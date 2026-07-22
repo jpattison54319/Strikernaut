@@ -16,8 +16,18 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
+            GeometryReader { geometry in
+                Image("OnboardingHero")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+            }
+            .ignoresSafeArea()
+            .accessibilityHidden(true)
+
             LinearGradient(
-                colors: [GoalRushTheme.navy, GoalRushTheme.blue.opacity(0.30), GoalRushTheme.navy],
+                colors: [GoalRushTheme.navy.opacity(0.25), GoalRushTheme.navy.opacity(0.55), GoalRushTheme.navy.opacity(0.97)],
                 startPoint: .top, endPoint: .bottom
             )
             .ignoresSafeArea()

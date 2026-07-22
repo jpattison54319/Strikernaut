@@ -16,11 +16,11 @@ struct DailyRewardCard: View {
             }
         } label: {
             HStack(spacing: 13) {
-                Image(systemName: "gift.fill")
-                    .font(.title2.bold())
-                    .foregroundStyle(GoalRushTheme.navy)
+                Image("DailyChest")
+                    .resizable()
+                    .scaledToFill()
                     .frame(width: 48, height: 48)
-                    .background(GoalRushTheme.gold, in: .rect(cornerRadius: 14))
+                    .clipShape(.rect(cornerRadius: 14))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(store.isDailyRewardClaimable ? "Daily reward ready" : "Daily reward claimed")
                         .font(.headline)
@@ -83,9 +83,11 @@ private struct DailyRewardClaimSheet: View {
             ConfettiBurst(accent: GoalRushTheme.gold)
             VStack(spacing: 18) {
                 Spacer()
-                Image(systemName: "gift.fill")
-                    .font(.system(size: 64, weight: .bold))
-                    .foregroundStyle(GoalRushTheme.gold)
+                Image("DailyChest")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 120, height: 120)
+                    .clipShape(.rect(cornerRadius: 28))
                     .shadow(color: GoalRushTheme.gold.opacity(0.4), radius: 20)
                 Text("DAY \(streak) REWARD")
                     .font(.caption.bold())

@@ -95,6 +95,21 @@ Color palette: deep navy, cobalt, teal, cyan, restrained warm gold
 Constraints: original design; no character, clothing, shoes, balls, text, UI,
 arrows, logos, sponsors, flags, real clubs, watermark, or border
 
-All five images were generated with the built-in image-generation tool in the
+### Daily reward chest
+
+Use case: `stylized-concept`. Premium rounded toy-like 3D render of a glowing
+treasure chest slightly open with golden light and soccer-ball-patterned coins
+spilling out, cobalt and gold palette, dark navy background, centered
+composition, no text, no watermark.
+
+### Onboarding hero
+
+Use case: `stylized-concept`. Premium rounded toy-like 3D render, portrait 2:3
+futuristic soccer training stadium, three converging turf lanes, small
+cobalt/teal player dribbling a soccer ball toward friendly orange training
+robots upfield, subtle motion lines, sunny lighting, quiet empty lower third
+for UI overlay, elevated camera, no text, no UI, no watermark.
+
+All seven images were generated with the built-in image-generation tool in the
 prompt modes named above and
 copied into `GoalRush/Resources/Assets.xcassets` for the app target.
