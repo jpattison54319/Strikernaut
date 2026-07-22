@@ -18,6 +18,20 @@ struct SettingsView: View {
                     Text("Assist Mode widens shots and slows hostile projectiles without reducing rewards.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                Section("Your Journey") {
+                    LabeledContent("Runs played", value: "\(store.progress.lifetimeStats.totalRuns)")
+                    LabeledContent("Endless waves cleared", value: "\(store.progress.lifetimeStats.totalWavesCleared)")
+                    LabeledContent("Best combo", value: "×\(store.progress.lifetimeStats.bestCombo)")
+                    LabeledContent("Lifetime tokens", value: store.progress.lifetimeStats.totalTokensEarned.formatted())
+                }
+                Section {
+                    Button("Replay Onboarding", systemImage: "play.rectangle") {
+                        store.progress.hasSeenOnboarding = false
+                        store.saveProgress()
+                        store.route = .onboarding
+                    }
+                    .accessibilityIdentifier("settings-replay-onboarding")
+                }
                 Section {
                     Button("Reset Progress", role: .destructive) { store.pendingResetConfirmation = true }
                 } footer: {
@@ -44,6 +58,7 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Home", systemImage: "chevron.left") {
+                        store.uiAudio.play(.tap)
                         store.settings.save()
                         store.route = .home
                     }

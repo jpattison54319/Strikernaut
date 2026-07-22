@@ -66,10 +66,12 @@ struct GearView: View {
                         slot: slot,
                         canCycle: !GearCatalog.items(for: slot, unlocked: store.progress.unlockedGear).isEmpty,
                         selected: selectedSlot == slot,
+                        showsNewBadge: hasUnseenGear(in: slot),
                         previous: { cycle(slot, direction: -1) },
                         next: { cycle(slot, direction: 1) }
                     )
                     .position(x: geometry.size.width / 2, y: [128, 220, 286, 346, 400][index])
+                    .onAppear { markVisibleGearSeen(in: slot) }
                 }
 
             }
@@ -96,8 +98,13 @@ struct GearView: View {
                     Text(selectedSlot.title.uppercased())
                         .font(.caption2.bold())
                         .foregroundStyle(.secondary)
-                    Text(item?.name ?? "No \(selectedSlot.title) Gear")
-                        .font(.headline)
+                    HStack(spacing: 6) {
+                        Text(item?.name ?? "No \(selectedSlot.title) Gear")
+                            .font(.headline)
+                        if let item, isNewGear(item.id) {
+                            NewGearBadge()
+                        }
+                    }
                     Text(item?.effect ?? emptySlotMessage)
                         .font(.subheadline)
                         .foregroundStyle(item == nil ? .secondary : GoalRushTheme.positive)
@@ -162,7 +169,22 @@ struct GearView: View {
 
     private func cycle(_ slot: GearSlot, direction: Int) {
         selectedSlot = slot
+        store.uiAudio.play(.tap)
         store.cycleGear(in: slot, direction: direction)
+        markVisibleGearSeen(in: slot)
+    }
+
+    private func hasUnseenGear(in slot: GearSlot) -> Bool {
+        GearCatalog.items(for: slot, unlocked: store.progress.unlockedGear).contains { isNewGear($0.id) }
+    }
+
+    private func isNewGear(_ id: GearID) -> Bool {
+        store.progress.unlockedGear.contains(id) && !store.progress.seenGearIDs.contains(id)
+    }
+
+    private func markVisibleGearSeen(in slot: GearSlot) {
+        guard let id = store.progress.equippedGear[slot] else { return }
+        store.markGearSeen(id)
     }
 }
 
@@ -203,10 +225,23 @@ private struct LockerAvatarView: View {
     }
 }
 
+private struct NewGearBadge: View {
+    var body: some View {
+        Text("NEW")
+            .font(.caption2.bold())
+            .foregroundStyle(GoalRushTheme.navy)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(GoalRushTheme.gold, in: .capsule)
+            .overlay { Capsule().stroke(.white.opacity(0.35)) }
+    }
+}
+
 private struct GearCycleRow: View {
     let slot: GearSlot
     let canCycle: Bool
     let selected: Bool
+    let showsNewBadge: Bool
     let previous: () -> Void
     let next: () -> Void
 
@@ -224,6 +259,11 @@ private struct GearCycleRow: View {
         }
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity)
+        .overlay(alignment: .top) {
+            if showsNewBadge {
+                NewGearBadge().offset(y: -13)
+            }
+        }
         .disabled(!canCycle)
     }
 }
