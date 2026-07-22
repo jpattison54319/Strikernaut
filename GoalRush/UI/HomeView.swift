@@ -25,7 +25,9 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     topBar
-                    Spacer(minLength: 108)
+                    continueHero
+                    DailyRewardCard()
+                    MissionsStrip()
                     title
                     modeCards
                     utilityButtons
@@ -36,6 +38,7 @@ struct HomeView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
+        .onAppear { store.refreshMissionsIfNeeded() }
     }
 
     private var topBar: some View {
@@ -50,7 +53,10 @@ struct HomeView: View {
                 .overlay { Capsule().stroke(.white.opacity(0.16)) }
                 .accessibilityLabel("\(store.progress.trainingTokens) Training Tokens")
             Spacer()
-            Button("Settings", systemImage: "gearshape.fill") { store.route = .settings }
+            Button("Settings", systemImage: "gearshape.fill") {
+                store.uiAudio.play(.tap)
+                store.route = .settings
+            }
                 .labelStyle(.iconOnly)
                 .font(.headline)
                 .frame(width: 44, height: 44)
@@ -61,19 +67,11 @@ struct HomeView: View {
     }
 
     private var title: some View {
-        VStack(spacing: 7) {
-            Text("SOCCER ROGUELITE")
-                .font(.caption.bold())
-                .tracking(1.4)
-                .foregroundStyle(GoalRushTheme.cyan)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(GoalRushTheme.cyan.opacity(0.13), in: .capsule)
-                .overlay { Capsule().stroke(GoalRushTheme.cyan.opacity(0.30)) }
-            Text("GOAL RUSH")
-                .font(.largeTitle.bold())
-                .tracking(2)
-        }
+        Text("PLAY")
+            .font(.headline)
+            .tracking(1.2)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var modeCards: some View {
@@ -85,6 +83,7 @@ struct HomeView: View {
                 icon: "map.fill",
                 colors: [GoalRushTheme.blue, GoalRushTheme.cyan]
             ) {
+                store.uiAudio.play(.tap)
                 store.route = .levels
             }
             .accessibilityIdentifier("play")
@@ -96,6 +95,7 @@ struct HomeView: View {
                 icon: "infinity",
                 colors: [Color(red: 0.72, green: 0.18, blue: 0.82), GoalRushTheme.orange]
             ) {
+                store.uiAudio.play(.tap)
                 store.route = .endless
             }
             .accessibilityIdentifier("endless")
@@ -110,6 +110,60 @@ struct HomeView: View {
             Button("Upgrades", systemImage: "arrow.up.circle.fill") { store.route = .upgrades }
                 .buttonStyle(SecondaryGameButton())
                 .accessibilityIdentifier("upgrades")
+            Button("Trophies", systemImage: "trophy.fill") { store.route = .trophies }
+                .buttonStyle(SecondaryGameButton())
+                .accessibilityIdentifier("trophies")
+        }
+    }
+
+    private var continueHero: some View {
+        let nextLevel = nextCampaignLevel
+        return Button {
+            store.uiAudio.play(.tap)
+            if let nextLevel { store.start(level: nextLevel.number) }
+            else { store.route = .endless }
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "play.fill")
+                    .font(.title.bold())
+                    .foregroundStyle(GoalRushTheme.navy)
+                    .frame(width: 58, height: 58)
+                    .background(.white, in: .circle)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(nextLevel == nil ? "CAMPAIGN COMPLETE" : "CONTINUE")
+                        .font(.caption.bold())
+                        .tracking(1.2)
+                        .foregroundStyle(.white.opacity(0.8))
+                    Text(nextLevel.map { "Level \($0.number): \($0.name)" } ?? "Chase your Endless best")
+                        .font(.title3.bold())
+                        .lineLimit(1)
+                    if let nextLevel {
+                        Text("First clear bonus +\(nextLevel.firstClearBonus) tokens")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                }
+                Spacer(minLength: 4)
+            }
+            .foregroundStyle(.white)
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+            .background(
+                LinearGradient(colors: [GoalRushTheme.gold, GoalRushTheme.orange],
+                               startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: .rect(cornerRadius: 22)
+            )
+            .overlay { RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.35)) }
+        }
+        .buttonStyle(HomeModeButtonStyle())
+        .shimmer(active: true)
+        .accessibilityIdentifier("continue-hero")
+    }
+
+    private var nextCampaignLevel: LevelDefinition? {
+        GameContent.levels.first { level in
+            level.number <= store.progress.highestUnlockedLevel
+                && store.progress.levelRecords[level.number]?.completed != true
         }
     }
 

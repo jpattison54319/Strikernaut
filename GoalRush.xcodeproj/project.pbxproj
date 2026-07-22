@@ -51,6 +51,7 @@
 		605B538FBB0B55C729EF3A53 /* GearCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F2D5A976B14B5F05CD86158 /* GearCatalog.swift */; };
 		6357E5308C7450296182663F /* ui-whoosh.wav in Resources */ = {isa = PBXBuildFile; fileRef = B95DDB976C02345D5F26F7EA /* ui-whoosh.wav */; };
 		6685A65EBFE5EB45628ECFA0 /* kick.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9D307599CCB342EE127BFB27 /* kick.wav */; };
+		6932D05C21ACE87EBBF9BA69 /* MissionsStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 188CCBA8258454B9F7197CB8 /* MissionsStrip.swift */; };
 		72E97760CD181AB3AD7DF446 /* GoalRushScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38B9FF2BFD187C82DD4EC915 /* GoalRushScene.swift */; };
 		760263620F84989FFD94C2B7 /* UpgradesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0254B7CFA7F9F39960BFBBE3 /* UpgradesView.swift */; };
 		7679DC35CADDA828D22A0290 /* GearLoadout.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3B89E42E3712B1358910190 /* GearLoadout.swift */; };
@@ -58,6 +59,7 @@
 		80BF81EFD31B8A5C8A9106A0 /* ui-fanfare.wav in Resources */ = {isa = PBXBuildFile; fileRef = 3EC7B24DE2AB070746799247 /* ui-fanfare.wav */; };
 		811F4A9E879D548A7D55A937 /* CampaignDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B709F46B970C48132206AE8A /* CampaignDiscovery.swift */; };
 		8388CBBB9DC997C467E5F08C /* Mission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A94123D6D2B76288FBD9A10 /* Mission.swift */; };
+		8FD7293ED235D851AFCFA740 /* DailyRewardCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63F554A9FE62128B46A658A4 /* DailyRewardCard.swift */; };
 		90AA694ED4DAF88804E2FA58 /* ui-purchase.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9279E5BB4F368A11818421F0 /* ui-purchase.wav */; };
 		92753E75FE58FA165D4EDE60 /* GameStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4657C95D20FBD53270599EC5 /* GameStore.swift */; };
 		969EAE68D10061D17A42D1B4 /* CampaignBriefingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2996AE70254FCDC101D533C1 /* CampaignBriefingView.swift */; };
@@ -120,6 +122,7 @@
 		17EB783DACBDD7512092D55F /* GameSimulationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSimulationTests.swift; sourceTree = "<group>"; };
 		1808F88B1ECFD76457D53259 /* UpgradeCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradeCardView.swift; sourceTree = "<group>"; };
 		180F4F1C9CA9717EF39BF7E3 /* CampaignDiscoveryPreviewScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignDiscoveryPreviewScene.swift; sourceTree = "<group>"; };
+		188CCBA8258454B9F7197CB8 /* MissionsStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionsStrip.swift; sourceTree = "<group>"; };
 		1CCA2F1BC672D9BA8E2624F5 /* impact.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = impact.wav; sourceTree = "<group>"; };
 		27BED2ED95D9608216312408 /* UpgradeRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradeRules.swift; sourceTree = "<group>"; };
 		28186635A518D795193A1FF1 /* music-boss.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "music-boss.wav"; sourceTree = "<group>"; };
@@ -145,6 +148,7 @@
 		4EBE1B1E3644EA1BE01BC972 /* GearDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GearDefinition.swift; sourceTree = "<group>"; };
 		4EFE9990E5C5A39DD22EB4AF /* CampaignDiscoveryPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignDiscoveryPreview.swift; sourceTree = "<group>"; };
 		5A0A73CFDF63017A52765652 /* LifetimeStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifetimeStats.swift; sourceTree = "<group>"; };
+		63F554A9FE62128B46A658A4 /* DailyRewardCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyRewardCard.swift; sourceTree = "<group>"; };
 		64F0D5AF197A924F9B3A2FFA /* GameContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameContent.swift; sourceTree = "<group>"; };
 		6B6E55E3BDA49850619BE407 /* JuiceModifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JuiceModifiers.swift; sourceTree = "<group>"; };
 		709DFC3746003959BD07DA6E /* GoalRushApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoalRushApp.swift; sourceTree = "<group>"; };
@@ -390,12 +394,14 @@
 				D86ED08C61DA02750D41E1D2 /* CampaignDiscoveryCard.swift */,
 				4EFE9990E5C5A39DD22EB4AF /* CampaignDiscoveryPreview.swift */,
 				E4F15966BBF5B785E48C5308 /* CelebrationToast.swift */,
+				63F554A9FE62128B46A658A4 /* DailyRewardCard.swift */,
 				F752C22713C966351491FD6E /* EndlessHubView.swift */,
 				DB4C08BB5E0A422CDDD2DE32 /* GameContainerView.swift */,
 				412293E008C6209B2DC5D3D9 /* GearView.swift */,
 				495FA735968D1B7A74290ADF /* GoalRushTheme.swift */,
 				B8AE3EE9FD1B8CACDCA124E3 /* HomeView.swift */,
 				02D82FAE80C825FDA3DDF66F /* LevelSelectView.swift */,
+				188CCBA8258454B9F7197CB8 /* MissionsStrip.swift */,
 				D7D39DE7E299213025D591C1 /* OnboardingView.swift */,
 				ADE9D892566B50E8FF2EDBA7 /* ResultView.swift */,
 				F76E45A06AF4BCE321B4391C /* RootView.swift */,
@@ -600,6 +606,7 @@
 				58C8A6D29AB3FB8B9404D202 /* ConfettiBurst.swift in Sources */,
 				9D8F5163E7F18F2831207E56 /* CountUpText.swift in Sources */,
 				BD9F18E8612FD061DB5DA00F /* DailyReward.swift in Sources */,
+				8FD7293ED235D851AFCFA740 /* DailyRewardCard.swift in Sources */,
 				362C13F1A7B142E707535C0A /* EndlessHubView.swift in Sources */,
 				DD6595FA5E8DAE04CC6A13E2 /* EndlessRecord.swift in Sources */,
 				015D7076C26A0E73D36CDFEB /* EndlessRules.swift in Sources */,
@@ -627,6 +634,7 @@
 				FFCEC42927E6A129F92F71FE /* LifetimeStats.swift in Sources */,
 				20C08E77EC6311FE4F9A863E /* LockerPreviewScene.swift in Sources */,
 				8388CBBB9DC997C467E5F08C /* Mission.swift in Sources */,
+				6932D05C21ACE87EBBF9BA69 /* MissionsStrip.swift in Sources */,
 				23763DD083D1838326F5038B /* OnboardingView.swift in Sources */,
 				FFB56C2CE3771673DF29E66D /* ProgressStore.swift in Sources */,
 				28E8E5DAA8FA503E0C6DD004 /* ResultView.swift in Sources */,

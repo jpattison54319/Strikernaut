@@ -147,4 +147,17 @@ final class GoalRushUITests: XCTestCase {
         next.tap() // "Kick Off" on the final page
         XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 5) || app.buttons["Kick Off"].waitForExistence(timeout: 2))
     }
+
+    func testDailyChestClaimsAndPaysTokens() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-save", "--currency", "0"]
+        app.launch()
+        let chest = app.buttons["daily-chest"]
+        XCTAssertTrue(chest.waitForExistence(timeout: 3))
+        chest.tap()
+        let collect = app.buttons["daily-collect"]
+        XCTAssertTrue(collect.waitForExistence(timeout: 3))
+        collect.tap()
+        XCTAssertTrue(chest.waitForExistence(timeout: 2))
+    }
 }
