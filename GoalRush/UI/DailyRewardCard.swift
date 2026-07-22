@@ -59,7 +59,7 @@ struct DailyRewardCard: View {
         .pulseGlow(store.isDailyRewardClaimable)
         .accessibilityIdentifier("daily-chest")
         .accessibilityLabel(store.isDailyRewardClaimable
-                            ? "Claim daily reward, plus \(store.nextDailyReward) tokens, streak day \(store.dailyStreak + 1)"
+                            ? "Claim daily reward, plus \(store.nextDailyReward) tokens, streak day \(store.nextStreakDay)"
                             : "Daily reward claimed, streak day \(store.dailyStreak)")
         .sheet(item: $claimedReward) { claim in
             DailyRewardClaimSheet(reward: claim.amount, streak: store.dailyStreak)

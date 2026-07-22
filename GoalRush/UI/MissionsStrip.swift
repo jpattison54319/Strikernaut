@@ -57,6 +57,7 @@ private struct MissionRow: View {
                 .frame(minHeight: 34)
                 .background(GoalRushTheme.gold, in: .capsule)
                 .pulseGlow(true)
+                .accessibilityLabel("Claim \(mission.reward) tokens, \(MissionCatalog.title(for: mission.kind))")
                 .accessibilityIdentifier("mission-claim-\(mission.kind.rawValue)")
             } else {
                 Text("\(min(mission.progress, mission.goal))/\(mission.goal)")

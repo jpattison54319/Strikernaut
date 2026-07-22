@@ -82,13 +82,15 @@ safe defaults. Debug launch arg `--reset-onboarding` re-arms the FTUE.
 - **Combo system** in `GameSimulation`: defeating a target starts/extends a
   3.0 s window; each defeat inside the window increments `combo`. Combo adds a
   score bonus in Endless (`+10% per combo step, capped +100%`) and emits new
-  `SimulationEvent`s: `comboChanged(Int)`, `comboMilestone(Int)` (5/10/25/50),
+  `SimulationEvent`s: `comboChanged(Int)`, `comboMilestone(Int)` (shipped
+  milestone set: 5/10/15/25/50/100),
   `targetDefeated(Vector2, isBoss)`. `HUDState` gains `combo`,
   `comboFraction` (window remaining). Combo resets on taking damage (risk/
   reward tension) and decays when the window lapses.
 - **First-win forgiveness** (balance, approved): Level 1 enemy HP/speed
   scaled −15% and the first checkpoint grants +10 stamina, so a new player's
-  first session ends in a clear.
+  first session ends in a clear. (Shipped checkpoint threshold is 0.40 — the
+  heal must land before a stationary player takes lethal damage.)
 - `GoalRushScene`: light screen shake on player damage and boss phase
   (skipped when `reducedEffects` or system Reduce Motion is on).
 
@@ -106,7 +108,9 @@ safe defaults. Debug launch arg `--reset-onboarding` re-arms the FTUE.
 - `FloatingTextOverlay` — SwiftUI layer above `SpriteView` translating
   simulation events (`reward`, `heal`, combo milestones, crits) into rising
   fade-out labels at normalized→view mapped positions. Capped at 12 live
-  labels; reused via identified views.
+  labels; reused via identified views. (Dropped in favor of in-scene
+  presentations: the existing `spawnReward`/`spawnHeal` plus the new combo
+  popup in `GoalRushScene`.)
 - `ConfettiBurst` — `Canvas`-based particle celebration (single draw pass,
   capped particle count), used on Result wins, claims, and achievement toasts.
   Disabled under Reduce Motion.
@@ -168,7 +172,8 @@ pre-highlighted. Skippable; `hasSeenOnboarding` persisted; never shown again.
 
 - **Combo meter**: thin arc/bar under stamina with count + decay; milestone
   popups ("COMBO ×10!") center-screen via `FloatingTextOverlay`; `ui-combo`
-  ticks pitch-up per step (cap).
+  ticks pitch-up per step (cap). (Shipped with milestone-only ticks instead
+  of per-step pitch-up.)
 - **Floating rewards**: `+N` token pops at defeat positions, crit calls, heal
   pops.
 - **Damage feedback**: brief red edge vignette + screen shake (skipped under
@@ -215,7 +220,9 @@ pre-highlighted. Skippable; `hasSeenOnboarding` persisted; never shown again.
 ### Locker (Gear)
 
 - Equipping plays `ui-tap` + haptic; newly unlocked (unseen) items get a
-  "NEW" badge until viewed once (tracked in progress).
+  "NEW" badge until viewed once (tracked in progress). (Shipped with
+  slot-aggregate badge semantics — a per-item badge would self-clear when
+  items are marked seen on appear.)
 
 ### Settings
 
@@ -226,7 +233,7 @@ pre-highlighted. Skippable; `hasSeenOnboarding` persisted; never shown again.
 
 - Sections by category; unlocked show date, locked show progress
   ("Wave 12 / 20"). Unlock triggers `AchievementToast` + `ui-fanfare` wherever
-  the player is.
+  the player is. (Shipped as a single ordered list — no sections or dates.)
 
 ## Audio & haptics
 

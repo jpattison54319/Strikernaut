@@ -133,7 +133,7 @@ struct LevelSelectView: View {
     private func levelAccessibilityLabel(_ level: LevelDefinition, unlocked: Bool, record: LevelRecord?) -> String {
         if !unlocked { return "Challenge \(level.worldLevel), \(level.name), locked" }
         if record?.completed == true {
-            let stars = StarRating.stars(staminaFraction: min(1, (record?.bestStamina ?? 0) / 100))
+            let stars = StarRating.stars(staminaFraction: min(1, (record?.bestStamina ?? 0) / PlayerStats(progress: store.progress).maxStamina))
             return "Challenge \(level.worldLevel), \(level.name), completed, \(stars) of 3 stars, best \(record?.bestTokens ?? 0) tokens"
         }
         return "Challenge \(level.worldLevel), \(level.name), ready"
@@ -186,6 +186,7 @@ private struct WorldCampaignCard: View {
 }
 
 private struct LevelCardView: View {
+    @Environment(GameStore.self) private var store
     let level: LevelDefinition
     let unlocked: Bool
     let record: LevelRecord?
@@ -241,7 +242,7 @@ private struct LevelCardView: View {
         if completed {
             HStack(spacing: 2) {
                 ForEach(0..<3, id: \.self) { index in
-                    Image(systemName: index < StarRating.stars(staminaFraction: min(1, (record?.bestStamina ?? 0) / 100)) ? "star.fill" : "star")
+                    Image(systemName: index < StarRating.stars(staminaFraction: min(1, (record?.bestStamina ?? 0) / PlayerStats(progress: store.progress).maxStamina)) ? "star.fill" : "star")
                         .font(.caption.bold())
                         .foregroundStyle(GoalRushTheme.gold)
                 }

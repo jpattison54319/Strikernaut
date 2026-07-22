@@ -229,12 +229,14 @@ final class GameStore {
         guard let id else {
             progress.equippedGear.removeValue(forKey: slot)
             saveProgress()
+            evaluateAchievements()
             return true
         }
         let item = GearCatalog.item(id)
         guard item.slot == slot, progress.unlockedGear.contains(id) else { return false }
         progress.equippedGear[slot] = id
         saveProgress()
+        evaluateAchievements()
         return true
     }
 
@@ -257,7 +259,7 @@ final class GameStore {
         try? persistence.reset()
         progress = .newPlayer
         celebrations = []
-        route = .home
+        route = .onboarding
     }
 
     func saveProgress() {
@@ -270,8 +272,16 @@ final class GameStore {
 
     var dailyStreak: Int { progress.dailyReward.streak }
 
+    /// The streak day the next claim will land on (1 if the streak is broken).
+    var nextStreakDay: Int {
+        guard isDailyRewardClaimable else { return progress.dailyReward.streak }
+        let calendar = Calendar.current
+        let yesterday = DailyRewardEngine.dayString(for: calendar.date(byAdding: .day, value: -1, to: .now) ?? .now, calendar: calendar)
+        return progress.dailyReward.lastClaimDay == yesterday ? progress.dailyReward.streak + 1 : 1
+    }
+
     var nextDailyReward: Int {
-        DailyRewardEngine.reward(forStreakDay: isDailyRewardClaimable ? progress.dailyReward.streak + 1 : progress.dailyReward.streak)
+        DailyRewardEngine.reward(forStreakDay: nextStreakDay)
     }
 
     var isDailyRewardClaimable: Bool {

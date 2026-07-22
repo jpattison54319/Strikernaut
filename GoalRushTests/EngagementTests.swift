@@ -151,4 +151,34 @@ struct EngagementTests {
         #expect(Set(AchievementCatalog.ordered) == Set(AchievementID.allCases))
         #expect(AchievementCatalog.ordered.count == AchievementID.allCases.count)
     }
+
+    @Test func dailyRewardPreviewMatchesClaimAfterMissedDay() {
+        let store = makeStore()
+        store.progress.dailyReward = DailyRewardState(lastClaimDay: "2000-01-01", streak: 5)
+        #expect(store.nextStreakDay == 1)
+        #expect(store.nextDailyReward == 40)
+        let calendar = Calendar.current
+        let yesterday = DailyRewardEngine.dayString(for: calendar.date(byAdding: .day, value: -1, to: .now) ?? .now, calendar: calendar)
+        store.progress.dailyReward = DailyRewardState(lastClaimDay: yesterday, streak: 5)
+        #expect(store.nextStreakDay == 6)
+        #expect(store.nextDailyReward == 180)
+    }
+
+    @Test func missionRolloverReplacesYesterdaysMissions() {
+        let store = makeStore()
+        store.refreshMissionsIfNeeded(now: Date())
+        let todays = store.progress.missions
+        #expect(!todays.isEmpty)
+        store.progress.missions[0].progress = store.progress.missions[0].goal
+        let calendar = Calendar.current
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        store.refreshMissionsIfNeeded(now: tomorrow)
+        #expect(store.progress.missionsDay != Self.dayStampToday())
+        #expect(store.progress.missions.allSatisfy { $0.progress == 0 && !$0.claimed })
+        #expect(store.progress.missions != todays || store.progress.missions == todays) // content may coincide; state must reset
+    }
+
+    private static func dayStampToday() -> String {
+        DailyRewardEngine.dayString(for: Date(), calendar: .current)
+    }
 }

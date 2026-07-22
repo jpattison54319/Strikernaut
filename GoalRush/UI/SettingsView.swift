@@ -70,7 +70,10 @@ struct SettingsView: View {
             } message: {
                 Text("Campaign progress, Endless records, gear, upgrades, and Training Tokens cannot be recovered.")
             }
-            .onChange(of: store.settings) { _, newValue in newValue.save() }
+            .onChange(of: store.settings) { _, newValue in
+                newValue.save()
+                store.uiAudio.isEnabled = newValue.soundEnabled
+            }
         }
     }
 }

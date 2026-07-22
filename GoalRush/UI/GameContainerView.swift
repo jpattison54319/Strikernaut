@@ -71,15 +71,7 @@ struct GameContainerView: View {
         }
         .confirmationDialog("End this run?", isPresented: $showQuitConfirmation, titleVisibility: .visible) {
             Button("End Run", role: .destructive) {
-                let result = RunResult(
-                    mode: session.mode,
-                    didWin: false,
-                    tokensEarned: session.snapshot.tokens,
-                    remainingStamina: session.snapshot.stamina,
-                    wave: session.snapshot.wave,
-                    score: session.snapshot.score
-                )
-                store.finish(result, tokensAlreadyCredited: creditedRunTokens)
+                store.finish(buildResult(didWin: false), tokensAlreadyCredited: creditedRunTokens)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -277,6 +269,22 @@ struct GameContainerView: View {
         return min(1, max(0, session.hudState.elapsed / max(1, session.hudState.duration)))
     }
 
+    private func buildResult(didWin: Bool, bonus: Int = 0) -> RunResult {
+        RunResult(
+            mode: session.mode,
+            didWin: didWin,
+            tokensEarned: session.snapshot.tokens + bonus,
+            remainingStamina: session.snapshot.stamina,
+            wave: session.snapshot.wave,
+            score: session.snapshot.score,
+            targetsDefeated: session.snapshot.targetsDefeated,
+            bossesDefeated: session.snapshot.bossesDefeated,
+            bestCombo: session.snapshot.bestCombo,
+            abilitiesDrafted: session.draftsChosen,
+            staminaFraction: session.snapshot.stamina / max(1, session.snapshot.maxStamina)
+        )
+    }
+
     private func finishRun() {
         guard case .finished(let didWin) = session.lastEvent else { return }
         let bonus: Int
@@ -286,22 +294,7 @@ struct GameContainerView: View {
         } else {
             bonus = 0
         }
-        store.finish(
-            RunResult(
-                mode: session.mode,
-                didWin: didWin,
-                tokensEarned: session.snapshot.tokens + bonus,
-                remainingStamina: session.snapshot.stamina,
-                wave: session.snapshot.wave,
-                score: session.snapshot.score,
-                targetsDefeated: session.snapshot.targetsDefeated,
-                bossesDefeated: session.snapshot.bossesDefeated,
-                bestCombo: session.snapshot.bestCombo,
-                abilitiesDrafted: session.draftsChosen,
-                staminaFraction: session.snapshot.stamina / max(1, session.snapshot.maxStamina)
-            ),
-            tokensAlreadyCredited: creditedRunTokens
-        )
+        store.finish(buildResult(didWin: didWin, bonus: bonus), tokensAlreadyCredited: creditedRunTokens)
     }
 
     private func checkpointRunTokens() {
