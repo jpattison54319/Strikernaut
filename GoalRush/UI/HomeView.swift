@@ -7,8 +7,8 @@ struct HomeView: View {
     var body: some View {
         AtmosphericGameScreen(backgroundImage: "MenuHero") {
             HomeStage(
-                onDaily: { activeSheet = .dailyReward },
-                onMissions: { activeSheet = .missions }
+                onDaily: openDailyReward,
+                onMissions: openMissions
             )
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("home-root")
@@ -43,5 +43,15 @@ struct HomeView: View {
 
     private func refreshMissions() {
         store.refreshMissionsIfNeeded()
+    }
+
+    private func openDailyReward() {
+        store.uiAudio.play(.tap)
+        activeSheet = .dailyReward
+    }
+
+    private func openMissions() {
+        store.uiAudio.play(.tap)
+        activeSheet = .missions
     }
 }
