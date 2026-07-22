@@ -162,7 +162,7 @@ struct AbilityDraftView: View {
         .buttonStyle(AbilityChoiceButtonStyle(accent: presentation.accent))
         .shimmer(active: session.mode.isEndless && currentRank >= 5)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(AbilityPresentation.title(ability)), \(presentation.current) to \(presentation.next)")
+        .accessibilityLabel("\(AbilityPresentation.title(ability)), \(presentation.current) to \(presentation.next)\(ability == recommended ? ", Recommended" : "")")
         .accessibilityHint(session.mode.isEndless ? "Applies for the rest of this endless run" : "Applies for the rest of this level")
         .accessibilityIdentifier("ability-\(ability.rawValue)")
     }

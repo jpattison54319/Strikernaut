@@ -132,7 +132,10 @@ struct LevelSelectView: View {
 
     private func levelAccessibilityLabel(_ level: LevelDefinition, unlocked: Bool, record: LevelRecord?) -> String {
         if !unlocked { return "Challenge \(level.worldLevel), \(level.name), locked" }
-        if record?.completed == true { return "Challenge \(level.worldLevel), \(level.name), completed, best \(record?.bestTokens ?? 0) tokens" }
+        if record?.completed == true {
+            let stars = StarRating.stars(staminaFraction: min(1, (record?.bestStamina ?? 0) / 100))
+            return "Challenge \(level.worldLevel), \(level.name), completed, \(stars) of 3 stars, best \(record?.bestTokens ?? 0) tokens"
+        }
         return "Challenge \(level.worldLevel), \(level.name), ready"
     }
 }
@@ -243,6 +246,7 @@ private struct LevelCardView: View {
                         .foregroundStyle(GoalRushTheme.gold)
                 }
             }
+            .accessibilityHidden(true)
         } else if unlocked {
             Text("READY")
                 .foregroundStyle(GoalRushTheme.cyan)

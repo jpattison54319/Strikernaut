@@ -22,6 +22,9 @@ struct CelebrationToast: View {
         .onTapGesture { dismiss() }
         .sensoryFeedback(.success, trigger: celebration)
         .onAppear {
+            if case .achievement(let id) = celebration {
+                AccessibilityNotification.Announcement("Achievement unlocked: \(AchievementCatalog.title(for: id))").post()
+            }
             store.uiAudio.play(.fanfare, volume: 0.7)
             autoDismissTask = Task {
                 try? await Task.sleep(for: .seconds(3.5))

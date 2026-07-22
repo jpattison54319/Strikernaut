@@ -5,6 +5,8 @@ struct CampaignDiscoveryPreview: View {
     let discovery: CampaignDiscovery
     let accent: Color
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private let scene: CampaignDiscoveryPreviewScene?
 
     init(discovery: CampaignDiscovery, accent: Color) {
@@ -34,7 +36,7 @@ struct CampaignDiscoveryPreview: View {
                 Image(systemName: discovery.systemImage)
                     .font(.system(size: 38, weight: .bold))
                     .foregroundStyle(.white, accent)
-                    .symbolEffect(.bounce, options: .nonRepeating)
+                    .symbolEffect(.bounce, options: .nonRepeating, isActive: !reduceMotion)
             }
         }
         .frame(width: 106, height: 96)

@@ -28,3 +28,19 @@ transitions. Settings use UserDefaults and contain no personal data.
 
 There are no external packages, accounts, servers, ads, analytics, StoreKit,
 CloudKit, or Game Center dependencies.
+
+Engagement systems live in `Domain/Engagement`: pure, testable engines for daily
+missions (`MissionCatalog`), streak-based daily rewards (`DailyRewardEngine`),
+and achievements (`AchievementCatalog`), all driven by `LifetimeStats` counters
+recorded when a run ends. `PlayerProgress` schema version 3 stores those stats
+alongside daily-reward state, mission state, unlocked achievements, and the
+onboarding flag, decoding older saves with safe defaults. The simulation feeds
+these systems through combo scoring (defeats inside a three-second window raise
+a score multiplier and emit milestone events) and per-run counters (targets,
+bosses, best combo, drafted abilities). Menu effects play through `UIAudio`,
+which pools three AVAudioPlayers per sound for low-latency overlap, while
+reusable SwiftUI juice (`ConfettiBurst`, `CountUpText`, shimmer, pulse glow,
+toast banners) celebrates rewards and achievements with every effect gated on
+Reduce Motion. The Home screen acts as a daily hub (reward card plus missions
+strip), achievement toasts overlay the root view after runs, and a first-time
+onboarding flow introduces the loop (replayable via `--reset-onboarding`).

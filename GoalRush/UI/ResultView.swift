@@ -130,7 +130,7 @@ struct ResultView: View {
             Image(systemName: heroIcon)
                 .font(.system(size: 64, weight: .bold))
                 .foregroundStyle(heroColor)
-                .symbolEffect(.bounce, value: appeared)
+                .symbolEffect(.bounce, value: appeared && !reduceMotion)
                 .shadow(color: heroColor.opacity(0.40), radius: 18)
                 .accessibilityHidden(true)
             VStack(spacing: 5) {

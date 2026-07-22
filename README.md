@@ -31,8 +31,9 @@ The default test destination is iPhone 17 Pro on iOS 26.5. Change
 ## Debug launch arguments
 
 - `--reset-save`: clear local progression before launch
+- `--reset-onboarding`: replay the first-time onboarding
 - `--currency 500`: set starting tokens for the current launch
-- `--screen endless`: open a menu screen directly (`levels`, `endless`, `gear`, `upgrades`, or `settings`)
+- `--screen endless`: open a menu screen directly (`levels`, `endless`, `gear`, `upgrades`, `settings`, `onboarding`, or `trophies`)
 - `--level 6`: launch directly into a level
 - `--endless mars`: launch an Endless run directly on an unlocked world
 - `--unlock-worlds`: unlock both campaign worlds in debug builds

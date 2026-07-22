@@ -21,6 +21,7 @@ struct DailyRewardCard: View {
                     .scaledToFill()
                     .frame(width: 48, height: 48)
                     .clipShape(.rect(cornerRadius: 14))
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(store.isDailyRewardClaimable ? "Daily reward ready" : "Daily reward claimed")
                         .font(.headline)
@@ -89,6 +90,7 @@ private struct DailyRewardClaimSheet: View {
                     .frame(width: 120, height: 120)
                     .clipShape(.rect(cornerRadius: 28))
                     .shadow(color: GoalRushTheme.gold.opacity(0.4), radius: 20)
+                    .accessibilityHidden(true)
                 Text("DAY \(streak) REWARD")
                     .font(.caption.bold())
                     .tracking(1.2)
