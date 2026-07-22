@@ -4,12 +4,19 @@ struct MissionsStrip: View {
     @Environment(GameStore.self) private var store
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Daily Missions", systemImage: "target")
-                .font(.headline)
-            VStack(spacing: 10) {
-                ForEach(store.progress.missions) { mission in
-                    MissionRow(mission: mission)
+        Group {
+            if store.progress.missions.isEmpty {
+                ContentUnavailableView(
+                    "Missions refresh soon",
+                    systemImage: "clock.arrow.circlepath",
+                    description: Text("Check back shortly for a new set of daily objectives.")
+                )
+                .foregroundStyle(.white)
+            } else {
+                VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
+                    ForEach(store.progress.missions) { mission in
+                        MissionRow(mission: mission)
+                    }
                 }
             }
         }

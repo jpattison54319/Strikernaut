@@ -20,6 +20,20 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(app.buttons["upgrade-impact"].waitForExistence(timeout: 2))
     }
 
+    func testHomeProgressivelyDisclosesMissionDetails() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-save", "--currency", "500"]
+        app.launch()
+
+        XCTAssertTrue(app.otherElements["home-root"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["missions"].exists)
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "mission-")).count, 0)
+
+        app.buttons["missions"].tap()
+        XCTAssertTrue(app.otherElements["missions-sheet"].waitForExistence(timeout: 2))
+        XCTAssertGreaterThan(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "mission-")).count, 0)
+    }
+
     func testSettingsExposeAccessibilityControls() {
         let app = XCUIApplication()
         app.launchArguments = ["--reset-save"]
