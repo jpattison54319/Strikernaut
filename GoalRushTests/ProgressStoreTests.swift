@@ -147,4 +147,32 @@ struct ProgressStoreTests {
             #expect(Bundle.main.url(forResource: name, withExtension: "wav") != nil)
         }
     }
+
+    @Test func versionTwoSaveMigratesToThreeWithEngagementDefaults() throws {
+        let json = """
+        {
+          "schemaVersion": 2,
+          "trainingTokens": 321,
+          "highestUnlockedLevel": 5,
+          "upgradeRanks": {"impact": 2},
+          "levelRecords": {"1": {"completed": true, "bestTokens": 40, "bestStamina": 30}},
+          "hasMovedInTutorial": true,
+          "unlockedGear": [],
+          "equippedGear": {},
+          "endlessRecords": {}
+        }
+        """
+        var progress = try JSONDecoder().decode(PlayerProgress.self, from: Data(json.utf8))
+        progress.reconcileUnlockedContent()
+        #expect(progress.schemaVersion == 3)
+        #expect(progress.trainingTokens == 321)
+        #expect(progress.lifetimeStats == LifetimeStats())
+        #expect(progress.dailyReward == DailyRewardState())
+        #expect(progress.missions.isEmpty)
+        #expect(progress.missionsDay.isEmpty)
+        #expect(progress.unlockedAchievements.isEmpty)
+        #expect(progress.seenGearIDs.isEmpty)
+        #expect(!progress.hasSeenOnboarding)
+        #expect(progress.rank(for: .impact) == 2)
+    }
 }
