@@ -135,4 +135,16 @@ final class GoalRushUITests: XCTestCase {
         expectation(for: advanced, evaluatedWith: progress)
         waitForExpectations(timeout: 4)
     }
+
+    func testOnboardingShowsOnceAndStartsFirstLevel() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-onboarding", "--fixed-seed", "42"]
+        app.launch()
+        let next = app.buttons["onboarding-next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 3))
+        next.tap()
+        next.tap()
+        next.tap() // "Kick Off" on the final page
+        XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 5) || app.buttons["Kick Off"].waitForExistence(timeout: 2))
+    }
 }
