@@ -142,7 +142,8 @@ struct ProgressStoreTests {
     }
 
     @Test func expectedAudioAssetsAreBundled() {
-        let names = ["kick", "impact", "coin", "heal", "confirm", "victory", "defeat", "boss-phase", "music-calm", "music-pressure", "music-boss"]
+        let names = ["kick", "impact", "coin", "heal", "confirm", "victory", "defeat", "boss-phase", "music-calm", "music-pressure", "music-boss",
+                     "ui-tap", "ui-whoosh", "ui-purchase", "ui-claim", "ui-fanfare", "ui-draft", "ui-locked", "ui-combo"]
         for name in names {
             #expect(Bundle.main.url(forResource: name, withExtension: "wav") != nil)
         }
