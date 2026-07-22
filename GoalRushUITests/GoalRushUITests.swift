@@ -15,7 +15,7 @@ final class GoalRushUITests: XCTestCase {
         app.buttons["play"].tap()
         XCTAssertTrue(app.buttons["level-1"].waitForExistence(timeout: 2))
         XCTAssertFalse(app.buttons["level-2"].isEnabled)
-        app.navigationBars.buttons["Home"].tap()
+        app.buttons["Home"].tap()
         app.buttons["upgrades"].tap()
         XCTAssertTrue(app.buttons["upgrade-impact"].waitForExistence(timeout: 2))
     }
@@ -108,6 +108,17 @@ final class GoalRushUITests: XCTestCase {
         mars.tap()
         XCTAssertTrue(app.staticTexts["Mars Levels"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.buttons["level-11"].exists)
+    }
+
+    func testCampaignLevelShowsPreviewBeforeLaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-save", "--screen", "levels"]
+        app.launch()
+
+        XCTAssertFalse(app.otherElements["level-preview"].exists)
+        app.buttons["level-1"].tap()
+        XCTAssertTrue(app.otherElements["level-preview"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["level-preview-play"].exists)
     }
 
     func testMarsEndlessStartsFromHubAndAdvances() {

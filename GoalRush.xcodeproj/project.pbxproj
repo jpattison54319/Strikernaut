@@ -80,6 +80,7 @@
 		9D8F5163E7F18F2831207E56 /* CountUpText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B998B22C03C9ADF35579989 /* CountUpText.swift */; };
 		A490418ACA599CA170357673 /* HomeBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2793599C1FE7813CD18898E /* HomeBrand.swift */; };
 		A581771A3844D2FB6F0ED9D6 /* EngagementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34D869E54F6A8F2C97E0954D /* EngagementTests.swift */; };
+		A1C3D5E7F90123456789ABCD /* CampaignSelectionComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C3D5E7F90123456789ABCE /* CampaignSelectionComponents.swift */; };
 		A70291CA399DA19846259906 /* HomeAccessibilityAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A67567153B10838019CFD59 /* HomeAccessibilityAction.swift */; };
 		ACABE6C83DE91194106141C7 /* GameSheetScaffold.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB612491F5F0EB4B8413509 /* GameSheetScaffold.swift */; };
 		AE05F197B0CBDD56DDE4EA8E /* WorldID.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE06B85B3FBF9280171F194 /* WorldID.swift */; };
@@ -89,10 +90,12 @@
 		B5479C9A67D9ABC02E1926D3 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DBE132731C07ECCE06D3086 /* SettingsView.swift */; };
 		B8045E0DE5D91278F374A666 /* GameAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78E710C47BDD13E7C0775668 /* GameAudio.swift */; };
 		B999253845CD39D8F6961411 /* CampaignConcept.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9EFC92FF030421EF1BA76EA /* CampaignConcept.swift */; };
+		B1C3D5E7F90123456789ABCD /* EndlessSelectionComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C3D5E7F90123456789ABCE /* EndlessSelectionComponents.swift */; };
 		BD9F18E8612FD061DB5DA00F /* DailyReward.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7299C0D52378BD3C205EFE85 /* DailyReward.swift */; };
 		BE66A891C1E5CC77184B60D3 /* GearModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74CD171C2D25E5609B4CE40D /* GearModifiers.swift */; };
 		C574D08321B3D70A6E20FABC /* Achievement.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66845E5674D0B6752465CA9 /* Achievement.swift */; };
 		C8450EDCFFE7757BB9C1DA13 /* GameContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB4C08BB5E0A422CDDD2DE32 /* GameContainerView.swift */; };
+		C1C3D5E7F90123456789ABCD /* WorldSelectionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1C3D5E7F90123456789ABCE /* WorldSelectionBar.swift */; };
 		D2DD8DBF020C3AB78D9E3182 /* AtmosphericGameScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B003F57292BDF782A1E8E7 /* AtmosphericGameScreen.swift */; };
 		D45923F0A1D6227620F34269 /* ToastBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD4995B9F5F2B4F82B5A82EA /* ToastBanner.swift */; };
 		DBE425AB3283BEDD532A59E9 /* StarRating.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6BB7431F964604DD703D748 /* StarRating.swift */; };
@@ -207,6 +210,7 @@
 		9E54480E377B3B9BB2E11D65 /* HomeDockButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDockButton.swift; sourceTree = "<group>"; };
 		9FB142E1EB991C46BB5CD264 /* LockerPreviewScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockerPreviewScene.swift; sourceTree = "<group>"; };
 		A41EB16FA8C0D00AAFC554AE /* HomePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePresentation.swift; sourceTree = "<group>"; };
+		A1C3D5E7F90123456789ABCE /* CampaignSelectionComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignSelectionComponents.swift; sourceTree = "<group>"; };
 		A9549FCAF3F773249B989F93 /* ui-combo.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "ui-combo.wav"; sourceTree = "<group>"; };
 		AA7358C848E1E8D108519615 /* victory.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = victory.wav; sourceTree = "<group>"; };
 		ADE9D892566B50E8FF2EDBA7 /* ResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultView.swift; sourceTree = "<group>"; };
@@ -215,6 +219,7 @@
 		B709F46B970C48132206AE8A /* CampaignDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignDiscovery.swift; sourceTree = "<group>"; };
 		B8AE3EE9FD1B8CACDCA124E3 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		B95DDB976C02345D5F26F7EA /* ui-whoosh.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "ui-whoosh.wav"; sourceTree = "<group>"; };
+		B1C3D5E7F90123456789ABCE /* EndlessSelectionComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndlessSelectionComponents.swift; sourceTree = "<group>"; };
 		BAE06B85B3FBF9280171F194 /* WorldID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldID.swift; sourceTree = "<group>"; };
 		BBB612491F5F0EB4B8413509 /* GameSheetScaffold.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSheetScaffold.swift; sourceTree = "<group>"; };
 		BC9953461FB883594532016F /* GameSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSessionModel.swift; sourceTree = "<group>"; };
@@ -224,6 +229,7 @@
 		C6BB62F04EF987875C9692FE /* ProgressStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressStoreTests.swift; sourceTree = "<group>"; };
 		C9EFC92FF030421EF1BA76EA /* CampaignConcept.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignConcept.swift; sourceTree = "<group>"; };
 		CB4DBC3C42CBF44CB3DFFA6D /* WorldDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldDefinition.swift; sourceTree = "<group>"; };
+		C1C3D5E7F90123456789ABCE /* WorldSelectionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldSelectionBar.swift; sourceTree = "<group>"; };
 		CC9C0B36611BCF75D508B2FD /* RunMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunMode.swift; sourceTree = "<group>"; };
 		CD81C48016A65DF5D2BACB76 /* ui-claim.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "ui-claim.wav"; sourceTree = "<group>"; };
 		D7D39DE7E299213025D591C1 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
@@ -458,9 +464,11 @@
 				2996AE70254FCDC101D533C1 /* CampaignBriefingView.swift */,
 				D86ED08C61DA02750D41E1D2 /* CampaignDiscoveryCard.swift */,
 				4EFE9990E5C5A39DD22EB4AF /* CampaignDiscoveryPreview.swift */,
+				A1C3D5E7F90123456789ABCE /* CampaignSelectionComponents.swift */,
 				E4F15966BBF5B785E48C5308 /* CelebrationToast.swift */,
 				63F554A9FE62128B46A658A4 /* DailyRewardCard.swift */,
 				F752C22713C966351491FD6E /* EndlessHubView.swift */,
+				B1C3D5E7F90123456789ABCE /* EndlessSelectionComponents.swift */,
 				DB4C08BB5E0A422CDDD2DE32 /* GameContainerView.swift */,
 				412293E008C6209B2DC5D3D9 /* GearView.swift */,
 				495FA735968D1B7A74290ADF /* GoalRushTheme.swift */,
@@ -490,6 +498,7 @@
 				01ECD93BC47E9F7339DF313F /* UpgradeIntroCard.swift */,
 				F0F4BDC9A0629FFEE3812589 /* UpgradePresentation.swift */,
 				0254B7CFA7F9F39960BFBBE3 /* UpgradesView.swift */,
+				C1C3D5E7F90123456789ABCE /* WorldSelectionBar.swift */,
 				71F7BEC8D5DA0D7C450B0399 /* DesignSystem */,
 				26A69A1B9CCCFB6586B54D4C /* Juice */,
 			);
@@ -684,6 +693,7 @@
 				594E886BEE294DF4D5E9747A /* CampaignDiscoveryCard.swift in Sources */,
 				E67FB4BF2C3B402B0C7591E0 /* CampaignDiscoveryPreview.swift in Sources */,
 				279D5745364B17D3E74E4D19 /* CampaignDiscoveryPreviewScene.swift in Sources */,
+				A1C3D5E7F90123456789ABCD /* CampaignSelectionComponents.swift in Sources */,
 				AE5E50F8E2D0DF720433CA7F /* Celebration.swift in Sources */,
 				4193A37356D9E7B0D4224064 /* CelebrationToast.swift in Sources */,
 				58C8A6D29AB3FB8B9404D202 /* ConfettiBurst.swift in Sources */,
@@ -693,6 +703,7 @@
 				362C13F1A7B142E707535C0A /* EndlessHubView.swift in Sources */,
 				DD6595FA5E8DAE04CC6A13E2 /* EndlessRecord.swift in Sources */,
 				015D7076C26A0E73D36CDFEB /* EndlessRules.swift in Sources */,
+				B1C3D5E7F90123456789ABCD /* EndlessSelectionComponents.swift in Sources */,
 				17C043C0D9865B710E351575 /* FloatingGameActionButton.swift in Sources */,
 				B8045E0DE5D91278F374A666 /* GameAudio.swift in Sources */,
 				C8450EDCFFE7757BB9C1DA13 /* GameContainerView.swift in Sources */,
@@ -757,6 +768,7 @@
 				760263620F84989FFD94C2B7 /* UpgradesView.swift in Sources */,
 				2E44D12F2E6BD923D7F96A61 /* WorldDefinition.swift in Sources */,
 				AE05F197B0CBDD56DDE4EA8E /* WorldID.swift in Sources */,
+				C1C3D5E7F90123456789ABCD /* WorldSelectionBar.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
