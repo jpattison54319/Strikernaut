@@ -11,6 +11,41 @@ enum GoalRushTheme {
     static let surface = Color(red: 0.06, green: 0.13, blue: 0.23)
     static let surfaceRaised = Color(red: 0.09, green: 0.19, blue: 0.31)
     static let positive = Color(red: 0.20, green: 0.92, blue: 0.55)
+
+    enum Metrics {
+        static let compactSpacing: CGFloat = 8
+        static let standardSpacing: CGFloat = 12
+        static let sectionSpacing: CGFloat = 20
+        static let smallRadius: CGFloat = 14
+        static let controlRadius: CGFloat = 18
+        static let panelRadius: CGFloat = 24
+        static let minimumTapTarget: CGFloat = 44
+        static let floatingControlSize: CGFloat = 52
+        static let horizontalPadding: CGFloat = 20
+        static let shadowRadius: CGFloat = 12
+        static let strokeWidth: CGFloat = 1
+    }
+
+    enum Motion {
+        static let press = Animation.snappy(duration: 0.16)
+        static let transition = Animation.snappy(duration: 0.24)
+    }
+
+    static let surfaceStroke = Color.white.opacity(0.16)
+    static let emphasizedSurfaceStroke = Color.white.opacity(0.28)
+    static let surfaceShadow = Color.black.opacity(0.24)
+
+    static let topScrim = LinearGradient(
+        colors: [.black.opacity(0.72), .black.opacity(0.30), .clear],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+
+    static let bottomScrim = LinearGradient(
+        colors: [.clear, .black.opacity(0.40), navy.opacity(0.92)],
+        startPoint: .top,
+        endPoint: .bottom
+    )
 }
 
 extension WorldID {
