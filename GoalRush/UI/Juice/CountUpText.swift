@@ -29,7 +29,7 @@ private struct AnimatedNumber: View, Animatable {
     }
 
     var body: some View {
-        Text("\(Int(value.rounded()))")
+        Text(Int(value.rounded()).formatted())
             .font(font)
             .monospacedDigit()
             .foregroundStyle(color)

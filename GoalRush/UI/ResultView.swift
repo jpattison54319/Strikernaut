@@ -121,7 +121,7 @@ struct ResultView: View {
         }
         .sensoryFeedback(trigger: appeared) { _, isVisible in
             guard isVisible, store.settings.hapticsEnabled else { return nil }
-            return result.didWin || result.mode.isEndless ? .success : .warning
+            return result.didWin || result.newBestWave || result.newBestScore ? .success : .warning
         }
     }
 
