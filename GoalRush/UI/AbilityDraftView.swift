@@ -4,6 +4,10 @@ struct AbilityDraftView: View {
     let abilities: [AbilityKind]
     let session: GameSessionModel
 
+    @Environment(GameStore.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+
     var body: some View {
         ZStack {
             Color.black.opacity(0.78).ignoresSafeArea()
@@ -18,8 +22,14 @@ struct AbilityDraftView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     header
-                    ForEach(abilities) { ability in
+                    ForEach(Array(abilities.enumerated()), id: \.element) { index, ability in
                         abilityButton(ability)
+                            .opacity(appeared ? 1 : 0)
+                            .offset(y: appeared ? 0 : 26)
+                            .animation(
+                                reduceMotion ? nil : .snappy(duration: 0.34).delay(Double(index) * 0.09),
+                                value: appeared
+                            )
                     }
                 }
                 .padding(.horizontal, 20)
@@ -27,6 +37,7 @@ struct AbilityDraftView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
+        .onAppear { appeared = true; store.uiAudio.play(.draft, volume: 0.6) }
     }
 
     private var header: some View {
@@ -47,6 +58,12 @@ struct AbilityDraftView: View {
         }
         .padding(.bottom, 2)
         .accessibilityElement(children: .combine)
+    }
+
+    private var recommended: AbilityKind? {
+        abilities.min { lhs, rhs in
+            session.simulation.abilityRank(lhs) < session.simulation.abilityRank(rhs)
+        }
     }
 
     private func abilityButton(_ ability: AbilityKind) -> some View {
@@ -76,8 +93,18 @@ struct AbilityDraftView: View {
                             in: .rect(cornerRadius: 14)
                         )
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(AbilityPresentation.title(ability))
-                            .font(.headline)
+                        HStack(spacing: 8) {
+                            Text(AbilityPresentation.title(ability))
+                                .font(.headline)
+                            if ability == recommended {
+                                Text("RECOMMENDED")
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(GoalRushTheme.navy)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(GoalRushTheme.positive, in: .capsule)
+                            }
+                        }
                         Text(AbilityPresentation.benefit(ability))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -125,8 +152,15 @@ struct AbilityDraftView: View {
             }
             .overlay { RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.14)) }
             .shadow(color: .black.opacity(0.28), radius: 14, y: 7)
+            .overlay {
+                if session.mode.isEndless && currentRank >= 5 {
+                    RoundedRectangle(cornerRadius: 22)
+                        .stroke(GoalRushTheme.gold.opacity(0.75), lineWidth: 2)
+                }
+            }
         }
         .buttonStyle(AbilityChoiceButtonStyle(accent: presentation.accent))
+        .shimmer(active: session.mode.isEndless && currentRank >= 5)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(AbilityPresentation.title(ability)), \(presentation.current) to \(presentation.next)")
         .accessibilityHint(session.mode.isEndless ? "Applies for the rest of this endless run" : "Applies for the rest of this level")
