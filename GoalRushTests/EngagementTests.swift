@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import GoalRush
 
@@ -73,5 +74,76 @@ struct EngagementTests {
         #expect(unlocked.contains(.combo10))
         #expect(unlocked.contains(.streak3))
         #expect(!unlocked.contains(.combo25))
+    }
+
+    @MainActor
+    private func makeStore() -> GameStore {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        return GameStore(progress: .newPlayer, settings: .init(),
+                         persistence: FileProgressStore(fileURL: directory.appending(path: "save.json")))
+    }
+
+    @Test func dailyClaimPaysTokensAndQueuesNothing() {
+        let store = makeStore()
+        let reward = store.claimDailyReward(now: Date(), calendar: .current)
+        #expect(reward == 40)
+        #expect(store.progress.trainingTokens == 40)
+        #expect(store.claimDailyReward(now: Date(), calendar: .current) == 0)
+        #expect(store.progress.trainingTokens == 40)
+    }
+
+    @Test func missionsRefreshOncePerDayAndClaimPaysReward() {
+        let store = makeStore()
+        store.refreshMissionsIfNeeded(now: Date())
+        #expect(store.progress.missions.count == 3)
+        let kind = store.progress.missions[0].kind
+        #expect(store.claimMission(kind) == 0) // incomplete missions pay nothing
+        var mission = store.progress.missions[0]
+        mission.progress = mission.goal
+        store.progress.missions[0] = mission
+        let paid = store.claimMission(kind)
+        #expect(paid == mission.reward)
+        #expect(store.progress.trainingTokens == paid)
+        #expect(store.claimMission(kind) == 0) // cannot claim twice
+    }
+
+    @Test func finishRecordsStatsProgressesMissionsAndUnlocksAchievements() {
+        let store = makeStore()
+        store.refreshMissionsIfNeeded(now: Date())
+        store.progress.missions = [MissionState(kind: .defeatTargets, goal: 10, progress: 0, claimed: false, reward: 80)]
+        store.finish(RunResult(mode: .campaign(level: 1), didWin: true, tokensEarned: 60,
+                               remainingStamina: 80, targetsDefeated: 25, staminaFraction: 0.8))
+        #expect(store.progress.lifetimeStats.totalRuns == 1)
+        #expect(store.progress.lifetimeStats.totalTargetsDefeated == 25)
+        #expect(store.progress.missions[0].isComplete)
+        #expect(store.progress.unlockedAchievements.contains(.firstClear))
+        #expect(store.celebrations.contains(.achievement(.firstClear)))
+        if case .result(let result) = store.route {
+            #expect(result.isFirstClear)
+        } else {
+            Issue.record("Expected result route")
+        }
+    }
+
+    @Test func endlessFinishFlagsNewBestWave() {
+        let store = makeStore()
+        store.finish(RunResult(mode: .endless(world: .earth), didWin: false, tokensEarned: 10,
+                               remainingStamina: 0, wave: 6, score: 9_000))
+        guard case .result(let first) = store.route else { Issue.record("Expected result"); return }
+        #expect(first.newBestWave)
+        #expect(first.newBestScore)
+        store.finish(RunResult(mode: .endless(world: .earth), didWin: false, tokensEarned: 10,
+                               remainingStamina: 0, wave: 4, score: 3_000))
+        guard case .result(let second) = store.route else { Issue.record("Expected result"); return }
+        #expect(!second.newBestWave)
+        #expect(!second.newBestScore)
+    }
+
+    @Test func purchaseCountsTowardAchievements() {
+        let store = makeStore()
+        store.progress.trainingTokens = 500
+        #expect(store.purchase(.impact))
+        #expect(store.progress.lifetimeStats.upgradesPurchased == 1)
+        #expect(store.progress.unlockedAchievements.contains(.firstUpgrade))
     }
 }
