@@ -110,10 +110,13 @@ final class GameSimulation {
 
     private func updateCampaignCheckpoints(events: inout [SimulationEvent]) {
         guard let level else { return }
-        let thresholds = level.number == 1 ? [0.42] : [0.25, 0.5, 0.75]
+        let thresholds = level.number == 1 ? [0.40] : [0.25, 0.5, 0.75]
         guard checkpointIndex < thresholds.count else { return }
         if snapshot.elapsed / level.duration >= thresholds[checkpointIndex] {
             checkpointIndex += 1
+            if level.number == 1 {
+                snapshot.stamina = min(snapshot.maxStamina, snapshot.stamina + 10)
+            }
             events.append(.checkpoint(checkpointIndex))
         }
     }
@@ -239,7 +242,8 @@ final class GameSimulation {
                         )
                     }
                 } else {
-                    target.position.y -= enemySpeed(kind) * activeSpeedMultiplier * slowFactor * delta
+                    let speedFactor = level?.number == 1 ? 0.85 : 1.0
+                    target.position.y -= enemySpeed(kind) * speedFactor * activeSpeedMultiplier * slowFactor * delta
                     if kind == .tackleBot || kind == .craterCrawler {
                         target.position.x += sin(target.phase * 5.2) * delta * 0.23
                     }
@@ -402,11 +406,12 @@ final class GameSimulation {
     }
 
     private func spawnEnemy(_ kind: EnemyKind, x: Double, y: Double) {
-        let multiplier: Double
+        var multiplier: Double
         if mode.isEndless {
             multiplier = EndlessRules.healthMultiplier(wave: snapshot.wave)
         } else {
             multiplier = 1 + Double((level?.number ?? 1) - 1) * 0.08
+            if level?.number == 1 { multiplier = 0.85 }
         }
         let hitPoints = enemyHealth(kind) * multiplier
         snapshot.targets.append(TargetState(id: identifier(), kind: .enemy(kind), position: .init(x: x, y: y), hitPoints: hitPoints, maximumHitPoints: hitPoints, phase: 0))

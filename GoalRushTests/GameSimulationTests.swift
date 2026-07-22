@@ -325,4 +325,31 @@ struct GameSimulationTests {
         #expect(reset)
         #expect(simulation.snapshot.comboFraction == 0)
     }
+
+    @Test func levelOneIsForgivingForNewPlayers() {
+        let forgiving = GameSimulation(level: GameContent.level(1), progress: .newPlayer, assistMode: false, seed: 3)
+        let standard = GameSimulation(level: GameContent.level(2), progress: .newPlayer, assistMode: false, seed: 3)
+        for _ in 0..<600 {
+            _ = forgiving.update(delta: 0.05)
+            _ = standard.update(delta: 0.05)
+        }
+        let forgivingHP = forgiving.snapshot.targets.map(\.maximumHitPoints).max() ?? 0
+        let standardHP = standard.snapshot.targets.map(\.maximumHitPoints).max() ?? 0
+        // Level 2 scales up +8% per level while Level 1 scales down 15%.
+        #expect(forgivingHP < standardHP)
+    }
+
+    @Test func levelOneCheckpointRestoresStamina() {
+        let simulation = GameSimulation(level: GameContent.level(1), progress: .newPlayer, assistMode: false, seed: 3)
+        // Drain stamina by standing still while enemies reach the line.
+        var sawCheckpoint = false
+        for _ in 0..<3_000 where !sawCheckpoint {
+            sawCheckpoint = simulation.update(delta: 0.05).contains { event in
+                if case .checkpoint = event { return true }
+                return false
+            }
+        }
+        #expect(sawCheckpoint)
+        #expect(simulation.snapshot.stamina > 0)
+    }
 }
