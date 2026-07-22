@@ -48,6 +48,7 @@ struct UpgradesView: View {
                 UpgradeInfoView()
                     .presentationDetents([.medium])
             }
+            .onAppear { store.uiAudio.play(.whoosh, volume: 0.35) }
         }
     }
 }

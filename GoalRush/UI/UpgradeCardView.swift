@@ -4,6 +4,8 @@ struct UpgradeCardView: View {
     @Environment(GameStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var successFeedback = 0
+    @State private var justPurchased = false
+    @State private var flashTask: Task<Void, Never>?
     let track: UpgradeTrack
 
     var body: some View {
@@ -58,26 +60,67 @@ struct UpgradeCardView: View {
                 .padding(12)
                 .background(.black.opacity(0.22), in: .rect(cornerRadius: 14))
 
-                Button(maximum ? "Fully Upgraded" : "Upgrade for \(cost) Tokens", systemImage: maximum ? "checkmark.seal.fill" : "arrow.up.circle.fill", action: purchase)
-                    .buttonStyle(PrimaryGameButton())
-                    .disabled(maximum || !affordable)
-                    .accessibilityIdentifier("upgrade-\(track.rawValue)")
+                if maximum {
+                    Label("MAX", systemImage: "seal.fill")
+                        .font(.headline)
+                        .foregroundStyle(GoalRushTheme.gold)
+                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .background(GoalRushTheme.gold.opacity(0.14), in: .rect(cornerRadius: 18))
+                        .overlay { RoundedRectangle(cornerRadius: 18).stroke(GoalRushTheme.gold.opacity(0.45)) }
+                } else {
+                    if affordable {
+                        Text("READY")
+                            .font(.caption.bold())
+                            .tracking(1.1)
+                            .foregroundStyle(GoalRushTheme.navy)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(GoalRushTheme.gold, in: .capsule)
+                    }
+                    Button("Upgrade for \(cost) Tokens", systemImage: "arrow.up.circle.fill", action: purchase)
+                        .buttonStyle(PrimaryGameButton())
+                        .disabled(!affordable)
+                        .accessibilityIdentifier("upgrade-\(track.rawValue)")
 
-                if !maximum && !affordable {
-                    Label("Earn \(cost - store.progress.trainingTokens) more Training Tokens", systemImage: "lock.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    if !affordable {
+                        ProgressView(value: min(1, Double(store.progress.trainingTokens) / Double(cost))) {
+                            Label("\(store.progress.trainingTokens)/\(cost)", systemImage: "lock.fill")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        .tint(GoalRushTheme.gold)
+                    }
                 }
             }
         }
+        .overlay {
+            RoundedRectangle(cornerRadius: 22)
+                .stroke(GoalRushTheme.gold, lineWidth: 2)
+                .opacity(justPurchased ? 1 : 0)
+        }
+        .pulseGlow(affordable && !maximum, color: GoalRushTheme.gold)
         .sensoryFeedback(trigger: successFeedback) { _, _ in
             store.settings.hapticsEnabled ? .success : nil
         }
         .animation(reduceMotion ? nil : .snappy, value: rank)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: justPurchased)
     }
 
     private func purchase() {
-        if store.purchase(track) { successFeedback += 1 }
+        if store.purchase(track) {
+            store.uiAudio.play(.purchase)
+            successFeedback += 1
+            guard !reduceMotion else { return }
+            flashTask?.cancel()
+            justPurchased = true
+            flashTask = Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled else { return }
+                justPurchased = false
+            }
+        } else {
+            store.uiAudio.play(.locked, volume: 0.5)
+        }
     }
 }
 
