@@ -109,6 +109,7 @@ struct GameContainerView: View {
                     ProgressView(value: session.hudState.stamina, total: session.hudState.maxStamina)
                         .tint(staminaColor)
                         .scaleEffect(y: 1.35)
+                        .pulseGlow(session.hudState.stamina / max(1, session.hudState.maxStamina) <= 0.28, color: GoalRushTheme.orange)
                 }
                 .frame(maxWidth: .infinity)
                 .accessibilityElement(children: .ignore)
@@ -145,7 +146,10 @@ struct GameContainerView: View {
                         .accessibilityLabel("\(session.hudState.shieldCharges) shield blocks")
                 }
 
-                Button("Pause", systemImage: "pause.fill") { session.togglePause() }
+                Button("Pause", systemImage: "pause.fill") {
+                    store.uiAudio.play(.whoosh, volume: 0.4)
+                    session.togglePause()
+                }
                     .labelStyle(.iconOnly)
                     .font(.headline)
                     .frame(width: 44, height: 44)
@@ -153,6 +157,31 @@ struct GameContainerView: View {
                     .overlay { Circle().stroke(.white.opacity(0.18)) }
                     .contentShape(.circle)
                     .accessibilityIdentifier("pause")
+            }
+
+            if session.hudState.combo > 0 {
+                HStack(spacing: 8) {
+                    Image(systemName: "bolt.fill")
+                        .font(.caption.bold())
+                        .foregroundStyle(comboColor)
+                    Text("COMBO ×\(session.hudState.combo)")
+                        .font(.caption.bold())
+                        .foregroundStyle(comboColor)
+                        .contentTransition(.numericText())
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(.white.opacity(0.12))
+                            Capsule()
+                                .fill(comboColor)
+                                .frame(width: geometry.size.width * session.hudState.comboFraction)
+                        }
+                    }
+                    .frame(height: 5)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Combo times \(session.hudState.combo)")
+                .accessibilityIdentifier("combo-meter")
             }
 
             HStack(spacing: 9) {
@@ -183,6 +212,7 @@ struct GameContainerView: View {
         .background(GoalRushTheme.navy.opacity(0.40), in: .rect(cornerRadius: 20))
         .overlay { RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.15)) }
         .shadow(color: .black.opacity(0.28), radius: 14, y: 7)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: session.hudState.combo > 0)
     }
 
     private var pauseOverlay: some View {
@@ -202,10 +232,20 @@ struct GameContainerView: View {
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
-                        Button("Resume Run", systemImage: "play.fill") { session.togglePause() }
+                        if !store.progress.missions.isEmpty {
+                            MissionsStrip()
+                                .padding(.top, 4)
+                        }
+                        Button("Resume Run", systemImage: "play.fill") {
+                            store.uiAudio.play(.tap)
+                            session.togglePause()
+                        }
                             .buttonStyle(PrimaryGameButton())
                             .accessibilityIdentifier("Resume")
-                        Button("End Run", systemImage: "xmark.circle") { showQuitConfirmation = true }
+                        Button("End Run", systemImage: "xmark.circle") {
+                            store.uiAudio.play(.tap)
+                            showQuitConfirmation = true
+                        }
                             .buttonStyle(SecondaryGameButton())
                             .tint(GoalRushTheme.orange)
                     }
@@ -220,6 +260,14 @@ struct GameContainerView: View {
         if ratio > 0.55 { return GoalRushTheme.positive }
         if ratio > 0.28 { return GoalRushTheme.gold }
         return GoalRushTheme.orange
+    }
+
+    private var comboColor: Color {
+        switch session.hudState.combo {
+        case 25...: return GoalRushTheme.orange
+        case 10...: return GoalRushTheme.gold
+        default: return GoalRushTheme.cyan
+        }
     }
 
     private var levelProgress: Double {
