@@ -24,6 +24,7 @@ final class GameSessionModel {
     var lastEvent: SimulationEvent?
     var recentEvents: [SimulationEvent] = []
     private(set) var didFinish = false
+    private(set) var draftsChosen = 0
     private var random: SeededGenerator
     private var lastTime: TimeInterval?
     private var lastHUDPublishTime: TimeInterval = 0
@@ -90,6 +91,7 @@ final class GameSessionModel {
     }
 
     func choose(_ ability: AbilityKind) {
+        draftsChosen += 1
         let previousStamina = simulation.snapshot.stamina
         simulation.apply(ability)
         snapshot = simulation.snapshot

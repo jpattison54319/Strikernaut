@@ -245,7 +245,12 @@ struct GameContainerView: View {
                 tokensEarned: session.snapshot.tokens + bonus,
                 remainingStamina: session.snapshot.stamina,
                 wave: session.snapshot.wave,
-                score: session.snapshot.score
+                score: session.snapshot.score,
+                targetsDefeated: session.snapshot.targetsDefeated,
+                bossesDefeated: session.snapshot.bossesDefeated,
+                bestCombo: session.snapshot.bestCombo,
+                abilitiesDrafted: session.draftsChosen,
+                staminaFraction: session.snapshot.stamina / max(1, session.snapshot.maxStamina)
             ),
             tokensAlreadyCredited: creditedRunTokens
         )
