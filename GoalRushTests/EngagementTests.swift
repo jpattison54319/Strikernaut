@@ -146,4 +146,9 @@ struct EngagementTests {
         #expect(store.progress.lifetimeStats.upgradesPurchased == 1)
         #expect(store.progress.unlockedAchievements.contains(.firstUpgrade))
     }
+
+    @Test func achievementDisplayOrderCoversEveryCaseExactlyOnce() {
+        #expect(Set(AchievementCatalog.ordered) == Set(AchievementID.allCases))
+        #expect(AchievementCatalog.ordered.count == AchievementID.allCases.count)
+    }
 }

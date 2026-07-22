@@ -380,7 +380,7 @@ final class GoalRushScene: SKScene {
     }
 
     private func showComboPopup(count: Int) {
-        guard !reducedEffects else { return }
+        guard !reducesMotion else { return }
         let label = SKLabelNode(text: "COMBO ×\(count)")
         label.fontName = "AvenirNext-Heavy"
         label.fontSize = 30

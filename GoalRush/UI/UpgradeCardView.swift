@@ -104,7 +104,10 @@ struct UpgradeCardView: View {
         }
         .animation(reduceMotion ? nil : .snappy, value: rank)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: justPurchased)
-        .onDisappear { flashTask?.cancel() }
+        .onDisappear {
+            flashTask?.cancel()
+            justPurchased = false
+        }
     }
 
     private func purchase() {
