@@ -81,14 +81,16 @@ final class GameStore {
             case "onboarding": store.route = .onboarding
             case "trophies": store.route = .trophies
             case "result-endless":
-                store.progress.endlessRecords[.earth] = .init(bestWave: 12, bestScore: 184_500)
+                store.progress.endlessRecords[.earth] = .init(bestWave: 11, bestScore: 150_000)
                 store.route = .result(.init(
                     mode: .endless(world: .earth),
                     didWin: false,
                     tokensEarned: 286,
                     remainingStamina: 0,
                     wave: 12,
-                    score: 184_500
+                    score: 184_500,
+                    newBestWave: true,
+                    newBestScore: true
                 ))
             case "result-world":
                 let rewards = GameContent.world(.earth).gearRewards

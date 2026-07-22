@@ -160,4 +160,13 @@ final class GoalRushUITests: XCTestCase {
         collect.tap()
         XCTAssertTrue(chest.waitForExistence(timeout: 2))
     }
+
+    func testEndlessResultShowsNewBestBadge() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-save", "--screen", "result-endless"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["result-new-best"].waitForExistence(timeout: 3)
+                      || app.otherElements["result-new-best"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["result-primary"].exists)
+    }
 }

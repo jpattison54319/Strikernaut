@@ -11,27 +11,114 @@ struct ResultView: View {
             LinearGradient(colors: backgroundColors, startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
 
-            if result.didWin || result.mode.isEndless {
+            if result.didWin || result.newBestWave || result.newBestScore {
                 ResultBurst(accent: result.mode.world.accentColor)
                     .scaleEffect(appeared ? 1 : 0.35)
                     .opacity(appeared ? 1 : 0)
                     .animation(reduceMotion ? nil : .spring(duration: 0.75, bounce: 0.26), value: appeared)
                     .accessibilityHidden(true)
+                ConfettiBurst(accent: result.mode.world.accentColor)
             }
 
             ScrollView {
                 VStack(spacing: 20) {
                     Spacer(minLength: 38)
                     hero
+                    if result.newBestWave || result.newBestScore {
+                        Text("NEW BEST!")
+                            .font(.headline.bold())
+                            .foregroundStyle(GoalRushTheme.navy)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 8)
+                            .background(GoalRushTheme.gold, in: .capsule)
+                            .shadow(color: GoalRushTheme.gold.opacity(0.5), radius: 14)
+                            .scaleEffect(appeared ? 1 : 0.4)
+                            .animation(reduceMotion ? nil : .spring(duration: 0.5, bounce: 0.5).delay(0.35), value: appeared)
+                            .accessibilityIdentifier("result-new-best")
+                    }
+                    if result.didWin && !result.mode.isEndless {
+                        HStack(spacing: 10) {
+                            ForEach(0..<3, id: \.self) { index in
+                                Image(systemName: index < StarRating.stars(staminaFraction: result.staminaFraction) ? "star.fill" : "star")
+                                    .font(.title.bold())
+                                    .foregroundStyle(GoalRushTheme.gold)
+                                    .scaleEffect(appeared ? 1 : 0.2)
+                                    .animation(reduceMotion ? nil : .spring(duration: 0.4, bounce: 0.55).delay(0.25 + Double(index) * 0.14), value: appeared)
+                            }
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(StarRating.stars(staminaFraction: result.staminaFraction)) of 3 stars")
+                        .accessibilityIdentifier("result-stars")
+                    }
                     resultStats
+                    let progressed = store.progress.missions.filter { $0.progress > 0 }
+                    if !progressed.isEmpty {
+                        GameCard {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Label("Mission progress", systemImage: "target")
+                                    .font(.subheadline.bold())
+                                ForEach(progressed) { mission in
+                                    HStack {
+                                        Text(MissionCatalog.title(for: mission.kind))
+                                            .font(.caption)
+                                        Spacer()
+                                        if mission.isComplete && !mission.claimed {
+                                            Text("COMPLETE • claim on Home")
+                                                .font(.caption.bold())
+                                                .foregroundStyle(GoalRushTheme.positive)
+                                        } else {
+                                            Text("\(min(mission.progress, mission.goal))/\(mission.goal)")
+                                                .font(.caption.bold().monospacedDigit())
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if !result.gearEarned.isEmpty { gearReward }
+                    if let track = nextUpgradeTrack {
+                        let rank = store.progress.rank(for: track)
+                        let cost = UpgradeRules.cost(forNextRank: rank)
+                        let affordable = store.progress.trainingTokens >= cost
+                        Button { store.route = .upgrades } label: {
+                            VStack(spacing: 8) {
+                                HStack {
+                                    Label("Next upgrade", systemImage: "arrow.up.circle.fill")
+                                        .font(.subheadline.bold())
+                                    Spacer()
+                                    Text(affordable ? "READY" : "\(store.progress.trainingTokens)/\(cost)")
+                                        .font(.caption.bold().monospacedDigit())
+                                        .foregroundStyle(affordable ? GoalRushTheme.positive : .secondary)
+                                }
+                                Text("\(UpgradeRules.title(for: track)) rank \(rank + 1)")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                ProgressView(value: min(1, Double(store.progress.trainingTokens) / Double(cost)))
+                                    .tint(affordable ? GoalRushTheme.positive : GoalRushTheme.gold)
+                            }
+                            .padding(14)
+                            .background(.white.opacity(0.06), in: .rect(cornerRadius: 18))
+                            .overlay { RoundedRectangle(cornerRadius: 18).stroke(affordable ? GoalRushTheme.positive.opacity(0.6) : .white.opacity(0.12)) }
+                        }
+                        .buttonStyle(.plain)
+                        .pulseGlow(affordable, color: GoalRushTheme.positive)
+                        .accessibilityIdentifier("result-next-upgrade")
+                    }
                     actions
                     Spacer(minLength: 24)
                 }
                 .padding(.horizontal, 22)
             }
         }
-        .onAppear { appeared = true }
+        .onAppear {
+            appeared = true
+            if result.didWin || result.newBestWave || result.newBestScore {
+                store.uiAudio.play(.fanfare)
+            } else {
+                store.uiAudio.play(.locked, volume: 0.4)
+            }
+        }
         .sensoryFeedback(trigger: appeared) { _, isVisible in
             guard isVisible, store.settings.hapticsEnabled else { return nil }
             return result.didWin || result.mode.isEndless ? .success : .warning
@@ -65,15 +152,17 @@ struct ResultView: View {
                     Label("Training Tokens", systemImage: "hexagon.fill")
                         .foregroundStyle(GoalRushTheme.gold)
                     Spacer()
-                    Text("+\(result.tokensEarned)")
-                        .font(.title2.bold())
-                        .foregroundStyle(GoalRushTheme.gold)
-                        .monospacedDigit()
+                    HStack(spacing: 4) {
+                        Text("+").font(.title2.bold()).foregroundStyle(GoalRushTheme.gold)
+                        CountUpText(value: result.tokensEarned, color: GoalRushTheme.gold)
+                    }
                 }
                 Divider().overlay(.white.opacity(0.12))
                 if result.mode.isEndless {
                     statRow(label: "Wave reached", value: "\(result.wave)", icon: "flag.checkered")
-                    statRow(label: "Final score", value: result.score.formatted(), icon: "trophy.fill")
+                    statRow(label: "Final score", icon: "trophy.fill") {
+                        CountUpText(value: result.score, font: .body.bold(), color: .primary)
+                    }
                     let best = store.progress.endlessRecord(for: result.mode.world)
                     statRow(label: "Personal best", value: "Wave \(best.bestWave)", icon: "crown.fill")
                 } else {
@@ -132,6 +221,11 @@ struct ResultView: View {
 
     private var actions: some View {
         VStack(spacing: 12) {
+            if result.isFirstClear {
+                Button("Spend your tokens", systemImage: "arrow.up.circle.fill") { store.route = .upgrades }
+                    .buttonStyle(SecondaryGameButton())
+            }
+
             Button(primaryTitle, systemImage: "play.fill", action: primaryAction)
                 .buttonStyle(PrimaryGameButton())
                 .accessibilityIdentifier("result-primary")
@@ -152,11 +246,21 @@ struct ResultView: View {
     }
 
     private func statRow(label: String, value: String, icon: String) -> some View {
+        statRow(label: label, icon: icon) { Text(value).bold().monospacedDigit() }
+    }
+
+    private func statRow<Value: View>(label: String, icon: String, @ViewBuilder value: () -> Value) -> some View {
         HStack {
             Label(label, systemImage: icon).foregroundStyle(.secondary)
             Spacer()
-            Text(value).bold().monospacedDigit()
+            value()
         }
+    }
+
+    private var nextUpgradeTrack: UpgradeTrack? {
+        UpgradeTrack.allCases
+            .filter { store.progress.rank(for: $0) < UpgradeRules.maxRank }
+            .min { UpgradeRules.cost(forNextRank: store.progress.rank(for: $0)) < UpgradeRules.cost(forNextRank: store.progress.rank(for: $1)) }
     }
 
     private var backgroundColors: [Color] {
@@ -167,6 +271,7 @@ struct ResultView: View {
     }
 
     private var heroIcon: String {
+        if result.isFirstClear { return "star.circle.fill" }
         if result.mode.isEndless { return "infinity.circle.fill" }
         return result.didWin ? "trophy.fill" : "arrow.counterclockwise.circle.fill"
     }
@@ -177,6 +282,7 @@ struct ResultView: View {
     }
 
     private var heroTitle: String {
+        if result.isFirstClear { return "FIRST CLEAR!" }
         if result.mode.isEndless { return "WAVE \(result.wave)" }
         return result.didWin ? "LEVEL CLEAR" : "RUN ENDED"
     }
