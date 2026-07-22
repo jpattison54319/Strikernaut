@@ -18,4 +18,8 @@ enum HomePresentation {
     static func completedMissionCount(_ missions: [MissionState]) -> Int {
         missions.filter { $0.isComplete && !$0.claimed }.count
     }
+
+    static func showsDailyCelebration(claimedReward: Int?, reducedFlashes: Bool) -> Bool {
+        claimedReward != nil && !reducedFlashes
+    }
 }

@@ -61,8 +61,13 @@ struct DailyRewardCard: View {
 
     private func claimedContent(reward: Int) -> some View {
         ZStack {
-            ConfettiBurst(accent: GoalRushTheme.gold)
-                .accessibilityHidden(true)
+            if HomePresentation.showsDailyCelebration(
+                claimedReward: claimedReward,
+                reducedFlashes: store.settings.reducedFlashes
+            ) {
+                ConfettiBurst(accent: GoalRushTheme.gold)
+                    .accessibilityHidden(true)
+            }
 
             VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
                 Image(systemName: "checkmark.seal.fill")

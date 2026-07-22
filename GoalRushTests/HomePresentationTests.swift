@@ -35,4 +35,14 @@ struct HomePresentationTests {
 
         #expect(HomePresentation.completedMissionCount(missions) == 1)
     }
+
+    @Test func missionClaimControlMeetsMinimumTapTarget() {
+        #expect(MissionRow.minimumClaimHeight >= GoalRushTheme.Metrics.minimumTapTarget)
+    }
+
+    @Test func dailyCelebrationRequiresAClaimAndAllowsReducedFlashesToSuppressIt() {
+        #expect(!HomePresentation.showsDailyCelebration(claimedReward: nil, reducedFlashes: false))
+        #expect(HomePresentation.showsDailyCelebration(claimedReward: 40, reducedFlashes: false))
+        #expect(!HomePresentation.showsDailyCelebration(claimedReward: 40, reducedFlashes: true))
+    }
 }
