@@ -192,16 +192,16 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         schemaVersion = max(2, try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 2)
         trainingTokens = try container.decodeIfPresent(Int.self, forKey: .trainingTokens) ?? 0
         highestUnlockedLevel = try container.decodeIfPresent(Int.self, forKey: .highestUnlockedLevel) ?? 1
-        upgradeRanks = try container.decodeIfPresent([UpgradeTrack: Int].self, forKey: .upgradeRanks) ?? [:]
+        upgradeRanks = container.decodeEnumKeyedMap(forKey: .upgradeRanks)
         levelRecords = try container.decodeIfPresent([Int: LevelRecord].self, forKey: .levelRecords) ?? [:]
         hasMovedInTutorial = try container.decodeIfPresent(Bool.self, forKey: .hasMovedInTutorial) ?? false
         unlockedGear = try container.decodeIfPresent(Set<GearID>.self, forKey: .unlockedGear) ?? []
-        let decodedGear = try container.decodeIfPresent([GearSlot: GearID].self, forKey: .equippedGear) ?? [:]
+        let decodedGear: [GearSlot: GearID] = container.decodeEnumKeyedMap(forKey: .equippedGear)
         equippedGear = [:]
         for (slot, id) in decodedGear where unlockedGear.contains(id) && GearCatalog.item(id).slot == slot {
             equippedGear[slot] = id
         }
-        endlessRecords = try container.decodeIfPresent([WorldID: EndlessRecord].self, forKey: .endlessRecords) ?? [:]
+        endlessRecords = container.decodeEnumKeyedMap(forKey: .endlessRecords)
         lifetimeStats = try container.decodeIfPresent(LifetimeStats.self, forKey: .lifetimeStats) ?? LifetimeStats()
         dailyReward = try container.decodeIfPresent(DailyRewardState.self, forKey: .dailyReward) ?? DailyRewardState()
         missions = try container.decodeIfPresent([MissionState].self, forKey: .missions) ?? []
@@ -229,6 +229,20 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         try container.encode(unlockedAchievements, forKey: .unlockedAchievements)
         try container.encode(seenGearIDs, forKey: .seenGearIDs)
         try container.encode(hasSeenOnboarding, forKey: .hasSeenOnboarding)
+    }
+}
+
+private extension KeyedDecodingContainer {
+    /// Dictionaries keyed by String-raw enums encode as arrays under Codable, but
+    /// v2 saves stored them as JSON objects keyed by the raw value. Accept both.
+    func decodeEnumKeyedMap<Key, Value>(forKey key: K) -> [Key: Value]
+        where Key: RawRepresentable & Decodable, Key.RawValue == String, Value: Decodable {
+        if let object = try? decode([String: Value].self, forKey: key) {
+            return object.reduce(into: [:]) { result, pair in
+                if let typedKey = Key(rawValue: pair.key) { result[typedKey] = pair.value }
+            }
+        }
+        return (try? decode([Key: Value].self, forKey: key)) ?? [:]
     }
 }
 
