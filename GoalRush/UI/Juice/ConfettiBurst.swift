@@ -15,6 +15,8 @@ struct ConfettiBurst: View {
                 let elapsed = context.date.timeIntervalSince(start)
                 Canvas { graphics, size in
                     guard elapsed >= 0, elapsed < duration else { return }
+                    let fade = 1 - elapsed / duration
+                    graphics.opacity = fade
                     for index in 0..<particleCount {
                         var random = SeededGenerator(seed: UInt64(index &+ 1) &* 6_364_136_223_846_793_005)
                         let angle = random.unit() * .pi * 2
@@ -22,12 +24,10 @@ struct ConfettiBurst: View {
                         let spin = random.unit() * .pi * 4
                         let x = size.width / 2 + cos(angle) * speed * elapsed
                         let y = size.height / 2 + sin(angle) * speed * elapsed + 320 * elapsed * elapsed
-                        let fade = 1 - elapsed / duration
-                        let rect = CGRect(x: x, y: y, width: 5, height: 8)
+                        let rect = CGRect(x: -2.5, y: -4, width: 5, height: 8)
                         let color: Color = index.isMultiple(of: 3) ? GoalRushTheme.gold : (index.isMultiple(of: 2) ? accent : .white)
-                        var transform = CGAffineTransform(translationX: rect.midX, y: rect.midY)
-                        transform = transform.rotated(by: spin + elapsed * 5)
-                        graphics.opacity = fade
+                        let transform = CGAffineTransform(rotationAngle: spin + elapsed * 5)
+                            .concatenating(CGAffineTransform(translationX: x, y: y))
                         graphics.fill(Path(rect).applying(transform), with: .color(color))
                     }
                 }

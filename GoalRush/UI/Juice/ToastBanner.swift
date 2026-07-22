@@ -9,6 +9,7 @@ struct ToastBanner: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
+                .accessibilityHidden(true)
                 .font(.title3.bold())
                 .foregroundStyle(GoalRushTheme.navy)
                 .frame(width: 40, height: 40)
