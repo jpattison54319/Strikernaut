@@ -337,6 +337,34 @@ struct GameSimulationTests {
         let standardHP = standard.snapshot.targets.map(\.maximumHitPoints).max() ?? 0
         // Level 2 scales up +8% per level while Level 1 scales down 15%.
         #expect(forgivingHP < standardHP)
+        // Level 1 spawns only coneRunners (base HP 10): the 0.85 factor must yield exactly 8.5.
+        #expect(abs(forgivingHP - 8.5) < 0.0001)
+        #expect(forgiving.snapshot.targets.allSatisfy { abs($0.maximumHitPoints - 8.5) < 0.0001 })
+    }
+
+    @Test func levelOneEnemiesAdvanceMoreSlowly() {
+        let forgiving = GameSimulation(level: GameContent.level(1), progress: .newPlayer, assistMode: false, seed: 3)
+        let standard = GameSimulation(level: GameContent.level(2), progress: .newPlayer, assistMode: false, seed: 3)
+        for _ in 0..<300 {
+            _ = forgiving.update(delta: 0.05)
+            _ = standard.update(delta: 0.05)
+        }
+        let forgivingFront = forgiving.snapshot.targets.map(\.position.y).min() ?? 1
+        let standardFront = standard.snapshot.targets.map(\.position.y).min() ?? 1
+        // coneRunner base speed 0.105 × 0.85 vs level-2 pool at full speed: L1's front line lags.
+        #expect(forgivingFront > standardFront)
+
+        // Pin the 0.85 speed factor exactly: every L1 enemy is a coneRunner and must
+        // advance 0.105 × 0.85 × delta per step (no abilities, campaign multiplier 1).
+        let before = Dictionary(uniqueKeysWithValues: forgiving.snapshot.targets.map { ($0.id, $0.position.y) })
+        _ = forgiving.update(delta: 0.05)
+        var tracked = 0
+        for target in forgiving.snapshot.targets {
+            guard case .enemy = target.kind, let previousY = before[target.id] else { continue }
+            tracked += 1
+            #expect(abs(previousY - target.position.y - 0.105 * 0.85 * 0.05) < 0.0001)
+        }
+        #expect(tracked > 0)
     }
 
     @Test func levelOneCheckpointRestoresStamina() {
