@@ -16,7 +16,8 @@ struct EndlessHubView: View {
             }
             .background(background)
             .safeAreaInset(edge: .bottom) {
-                Button("Start \(selectedWorld.name) Run", systemImage: "infinity") {
+                Button(record.bestWave > 0 ? "Start \(selectedWorld.name) Run • Best W\(record.bestWave)" : "Start \(selectedWorld.name) Run", systemImage: "infinity") {
+                    store.uiAudio.play(.tap)
                     store.startEndless(world: store.selectedWorld)
                 }
                 .buttonStyle(PrimaryGameButton())
@@ -120,6 +121,7 @@ struct EndlessHubView: View {
     }
 
     private var selectedWorld: WorldDefinition { GameContent.world(store.selectedWorld) }
+    private var record: EndlessRecord { store.progress.endlessRecord(for: store.selectedWorld) }
 
     private var background: some View {
         LinearGradient(
@@ -185,6 +187,11 @@ private struct EndlessWorldCard: View {
                             Text(record.bestScore > 0 ? "\(record.bestScore.formatted()) pts" : "No record yet")
                                 .font(.caption2)
                                 .foregroundStyle(.white.opacity(0.68))
+                            if record.bestWave > 0 {
+                                Label("Best wave \(record.bestWave) — beat it", systemImage: "crown.fill")
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(GoalRushTheme.gold)
+                            }
                         }
                     } else {
                         Image(systemName: "lock.fill").foregroundStyle(GoalRushTheme.gold)

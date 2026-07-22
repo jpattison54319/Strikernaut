@@ -161,6 +161,12 @@ private struct WorldCampaignCard: View {
                     Label(unlocked ? "\(completedCount) / 10" : "Locked", systemImage: unlocked ? "flag.checkered" : "lock.fill")
                         .font(.caption.bold())
                         .foregroundStyle(unlocked ? .white.opacity(0.80) : GoalRushTheme.gold)
+                    if unlocked {
+                        ProgressView(value: Double(completedCount), total: 10)
+                            .tint(world.id.accentColor)
+                            .scaleEffect(y: 1.4)
+                            .padding(.top, 4)
+                    }
                 }
                 .padding(16)
             }
@@ -223,14 +229,20 @@ private struct LevelCardView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .shimmer(active: unlocked && !completed)
         .opacity(unlocked ? 1 : 0.56)
     }
 
     @ViewBuilder
     private var statusBadge: some View {
         if completed {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(GoalRushTheme.positive)
+            HStack(spacing: 2) {
+                ForEach(0..<3, id: \.self) { index in
+                    Image(systemName: index < StarRating.stars(staminaFraction: min(1, (record?.bestStamina ?? 0) / 100)) ? "star.fill" : "star")
+                        .font(.caption.bold())
+                        .foregroundStyle(GoalRushTheme.gold)
+                }
+            }
         } else if unlocked {
             Text("READY")
                 .foregroundStyle(GoalRushTheme.cyan)
