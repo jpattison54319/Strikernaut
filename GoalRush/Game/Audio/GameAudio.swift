@@ -32,6 +32,8 @@ final class GameAudio {
         case .bossPhase: play("boss-phase", volume: 0.84, feedback: .boss)
         case .waveCompleted: play("confirm", volume: 0.68, feedback: .success)
         case .meteorKick: play("boss-phase", volume: 0.38, feedback: .critical)
+        case .comboMilestone: play("ui-combo", volume: 0.45, feedback: .reward)
+        case .comboChanged: break
         case .finished(let won): play(won ? "victory" : "defeat", volume: won ? 0.72 : 0.58, feedback: won ? .success : .damage)
         }
     }
@@ -69,7 +71,8 @@ final class GameAudio {
             "confirm": 2,
             "victory": 1,
             "defeat": 1,
-            "boss-phase": 2
+            "boss-phase": 2,
+            "ui-combo": 3
         ]
         for (name, count) in poolSizes {
             guard let url = Bundle.main.url(forResource: name, withExtension: "wav") else { continue }

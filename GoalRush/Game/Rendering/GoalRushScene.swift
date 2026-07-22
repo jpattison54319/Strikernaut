@@ -191,6 +191,10 @@ final class GoalRushScene: SKScene {
             case .meteorKick:
                 showScreenPulse(color: SKColor(red: 1, green: 0.34, blue: 0.08, alpha: 1), strength: 0.22)
                 spawnMeteorAura()
+            case .comboMilestone(let count):
+                showComboPopup(count: count)
+            case .comboChanged:
+                break
             case .finished(let won):
                 if won { showScreenPulse(color: SKColor(red: 1, green: 0.78, blue: 0.16, alpha: 1), strength: 0.48) }
             }
@@ -373,6 +377,24 @@ final class GoalRushScene: SKScene {
             .scale(to: reducesMotion ? 1.2 : 2.6, duration: reducesMotion ? 0.12 : 0.28),
             .fadeOut(withDuration: reducesMotion ? 0.12 : 0.28)
         ]), .removeFromParent()]))
+    }
+
+    private func showComboPopup(count: Int) {
+        guard !reducedEffects else { return }
+        let label = SKLabelNode(text: "COMBO ×\(count)")
+        label.fontName = "AvenirNext-Heavy"
+        label.fontSize = 30
+        label.fontColor = SKColor(red: 1.0, green: 0.72, blue: 0.12, alpha: 1)
+        label.position = CGPoint(x: size.width / 2, y: size.height * 0.62)
+        label.zPosition = 4_050
+        label.setScale(0.4)
+        addChild(label)
+        label.run(.sequence([
+            .group([.scale(to: 1, duration: 0.16), .fadeIn(withDuration: 0.1)]),
+            .wait(forDuration: 0.55),
+            .fadeOut(withDuration: 0.25),
+            .removeFromParent()
+        ]))
     }
 }
 

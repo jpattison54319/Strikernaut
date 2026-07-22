@@ -71,6 +71,11 @@ struct SimulationSnapshot: Equatable, Sendable {
     var waveDuration: Double
     var score: Int
     var isEndless: Bool
+    var combo: Int
+    var comboFraction: Double
+    var bestCombo: Int
+    var targetsDefeated: Int
+    var bossesDefeated: Int
 }
 
 struct HUDState: Equatable, Sendable {
@@ -86,6 +91,8 @@ struct HUDState: Equatable, Sendable {
     var waveDuration: Double
     var score: Int
     var isEndless: Bool
+    var combo: Int
+    var comboFraction: Double
 
     init(snapshot: SimulationSnapshot) {
         stamina = snapshot.stamina
@@ -99,6 +106,8 @@ struct HUDState: Equatable, Sendable {
         waveDuration = snapshot.waveDuration
         score = snapshot.score
         isEndless = snapshot.isEndless
+        combo = snapshot.combo
+        comboFraction = snapshot.comboFraction
         bossActive = snapshot.targets.contains { target in
             guard case .enemy(let enemy) = target.kind else { return false }
             return enemy == .titanKeeper || enemy == .marsColossus
@@ -117,6 +126,8 @@ enum SimulationEvent: Equatable, Sendable {
     case bossPhase(Int)
     case waveCompleted(Int)
     case meteorKick
+    case comboChanged(Int)
+    case comboMilestone(Int)
     case finished(Bool)
 }
 

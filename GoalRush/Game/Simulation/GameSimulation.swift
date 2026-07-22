@@ -18,6 +18,10 @@ final class GameSimulation {
     private var bossSpawned = false
     private var bossPhase = 1
     private var kickCount = 0
+    static let comboWindow: Double = 3.0
+    private static let comboMilestones: Set<Int> = [5, 10, 15, 25, 50, 100]
+    private var comboCount = 0
+    private var comboTimer = 0.0
 
     convenience init(level: LevelDefinition, progress: PlayerProgress, assistMode: Bool, seed: UInt64) {
         self.init(mode: .campaign(level: level.number), progress: progress, assistMode: assistMode, seed: seed)
@@ -45,7 +49,12 @@ final class GameSimulation {
             waveElapsed: 0,
             waveDuration: EndlessRules.waveDuration,
             score: 0,
-            isEndless: mode.isEndless
+            isEndless: mode.isEndless,
+            combo: 0,
+            comboFraction: 0,
+            bestCombo: 0,
+            targetsDefeated: 0,
+            bossesDefeated: 0
         )
     }
 
@@ -83,6 +92,7 @@ final class GameSimulation {
         snapshot.elapsed += delta
         if mode.isEndless { snapshot.waveElapsed += delta }
         updatePlayer(delta: delta)
+        updateCombo(delta: delta, events: &events)
         updateCampaignCheckpoints(events: &events)
         updateSpawning(delta: delta)
         updateKicking(delta: delta, events: &events)
@@ -293,6 +303,7 @@ final class GameSimulation {
                         let defeated = snapshot.targets[targetIndex]
                         removedTargets.insert(defeated.id)
                         awardReward(for: defeated, events: &events)
+                        registerDefeat(defeated, events: &events)
                     }
                     if projectile.remainingPierces > 0 {
                         projectile.remainingPierces -= 1
@@ -355,8 +366,39 @@ final class GameSimulation {
             snapshot.shieldCharges -= 1
         } else {
             snapshot.stamina = max(0, snapshot.stamina - amount)
+            if comboCount > 0 {
+                comboCount = 0
+                comboTimer = 0
+                snapshot.combo = 0
+                snapshot.comboFraction = 0
+                events.append(.comboChanged(0))
+            }
         }
         events.append(.damage)
+    }
+
+    private func updateCombo(delta: Double, events: inout [SimulationEvent]) {
+        guard comboCount > 0 else { return }
+        comboTimer -= delta
+        snapshot.comboFraction = max(0, comboTimer / Self.comboWindow)
+        if comboTimer <= 0 {
+            comboCount = 0
+            snapshot.combo = 0
+            snapshot.comboFraction = 0
+            events.append(.comboChanged(0))
+        }
+    }
+
+    private func registerDefeat(_ target: TargetState, events: inout [SimulationEvent]) {
+        comboCount += 1
+        comboTimer = Self.comboWindow
+        snapshot.combo = comboCount
+        snapshot.comboFraction = 1
+        snapshot.bestCombo = max(snapshot.bestCombo, comboCount)
+        snapshot.targetsDefeated += 1
+        if case .enemy(let kind) = target.kind, isBoss(kind) { snapshot.bossesDefeated += 1 }
+        events.append(.comboChanged(comboCount))
+        if Self.comboMilestones.contains(comboCount) { events.append(.comboMilestone(comboCount)) }
     }
 
     private func spawnEnemy(_ kind: EnemyKind, x: Double, y: Double) {
@@ -416,7 +458,8 @@ final class GameSimulation {
         let waveMultiplier = mode.isEndless ? 1 + Double(max(0, snapshot.wave - 1) / 10) * 0.25 : 1
         let value = max(1, Int((Double(baseValue) * stats.tokenMultiplier * goldenMultiplier * waveMultiplier).rounded()))
         snapshot.tokens += value
-        snapshot.score += baseValue * 100 * max(1, snapshot.wave)
+        let comboBonus = 1 + min(1.0, Double(comboCount) * 0.1)
+        snapshot.score += Int((Double(baseValue * 100 * max(1, snapshot.wave)) * comboBonus).rounded())
         events.append(.reward(value, position))
     }
 

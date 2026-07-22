@@ -280,4 +280,49 @@ struct GameSimulationTests {
         #expect(campaign >= firstTwoRanksAcrossAllTracks)
         #expect(campaign < maximumBuild)
     }
+
+    @Test func comboBuildsOnDefeatsAndResetsOnDamage() {
+        let simulation = GameSimulation(mode: .endless(world: .earth), progress: .newPlayer, assistMode: true, seed: 5)
+        simulation.apply(.oneTwo)
+        simulation.apply(.powerDrive)
+        var sawCombo = false
+        var sawReset = false
+        for _ in 0..<2_000 where !sawReset {
+            if let target = simulation.snapshot.targets.first {
+                simulation.setPlayerTarget(x: target.position.x)
+            }
+            for event in simulation.update(delta: 0.05) {
+                if case .comboChanged(let count) = event, count >= 2 { sawCombo = true }
+                if case .comboChanged(0) = event, sawCombo { sawReset = true }
+            }
+        }
+        #expect(sawCombo)
+        #expect(simulation.snapshot.bestCombo >= 2)
+        #expect(simulation.snapshot.targetsDefeated >= simulation.snapshot.bestCombo)
+    }
+
+    @Test func comboResetsWithinSecondsWithoutDefeats() {
+        let simulation = GameSimulation(mode: .endless(world: .earth), progress: .newPlayer, assistMode: true, seed: 5)
+        simulation.apply(.powerDrive)
+        var builtCombo = false
+        for _ in 0..<1_200 where !builtCombo {
+            if let target = simulation.snapshot.targets.first {
+                simulation.setPlayerTarget(x: target.position.x)
+            }
+            builtCombo = simulation.update(delta: 0.05).contains { event in
+                if case .comboChanged(let count) = event { return count >= 1 }
+                return false
+            }
+        }
+        #expect(builtCombo)
+        // Stop aiming. The 3 s window lapses, or an enemy reaches the line and
+        // deals damage — either way the combo must reset within 20 simulated seconds.
+        var reset = false
+        for _ in 0..<400 where !reset {
+            _ = simulation.update(delta: 0.05)
+            reset = simulation.snapshot.combo == 0
+        }
+        #expect(reset)
+        #expect(simulation.snapshot.comboFraction == 0)
+    }
 }
