@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - iOS 18 deployment target, Swift 6, `SWIFT_STRICT_CONCURRENCY: complete`, `SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor`.
-- **Do NOT run any git mutations.** This repo has zero commits and the owner has not authorized commits. Skip all "commit" steps.
+- **Git is authorized by the owner.** Work happens on branch `ux-engagement-overhaul`. Each task ends with one commit: stage only the task's files, message style `feat: <task summary>` / `test:` / `docs:` as appropriate.
 - After adding/removing files, `make generate` (XcodeGen 2.45.4 installed) re-globs `GoalRush/`; `make build`/`make test` run it automatically.
 - Verify with `make build` (build) and `make test` (unit). `make test-ui` for UI tests. Destination: iPhone 17 Pro, iOS 26.5.
 - Tests use Swift Testing: `@MainActor struct XTests { @Test func y() { #expect(...) } }` with `@testable import GoalRush`.
