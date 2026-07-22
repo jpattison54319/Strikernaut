@@ -10,12 +10,19 @@ private struct PulseGlow: ViewModifier {
         content
             .shadow(color: active ? color.opacity(glowing ? 0.55 : 0.18) : .clear,
                     radius: glowing ? 16 : 7)
-            .onAppear {
-                guard active, !reduceMotion else { return }
-                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                    glowing = true
-                }
-            }
+            .onAppear { updateGlow() }
+            .onChange(of: active) { _, _ in updateGlow() }
+    }
+
+    private func updateGlow() {
+        guard active, !reduceMotion else {
+            glowing = false
+            return
+        }
+        guard !glowing else { return }
+        withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+            glowing = true
+        }
     }
 }
 
