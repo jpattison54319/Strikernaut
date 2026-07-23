@@ -32,7 +32,7 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(impactTrack.waitForExistence(timeout: 2))
         impactTrack.tap()
         XCTAssertTrue(app.otherElements["upgrade-detail"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.buttons["upgrade-purchase-impact"].exists)
+        XCTAssertTrue(app.buttons["upgrade-purchase-impact"].waitForExistence(timeout: 2))
     }
 
     func testHomeProgressivelyDisclosesMissionDetails() {
