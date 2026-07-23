@@ -13,13 +13,13 @@ struct GameDestinationBar: View {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
                     titleLabel
-                    controls
+                    accessibilityControls
                 }
             } else {
                 ZStack {
                     titleLabel
                         .padding(.horizontal, 110)
-                    controls
+                    standardControls
                 }
             }
         }
@@ -38,32 +38,64 @@ struct GameDestinationBar: View {
             .font(.headline.weight(.heavy))
             .foregroundStyle(.white)
             .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
     }
 
-    private var controls: some View {
+    private var accessibilityControls: some View {
+        VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+            homeButton
+            infoButton
+        }
+        .frame(maxWidth: .infinity)
+        .foregroundStyle(.white)
+        .buttonStyle(.plain)
+    }
+
+    private var standardControls: some View {
         HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
-            Button(action: onHome) {
-                Label("Home", systemImage: "house.fill")
-                    .font(.subheadline.bold())
-                    .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)
-                    .frame(minHeight: GoalRushTheme.Metrics.minimumTapTarget)
-            }
+            homeButton
 
             Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
 
-            Button(action: onInfo) {
-                HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
-                    Text(trailingText)
-                        .lineLimit(1)
-                    Image(systemName: "info.circle.fill")
-                        .accessibilityHidden(true)
-                }
-                .font(.subheadline.bold())
-                .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)
-                .frame(minHeight: GoalRushTheme.Metrics.minimumTapTarget)
-            }
+            infoButton
         }
         .foregroundStyle(.white)
         .buttonStyle(.plain)
+    }
+
+    private var homeButton: some View {
+        Button(action: onHome) {
+            Label("Home", systemImage: "house.fill")
+                .font(.subheadline.bold())
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)
+                .frame(
+                    maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil,
+                    minHeight: GoalRushTheme.Metrics.minimumTapTarget,
+                    alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center
+                )
+        }
+    }
+
+    private var infoButton: some View {
+        Button(action: onInfo) {
+            HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+                Text(trailingText)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: true)
+                Image(systemName: "info.circle.fill")
+                    .accessibilityHidden(true)
+            }
+            .font(.subheadline.bold())
+            .multilineTextAlignment(.leading)
+            .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)
+            .frame(
+                maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil,
+                minHeight: GoalRushTheme.Metrics.minimumTapTarget,
+                alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center
+            )
+        }
     }
 }
