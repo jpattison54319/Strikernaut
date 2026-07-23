@@ -2,63 +2,140 @@ import SwiftUI
 
 struct TrophiesView: View {
     @Environment(GameStore.self) private var store
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var selectedCategory: ProgressCategory?
+    @State private var showingOverview = false
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(AchievementCatalog.ordered, id: \.self) { id in
-                        trophyRow(id)
+        AtmosphericGameScreen(backgroundImage: "MenuHero") {
+            VStack(spacing: 0) {
+                GameDestinationBar(
+                    title: "Progress",
+                    trailingText: "Overview",
+                    onHome: goHome,
+                    onInfo: showOverview
+                )
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.sectionSpacing) {
+                        completionSummary
+                        nextMilestone
+                        categoryGrid
                     }
+                    .padding(.horizontal, GoalRushTheme.Metrics.horizontalPadding)
+                    .padding(.vertical, GoalRushTheme.Metrics.sectionSpacing)
                 }
-                .padding()
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .background(
-                LinearGradient(colors: [GoalRushTheme.navy, GoalRushTheme.gold.opacity(0.10), GoalRushTheme.navy],
-                               startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            )
-            .navigationTitle("Trophies")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Home", systemImage: "chevron.left") { store.route = .home }
+        }
+        .sheet(item: $selectedCategory) { category in
+            ProgressCategorySheet(category: category)
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showingOverview) {
+            GameSheetScaffold(title: "Progress", subtitle: "Your journey across every Goal Rush mode.") {
+                Text("Open a category to review milestones, lifetime totals, your daily streak, or world gear collections.")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .padding(GoalRushTheme.Metrics.standardSpacing)
+                    .gameSurface(.panel)
+            }
+            .presentationDetents([.medium])
+        }
+    }
+
+    private var completionSummary: some View {
+        let unlocked = store.progress.unlockedAchievements.count
+        let total = AchievementID.allCases.count
+
+        return VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.compactSpacing) {
+            HStack {
+                Label("MILESTONE COMPLETION", systemImage: "trophy.fill")
+                    .font(.caption.bold())
+                    .foregroundStyle(GoalRushTheme.gold)
+                Spacer(minLength: 8)
+                Text("\(unlocked)/\(total)")
+                    .font(.headline.bold().monospacedDigit())
+                    .foregroundStyle(.white)
+            }
+            ProgressView(value: Double(unlocked), total: Double(total))
+                .tint(GoalRushTheme.gold)
+                .scaleEffect(y: 1.35)
+        }
+        .padding(GoalRushTheme.Metrics.standardSpacing)
+        .gameSurface(.hud)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(unlocked) of \(total) milestones complete")
+    }
+
+    @ViewBuilder
+    private var nextMilestone: some View {
+        if let next = AchievementCatalog.ordered.first(where: { !store.progress.unlockedAchievements.contains($0) }) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("NEXT MILESTONE")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white.opacity(0.68))
+                Text(AchievementCatalog.title(for: next))
+                    .font(.title3.weight(.heavy))
+                    .foregroundStyle(.white)
+                Text(AchievementCatalog.subtitle(for: next))
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.76))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(GoalRushTheme.Metrics.standardSpacing)
+            .gameSurface(.panel)
+            .accessibilityElement(children: .combine)
+        } else {
+            Label("Every milestone complete", systemImage: "checkmark.seal.fill")
+                .font(.headline.bold())
+                .foregroundStyle(GoalRushTheme.positive)
+                .frame(maxWidth: .infinity, minHeight: 56)
+                .gameSurface(.panel)
+        }
+    }
+
+    private var categoryGrid: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
+                    categoryButtons
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Text("\(store.progress.unlockedAchievements.count)/\(AchievementID.allCases.count)")
-                        .font(.subheadline.bold().monospacedDigit())
-                        .foregroundStyle(GoalRushTheme.gold)
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.flexible()), GridItem(.flexible())],
+                    spacing: GoalRushTheme.Metrics.sectionSpacing
+                ) {
+                    categoryButtons
                 }
             }
         }
     }
 
-    private func trophyRow(_ id: AchievementID) -> some View {
-        let unlocked = store.progress.unlockedAchievements.contains(id)
-        return HStack(spacing: 13) {
-            Image(systemName: AchievementCatalog.icon(for: id))
-                .font(.title3.bold())
-                .foregroundStyle(unlocked ? GoalRushTheme.navy : .secondary)
-                .frame(width: 44, height: 44)
-                .background(unlocked ? GoalRushTheme.gold : .white.opacity(0.08), in: .circle)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(AchievementCatalog.title(for: id))
-                    .font(.headline)
-                    .foregroundStyle(unlocked ? .white : .secondary)
-                Text(AchievementCatalog.subtitle(for: id))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    @ViewBuilder
+    private var categoryButtons: some View {
+            ForEach(ProgressCategory.allCases) { category in
+                FloatingGameActionButton(
+                    title: category.title,
+                    subtitle: category.subtitle,
+                    systemImage: category.icon,
+                    accent: category.accent
+                ) {
+                    store.uiAudio.play(.tap)
+                    selectedCategory = category
+                }
+                .frame(maxWidth: .infinity, minHeight: 120)
+                .accessibilityIdentifier("progress-\(category.rawValue)")
             }
-            Spacer(minLength: 4)
-            if unlocked {
-                Image(systemName: "checkmark.seal.fill").foregroundStyle(GoalRushTheme.gold)
-            } else {
-                Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary)
-            }
-        }
-        .padding(12)
-        .background(.white.opacity(unlocked ? 0.09 : 0.04), in: .rect(cornerRadius: 16))
-        .overlay { RoundedRectangle(cornerRadius: 16).stroke(unlocked ? GoalRushTheme.gold.opacity(0.35) : .white.opacity(0.08)) }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("trophy-\(id.rawValue)")
+    }
+
+    private func goHome() {
+        store.uiAudio.play(.tap)
+        store.route = .home
+    }
+
+    private func showOverview() {
+        store.uiAudio.play(.tap)
+        showingOverview = true
     }
 }

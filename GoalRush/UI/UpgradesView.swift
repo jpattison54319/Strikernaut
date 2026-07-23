@@ -2,73 +2,99 @@ import SwiftUI
 
 struct UpgradesView: View {
     @Environment(GameStore.self) private var store
+    @State private var selectedTrack: UpgradeTrack?
     @State private var showingInfo = false
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 28) {
-                    ForEach(UpgradeCategory.allCases) { category in
-                        VStack(alignment: .leading, spacing: 14) {
-                            Label(category.rawValue, systemImage: category == .player ? "figure.run" : "soccerball")
-                                .font(.title2.bold())
-                            ForEach(UpgradeTrack.allCases.filter { $0.category == category }) { track in
-                                UpgradeCardView(track: track)
-                            }
+        AtmosphericGameScreen(backgroundImage: "MenuHero") {
+            VStack(spacing: 0) {
+                GameDestinationBar(
+                    title: "Upgrades",
+                    trailingText: "How It Works",
+                    onHome: goHome,
+                    onInfo: showInfo
+                )
+
+                ScrollView {
+                    VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
+                        tokenSummary
+                        UpgradeTrackStage { track in
+                            store.uiAudio.play(.tap)
+                            selectedTrack = track
                         }
                     }
+                    .padding(.horizontal, GoalRushTheme.Metrics.horizontalPadding)
+                    .padding(.vertical, GoalRushTheme.Metrics.sectionSpacing)
                 }
-                .padding()
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .background(
-                LinearGradient(colors: [GoalRushTheme.navy, Color(red: 0.03, green: 0.18, blue: 0.22)], startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            )
-            .navigationTitle("Upgrades")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Home", systemImage: "chevron.left") { store.route = .home }
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("About upgrades", systemImage: "info.circle") {
-                        showingInfo = true
-                    }
-                    .labelStyle(.iconOnly)
-                    HStack(spacing: 5) {
-                        Image(systemName: "hexagon.fill")
-                        Text("\(store.progress.trainingTokens)").monospacedDigit()
-                    }
-                        .font(.subheadline.bold())
-                        .foregroundStyle(GoalRushTheme.gold)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("\(store.progress.trainingTokens) Training Tokens")
-                }
-            }
-            .sheet(isPresented: $showingInfo) {
-                UpgradeInfoView()
-                    .presentationDetents([.medium])
-            }
-            .onAppear { store.uiAudio.play(.whoosh, volume: 0.35) }
         }
+        .sheet(item: $selectedTrack) { track in
+            GameSheetScaffold(
+                title: UpgradeRules.title(for: track),
+                subtitle: UpgradePresentation.benefit(for: track)
+            ) {
+                UpgradeCardView(track: track)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("upgrade-detail")
+            .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showingInfo) {
+            UpgradeInfoView()
+                .presentationDetents([.medium])
+        }
+        .onAppear { store.uiAudio.play(.whoosh, volume: 0.35) }
+    }
+
+    private var tokenSummary: some View {
+        HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
+            Image(systemName: "hexagon.fill")
+                .font(.title2.bold())
+                .foregroundStyle(GoalRushTheme.gold)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("TRAINING TOKENS")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white.opacity(0.68))
+                Text(store.progress.trainingTokens.formatted())
+                    .font(.title2.weight(.heavy).monospacedDigit())
+                    .foregroundStyle(.white)
+            }
+            Spacer(minLength: 0)
+            Text("Choose a track")
+                .font(.subheadline.bold())
+                .foregroundStyle(GoalRushTheme.cyan)
+        }
+        .padding(GoalRushTheme.Metrics.standardSpacing)
+        .gameSurface(.hud)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(store.progress.trainingTokens) Training Tokens. Choose a track.")
+    }
+
+    private func goHome() {
+        store.uiAudio.play(.tap)
+        store.route = .home
+    }
+
+    private func showInfo() {
+        store.uiAudio.play(.tap)
+        showingInfo = true
     }
 }
 
 private struct UpgradeInfoView: View {
-    @Environment(\.dismiss) private var dismiss
-
     var body: some View {
-        NavigationStack {
-            List {
+        GameSheetScaffold(title: "Upgrades", subtitle: "Permanent improvements for every mode.") {
+            VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing) {
                 Label("Upgrades are permanent", systemImage: "checkmark.shield.fill")
                 Label("Active in Campaign and Endless", systemImage: "gamecontroller.fill")
-                Label("Cards show current → next", systemImage: "arrow.right")
+                Label("Details show current and next values", systemImage: "arrow.right")
             }
-            .navigationTitle("Upgrades")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
+            .font(.headline)
+            .foregroundStyle(.white)
+            .padding(GoalRushTheme.Metrics.standardSpacing)
+            .gameSurface(.panel)
         }
     }
 }

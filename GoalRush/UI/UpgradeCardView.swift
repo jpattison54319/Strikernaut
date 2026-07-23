@@ -80,7 +80,7 @@ struct UpgradeCardView: View {
                     Button("Upgrade for \(cost) Tokens", systemImage: "arrow.up.circle.fill", action: purchase)
                         .buttonStyle(PrimaryGameButton())
                         .disabled(!affordable)
-                        .accessibilityIdentifier("upgrade-\(track.rawValue)")
+                        .accessibilityIdentifier("upgrade-purchase-\(track.rawValue)")
 
                     if !affordable {
                         ProgressView(value: min(1, Double(store.progress.trainingTokens) / Double(cost))) {
@@ -98,12 +98,12 @@ struct UpgradeCardView: View {
                 .stroke(GoalRushTheme.gold, lineWidth: 2)
                 .opacity(justPurchased ? 1 : 0)
         }
-        .pulseGlow(affordable && !maximum, color: GoalRushTheme.gold)
+        .pulseGlow(affordable && !maximum && !store.settings.reducedFlashes, color: GoalRushTheme.gold)
         .sensoryFeedback(trigger: successFeedback) { _, _ in
             store.settings.hapticsEnabled ? .success : nil
         }
-        .animation(reduceMotion ? nil : .snappy, value: rank)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: justPurchased)
+        .animation(reduceMotion || store.settings.reducedFlashes ? nil : .snappy, value: rank)
+        .animation(reduceMotion || store.settings.reducedFlashes ? nil : .easeOut(duration: 0.35), value: justPurchased)
         .onDisappear {
             flashTask?.cancel()
             justPurchased = false
@@ -114,7 +114,7 @@ struct UpgradeCardView: View {
         if store.purchase(track) {
             store.uiAudio.play(.purchase)
             successFeedback += 1
-            guard !reduceMotion else { return }
+            guard !reduceMotion, !store.settings.reducedFlashes else { return }
             flashTask?.cancel()
             justPurchased = true
             flashTask = Task {

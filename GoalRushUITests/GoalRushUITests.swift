@@ -18,6 +18,19 @@ final class GoalRushUITests: XCTestCase {
         app.buttons["Home"].tap()
         app.buttons["upgrades"].tap()
         XCTAssertTrue(app.buttons["upgrade-impact"].waitForExistence(timeout: 2))
+        app.buttons["upgrade-impact"].tap()
+        XCTAssertTrue(app.buttons["upgrade-purchase-impact"].waitForExistence(timeout: 2))
+    }
+
+    func testUpgradesProgressivelyDiscloseTrackDetails() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-save", "--currency", "500", "--screen", "upgrades"]
+        app.launch()
+
+        XCTAssertFalse(app.otherElements["upgrade-detail"].exists)
+        app.buttons["upgrade-impact"].tap()
+        XCTAssertTrue(app.otherElements["upgrade-detail"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["upgrade-purchase-impact"].exists)
     }
 
     func testHomeProgressivelyDisclosesMissionDetails() {
@@ -39,6 +52,8 @@ final class GoalRushUITests: XCTestCase {
         app.launchArguments = ["--reset-save"]
         app.launch()
         app.buttons["settings"].tap()
+        XCTAssertTrue(app.buttons["settings-accessibility"].waitForExistence(timeout: 2))
+        app.buttons["settings-accessibility"].tap()
         XCTAssertTrue(app.switches["Assist Mode"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.switches["Reduce Flashes"].exists)
     }
@@ -93,8 +108,21 @@ final class GoalRushUITests: XCTestCase {
         let next = app.buttons["gear-torso-next"]
         XCTAssertTrue(next.waitForExistence(timeout: 3))
         next.tap()
+        app.buttons["Item Details"].tap()
         XCTAssertTrue(app.staticTexts["Captain Jersey"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.staticTexts["+10 maximum stamina"].exists)
+    }
+
+    func testProgressProgressivelyDisclosesTrophies() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-save", "--screen", "trophies"]
+        app.launch()
+
+        let trophies = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "trophy-"))
+        XCTAssertEqual(trophies.count, 0)
+        app.buttons["progress-trophies"].tap()
+        XCTAssertGreaterThan(trophies.count, 0)
     }
 
     func testUnlockedMarsCampaignTabIsSelectable() {
