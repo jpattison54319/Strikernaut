@@ -294,7 +294,16 @@ private struct CampaignLevelNode: View {
     }
 
     private var unlockCondition: String {
-        "Clear challenge \(max(1, level.number - 1)) to unlock"
+        if level.worldLevel > 1 {
+            return "Clear \(GameContent.world(level.world).name) challenge \(level.worldLevel - 1) to unlock"
+        }
+
+        switch level.world {
+        case .earth:
+            return "Available now"
+        case .mars:
+            return "Clear Earth challenge 10 to unlock"
+        }
     }
 }
 

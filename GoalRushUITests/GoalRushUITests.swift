@@ -116,6 +116,12 @@ final class GoalRushUITests: XCTestCase {
         app.launch()
 
         XCTAssertFalse(app.otherElements["level-preview"].exists)
+        let lockedLevel = app.buttons["level-2"]
+        XCTAssertTrue(lockedLevel.exists)
+        XCTAssertTrue(
+            lockedLevel.label.contains("Clear Earth challenge 1 to unlock"),
+            "Unexpected locked level label: \(lockedLevel.label)"
+        )
         app.buttons["level-1"].tap()
         XCTAssertTrue(app.otherElements["level-preview"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.buttons["level-preview-play"].exists)

@@ -1,13 +1,19 @@
 import SwiftUI
 
 struct WorldSelectionBar: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let identifierPrefix: String
     let selectedWorld: WorldID
     let progress: PlayerProgress
     let onSelect: (WorldID) -> Void
 
     var body: some View {
-        HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: GoalRushTheme.Metrics.compactSpacing))
+            : AnyLayout(HStackLayout(spacing: GoalRushTheme.Metrics.compactSpacing))
+
+        layout {
             ForEach(GameContent.worlds) { world in
                 WorldSelectionButton(
                     identifier: "\(identifierPrefix)\(world.id.rawValue)",
@@ -34,7 +40,8 @@ private struct WorldSelectionButton: View {
                 Image(systemName: unlocked ? world.id.icon : "lock.fill")
                     .accessibilityHidden(true)
                 Text(world.name)
-                    .lineLimit(1)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .font(.subheadline.bold())
             .foregroundStyle(foregroundColor)
@@ -50,7 +57,7 @@ private struct WorldSelectionButton: View {
         .disabled(!unlocked)
         .accessibilityIdentifier(identifier)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint(unlocked ? "Selects the \(world.name) arena" : unlockCondition)
+        .accessibilityHint(unlocked ? "Selects the \(world.name) world" : unlockCondition)
     }
 
     private var foregroundColor: Color {
