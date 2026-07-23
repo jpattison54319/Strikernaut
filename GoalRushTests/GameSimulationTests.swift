@@ -1,3 +1,4 @@
+import CoreGraphics
 import Testing
 @testable import GoalRush
 
@@ -160,6 +161,53 @@ struct GameSimulationTests {
                 #expect(joint?.childNode(withName: "\(prefix)-variant-base") == nil)
             }
         }
+    }
+
+    @Test func armReplacementIsNamedClearlyAndDrawnAboveEveryTorso() {
+        #expect(GearSlot.hands.title == "Arms")
+
+        for torso in [GearID.earthJersey, .marsCore] {
+            let player = GameNodeFactory.player(
+                loadout: GearLoadout(equipped: [.torso: torso, .hands: .marsGauntlets])
+            )
+            let body = player.childNode(withName: "body")
+            let arms = body?.childNode(withName: "slot-hands")
+            let torsoNode = body?.childNode(withName: "slot-torso")
+            #expect(arms?.zPosition ?? 0 > torsoNode?.zPosition ?? 0)
+        }
+    }
+
+    @Test func equippedTorsosUseOneConsistentOuterSilhouette() {
+        let shellWidths = [GearID.earthJersey, .marsCore].compactMap { torso -> CGFloat? in
+            let player = GameNodeFactory.player(loadout: GearLoadout(equipped: [.torso: torso]))
+            return player
+                .childNode(withName: "body")?
+                .childNode(withName: "slot-torso")?
+                .childNode(withName: "variant-\(torso.rawValue)")?
+                .childNode(withName: "torso-shell")?
+                .frame.width
+        }
+
+        #expect(shellWidths.count == 2)
+        #expect(Set(shellWidths.map { Int($0.rounded()) }).count == 1)
+    }
+
+    @Test func compactLockerPreviewKeepsTheWholeAvatarVisible() {
+        let scene = LockerPreviewScene(
+            loadout: GearLoadout(equipped: [
+                .head: .marsLens,
+                .torso: .marsCore,
+                .hands: .marsGauntlets,
+                .legs: .marsGuards,
+                .feet: .marsBoots
+            ])
+        )
+        scene.size = CGSize(width: 390, height: 270)
+
+        let frame = scene.childNode(withName: "player")?.calculateAccumulatedFrame()
+        #expect(frame != nil)
+        #expect((frame?.minY ?? -.infinity) >= 10)
+        #expect((frame?.maxY ?? .infinity) <= scene.size.height - 10)
     }
 
     @Test func replacedLegVisualsStillRunTheKickAnimation() {

@@ -13,7 +13,7 @@ enum GearSlot: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .head: "Head"
         case .torso: "Torso"
-        case .hands: "Hands"
+        case .hands: "Arms"
         case .legs: "Legs"
         case .feet: "Feet"
         }
@@ -23,7 +23,7 @@ enum GearSlot: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .head: "eyeglasses"
         case .torso: "tshirt.fill"
-        case .hands: "hand.raised.fill"
+        case .hands: "figure.arms.open"
         case .legs: "figure.run"
         case .feet: "shoe.fill"
         }

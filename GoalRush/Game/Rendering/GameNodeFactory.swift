@@ -17,7 +17,7 @@ enum GameNodeFactory {
         body.addChild(legs)
 
         let hands = playerHands(loadout.item(in: .hands))
-        hands.zPosition = 1
+        hands.zPosition = 3
         body.addChild(hands)
 
         let torso = playerTorso(loadout.item(in: .torso))
@@ -25,7 +25,7 @@ enum GameNodeFactory {
         body.addChild(torso)
 
         let head = playerHead(loadout.item(in: .head))
-        head.zPosition = 3
+        head.zPosition = 4
         body.addChild(head)
         return root
     }
@@ -295,7 +295,8 @@ enum GameNodeFactory {
 
         switch id {
         case .earthJersey:
-            let jersey = SKShapeNode(path: jerseyPath(topWidth: 48, bottomWidth: 34, height: 38))
+            let jersey = SKShapeNode(path: jerseyPath(topWidth: 44, bottomWidth: 34, height: 37))
+            jersey.name = "torso-shell"
             jersey.position.y = 2
             jersey.fillColor = color(0.025, 0.10, 0.34)
             jersey.strokeColor = color(1, 0.72, 0.10)
@@ -306,15 +307,16 @@ enum GameNodeFactory {
             variant.addChild(rect(size: .init(width: 5, height: 18), color: color(0.10, 0.82, 0.90), radius: 2.5, x: 6, y: 3, rotation: 0.38))
             variant.addChild(playerNumber(color: .white, y: -6))
         case .marsCore:
-            let armor = SKShapeNode(path: jerseyPath(topWidth: 51, bottomWidth: 35, height: 40))
+            let armor = SKShapeNode(path: jerseyPath(topWidth: 44, bottomWidth: 34, height: 37))
+            armor.name = "torso-shell"
             armor.position.y = 2
             armor.fillColor = color(0.20, 0.07, 0.34)
             armor.strokeColor = color(0.24, 0.94, 1)
             armor.lineWidth = 2.5
             variant.addChild(armor)
             variant.addChild(rect(size: .init(width: 31, height: 30), color: color(0.15, 0.06, 0.27), radius: 8, y: 1))
-            variant.addChild(rect(size: .init(width: 19, height: 9), color: color(0.54, 0.18, 0.76), radius: 4, x: -17, y: 14, rotation: -0.14))
-            variant.addChild(rect(size: .init(width: 19, height: 9), color: color(0.54, 0.18, 0.76), radius: 4, x: 17, y: 14, rotation: 0.14))
+            variant.addChild(rect(size: .init(width: 14, height: 8), color: color(0.54, 0.18, 0.76), radius: 4, x: -15, y: 14, rotation: -0.14))
+            variant.addChild(rect(size: .init(width: 14, height: 8), color: color(0.54, 0.18, 0.76), radius: 4, x: 15, y: 14, rotation: 0.14))
             variant.addChild(rect(size: .init(width: 31, height: 5), color: color(0.22, 0.90, 0.98), radius: 2, y: -14))
             let core = SKShapeNode(path: hexagon(radius: 7.5))
             core.fillColor = color(0.88, 0.20, 1)
@@ -325,7 +327,8 @@ enum GameNodeFactory {
             variant.addChild(core)
         default:
             variant.name = "variant-base"
-            let torso = rect(size: .init(width: 38, height: 35), color: color(0.025, 0.25, 0.76), radius: 11, y: 2)
+            let torso = rect(size: .init(width: 42, height: 36), color: color(0.025, 0.25, 0.76), radius: 11, y: 2)
+            torso.name = "torso-shell"
             torso.strokeColor = color(0.08, 0.72, 0.96)
             torso.lineWidth = 2
             variant.addChild(torso)

@@ -95,13 +95,12 @@ struct AbilityDraftView: View {
                             ),
                             in: .rect(cornerRadius: 14)
                         )
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 8) {
-                            Text(AbilityPresentation.title(ability))
-                                .font(.headline)
-                            if ability == recommended {
-                                GameStatusBadge(text: "RECOMMENDED", tone: .positive)
-                            }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(AbilityPresentation.title(ability))
+                            .font(.headline)
+                        if ability == recommended {
+                            GameStatusBadge(text: "RECOMMENDED", tone: .positive)
+                                .fixedSize()
                         }
                         Text(AbilityPresentation.benefit(ability))
                             .font(.subheadline)

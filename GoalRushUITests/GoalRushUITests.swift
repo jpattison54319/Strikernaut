@@ -274,6 +274,7 @@ final class GoalRushUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["result-primary"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.otherElements["result-more-actions"].exists)
+        XCTAssertFalse(app.buttons["result-next-upgrade"].exists)
         XCTAssertFalse(app.buttons["Upgrades"].exists)
         XCTAssertFalse(app.buttons["Locker"].exists)
         XCTAssertFalse(app.buttons["Choose Arena"].exists)
@@ -283,6 +284,9 @@ final class GoalRushUITests: XCTestCase {
         moreActions.tap()
 
         XCTAssertTrue(app.otherElements["result-more-actions"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["result-next-upgrade"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.buttons["result-more-upgrades"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["result-more-locker"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["result-more-map"].waitForExistence(timeout: 2))
     }
 }

@@ -232,6 +232,7 @@ struct GameContainerView: View {
                             .foregroundStyle(.secondary)
                     }
                     Button {
+                        store.uiAudio.play(.tap)
                         showingPauseMissions = true
                     } label: {
                         HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {

@@ -31,19 +31,29 @@ final class LockerPreviewScene: SKScene {
         layoutPlayer()
         startIdleAnimation()
         if animated {
-            playerNode.setScale(playerNode.xScale * 0.88)
-            playerNode.run(.scale(to: targetScale, duration: 0.24))
+            let fittedScale = playerNode.xScale
+            playerNode.setScale(fittedScale * 0.88)
+            playerNode.run(.scale(to: fittedScale, duration: 0.24))
             GameNodeFactory.animateKick(on: playerNode, reducedMotion: UIAccessibility.isReduceMotionEnabled)
         }
     }
 
-    private var targetScale: CGFloat {
-        min(2.70, max(2.15, min(size.width / 135, size.height / 175)))
-    }
-
     private func layoutPlayer() {
-        playerNode.position = CGPoint(x: size.width / 2, y: size.height * 0.43)
-        playerNode.setScale(targetScale)
+        playerNode.position = .zero
+        playerNode.setScale(1)
+        let bounds = playerNode.calculateAccumulatedFrame()
+        let horizontalInset: CGFloat = 18
+        let verticalInset: CGFloat = 14
+        let fittedScale = min(
+            2.70,
+            (size.width - horizontalInset * 2) / max(bounds.width, 1),
+            (size.height - verticalInset * 2) / max(bounds.height, 1)
+        )
+        playerNode.setScale(fittedScale)
+        playerNode.position = CGPoint(
+            x: size.width / 2 - bounds.midX * fittedScale,
+            y: size.height / 2 - bounds.midY * fittedScale
+        )
         playerNode.zPosition = 10
     }
 

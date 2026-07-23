@@ -218,6 +218,7 @@ struct ResultView: View {
                 .accessibilityIdentifier("result-primary")
 
             Button("More Actions", systemImage: "ellipsis.circle") {
+                store.uiAudio.play(.tap)
                 showingMoreActions = true
             }
             .buttonStyle(SecondaryGameButton())
