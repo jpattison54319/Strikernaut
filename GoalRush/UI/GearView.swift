@@ -71,64 +71,58 @@ struct GearView: View {
     }
 
     private var lockerStage: some View {
-        GeometryReader { geometry in
-            ZStack {
-                Image("LockerRoom")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
-                    .accessibilityHidden(true)
-                LinearGradient(
-                    colors: [.black.opacity(0.08), .clear, .black.opacity(0.34)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .accessibilityHidden(true)
+        VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
+            lockerPreview(height: 270)
 
-                LockerAvatarView(loadout: store.progress.loadout)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-
-                ForEach(Array(GearSlot.allCases.enumerated()), id: \.element) { index, slot in
+            VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+                ForEach(GearSlot.allCases) { slot in
                     gearRow(slot)
-                        .position(x: geometry.size.width / 2, y: [128, 220, 286, 346, 400][index])
+                        .frame(height: 56)
+                        .gameSurface(.panel)
                 }
             }
-            .clipShape(.rect(cornerRadius: GoalRushTheme.Metrics.panelRadius))
-            .overlay {
-                RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.panelRadius)
-                    .stroke(GoalRushTheme.emphasizedSurfaceStroke)
-            }
-            .shadow(color: GoalRushTheme.surfaceShadow, radius: 18, y: 9)
         }
-        .frame(height: 454)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Character gear preview")
     }
 
     private var accessibilityLockerStage: some View {
         VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
-            ZStack {
-                Image("LockerRoom")
-                    .resizable()
-                    .scaledToFill()
-                    .accessibilityHidden(true)
-                LockerAvatarView(loadout: store.progress.loadout)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-            .frame(height: 280)
-            .clipped()
-            .clipShape(.rect(cornerRadius: GoalRushTheme.Metrics.panelRadius))
+            lockerPreview(height: 240)
 
             ForEach(GearSlot.allCases) { slot in
                 gearRow(slot)
                     .padding(.horizontal, GoalRushTheme.Metrics.compactSpacing)
-                    .frame(minHeight: 60)
+                    .frame(minHeight: 64)
                     .gameSurface(.panel)
             }
         }
+    }
+
+    private func lockerPreview(height: CGFloat) -> some View {
+        ZStack {
+            Image("LockerRoom")
+                .resizable()
+                .scaledToFill()
+                .accessibilityHidden(true)
+            LinearGradient(
+                colors: [.black.opacity(0.08), .clear, .black.opacity(0.34)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .accessibilityHidden(true)
+            LockerAvatarView(loadout: store.progress.loadout)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+        .frame(height: height)
+        .clipped()
+        .clipShape(.rect(cornerRadius: GoalRushTheme.Metrics.panelRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.panelRadius)
+                .stroke(GoalRushTheme.emphasizedSurfaceStroke)
+        }
+        .shadow(color: GoalRushTheme.surfaceShadow, radius: 18, y: 9)
     }
 
     private func gearRow(_ slot: GearSlot) -> some View {

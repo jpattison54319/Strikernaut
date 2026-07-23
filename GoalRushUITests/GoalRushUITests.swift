@@ -28,7 +28,9 @@ final class GoalRushUITests: XCTestCase {
         app.launch()
 
         XCTAssertFalse(app.otherElements["upgrade-detail"].exists)
-        app.buttons["upgrade-impact"].tap()
+        let impactTrack = app.buttons["upgrade-impact"]
+        XCTAssertTrue(impactTrack.waitForExistence(timeout: 2))
+        impactTrack.tap()
         XCTAssertTrue(app.otherElements["upgrade-detail"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.buttons["upgrade-purchase-impact"].exists)
     }
@@ -121,7 +123,10 @@ final class GoalRushUITests: XCTestCase {
         let trophies = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "trophy-"))
         XCTAssertEqual(trophies.count, 0)
-        app.buttons["progress-trophies"].tap()
+        let trophiesCategory = app.buttons["progress-trophies"]
+        XCTAssertTrue(trophiesCategory.waitForExistence(timeout: 2))
+        trophiesCategory.tap()
+        XCTAssertTrue(trophies.firstMatch.waitForExistence(timeout: 2))
         XCTAssertGreaterThan(trophies.count, 0)
     }
 

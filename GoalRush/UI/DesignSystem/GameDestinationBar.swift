@@ -13,13 +13,13 @@ struct GameDestinationBar: View {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
                     titleLabel
+                        .frame(maxWidth: .infinity)
                     accessibilityControls
                 }
             } else {
-                ZStack {
-                    titleLabel
-                        .padding(.horizontal, 110)
-                    standardControls
+                ViewThatFits(in: .horizontal) {
+                    singleRowControls
+                    compactTwoRowControls
                 }
             }
         }
@@ -39,7 +39,6 @@ struct GameDestinationBar: View {
             .foregroundStyle(.white)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity)
     }
 
     private var accessibilityControls: some View {
@@ -52,13 +51,36 @@ struct GameDestinationBar: View {
         .buttonStyle(.plain)
     }
 
-    private var standardControls: some View {
-        HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
+    private var singleRowControls: some View {
+        HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
             homeButton
+                .fixedSize(horizontal: true, vertical: false)
 
-            Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
+            titleLabel
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(minWidth: 88, maxWidth: .infinity)
+                .layoutPriority(1)
 
             infoButton
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .foregroundStyle(.white)
+        .buttonStyle(.plain)
+    }
+
+    private var compactTwoRowControls: some View {
+        VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+            titleLabel
+                .frame(maxWidth: .infinity)
+
+            HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+                homeButton
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
+                infoButton
+                    .fixedSize(horizontal: true, vertical: false)
+            }
         }
         .foregroundStyle(.white)
         .buttonStyle(.plain)

@@ -34,31 +34,36 @@ struct GearCycleRow: View {
                 .gearArrowStyle(enabled: canCycle, selected: selected)
                 .accessibilityIdentifier("gear-\(slot.rawValue)-previous")
 
-            Spacer(minLength: 4)
+            ZStack(alignment: .topTrailing) {
+                HStack(spacing: 5) {
+                    Label(slot.title, systemImage: slot.icon)
+                        .font(.caption.bold())
+                    Text(itemName)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.72))
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .padding(.horizontal, showsNewBadge ? 42 : 4)
+                .frame(maxWidth: .infinity, minHeight: GoalRushTheme.Metrics.minimumTapTarget)
 
-            VStack(spacing: 2) {
-                Label(slot.title, systemImage: slot.icon)
-                    .font(.caption.bold())
-                Text(itemName)
-                    .font(.caption2)
-                    .lineLimit(1)
                 if showsNewBadge {
                     GameStatusBadge(text: "NEW", tone: .attention)
+                        .fixedSize()
+                        .scaleEffect(0.82)
+                        .offset(x: 2, y: -4)
                 }
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, 6)
             .accessibilityElement(children: .combine)
-
-            Spacer(minLength: 4)
 
             Button("Next \(slot.title) gear", systemImage: "chevron.right", action: next)
                 .labelStyle(.iconOnly)
                 .gearArrowStyle(enabled: canCycle, selected: selected)
                 .accessibilityIdentifier("gear-\(slot.rawValue)-next")
         }
-        .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)
-        .frame(maxWidth: .infinity, minHeight: GoalRushTheme.Metrics.minimumTapTarget)
+        .padding(.horizontal, GoalRushTheme.Metrics.compactSpacing)
+        .frame(maxWidth: .infinity, minHeight: 56, maxHeight: 56)
         .disabled(!canCycle)
     }
 }
