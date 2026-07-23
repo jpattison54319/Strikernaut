@@ -18,9 +18,10 @@ struct AbilityDraftView: View {
                 endRadius: 430
             )
             .ignoresSafeArea()
+            .accessibilityHidden(true)
 
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
                     header
                     ForEach(Array(abilities.enumerated()), id: \.element) { index, ability in
                         abilityButton(ability)
@@ -32,8 +33,8 @@ struct AbilityDraftView: View {
                             )
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 26)
+                .padding(.horizontal, GoalRushTheme.Metrics.horizontalPadding)
+                .padding(.vertical, GoalRushTheme.Metrics.sectionSpacing)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
@@ -41,7 +42,7 @@ struct AbilityDraftView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 9) {
+        VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
             Image(systemName: session.mode.isEndless ? "infinity" : "sparkles")
                 .font(.title.bold())
                 .foregroundStyle(GoalRushTheme.gold)
@@ -56,7 +57,9 @@ struct AbilityDraftView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.bottom, 2)
+        .padding(GoalRushTheme.Metrics.standardSpacing)
+        .frame(maxWidth: .infinity)
+        .gameSurface(.modal)
         .accessibilityElement(children: .combine)
     }
 
@@ -78,8 +81,8 @@ struct AbilityDraftView: View {
         return Button {
             session.choose(ability)
         } label: {
-            VStack(alignment: .leading, spacing: 13) {
-                HStack(alignment: .top, spacing: 13) {
+            VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing) {
+                HStack(alignment: .top, spacing: GoalRushTheme.Metrics.standardSpacing) {
                     Image(systemName: AbilityPresentation.icon(ability))
                         .font(.title2.bold())
                         .foregroundStyle(GoalRushTheme.navy)
@@ -97,12 +100,7 @@ struct AbilityDraftView: View {
                             Text(AbilityPresentation.title(ability))
                                 .font(.headline)
                             if ability == recommended {
-                                Text("RECOMMENDED")
-                                    .font(.caption2.bold())
-                                    .foregroundStyle(GoalRushTheme.navy)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
-                                    .background(GoalRushTheme.positive, in: .capsule)
+                                GameStatusBadge(text: "RECOMMENDED", tone: .positive)
                             }
                         }
                         Text(AbilityPresentation.benefit(ability))
@@ -137,30 +135,21 @@ struct AbilityDraftView: View {
                         .font(.subheadline.bold())
                         .foregroundStyle(presentation.accent)
                 }
-                .padding(12)
+                .padding(GoalRushTheme.Metrics.standardSpacing)
                 .background(.black.opacity(0.22), in: .rect(cornerRadius: 14))
             }
-            .padding(16)
+            .padding(GoalRushTheme.Metrics.standardSpacing)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                LinearGradient(
-                    colors: [GoalRushTheme.surfaceRaised.opacity(0.98), GoalRushTheme.surface.opacity(0.98)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .clipShape(.rect(cornerRadius: 22))
-            }
-            .overlay { RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.14)) }
-            .shadow(color: .black.opacity(0.28), radius: 14, y: 7)
+            .gameSurface(.panel)
             .overlay {
                 if session.mode.isEndless && currentRank >= 5 {
-                    RoundedRectangle(cornerRadius: 22)
+                    RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.controlRadius)
                         .stroke(GoalRushTheme.gold.opacity(0.75), lineWidth: 2)
                 }
             }
         }
         .buttonStyle(AbilityChoiceButtonStyle(accent: presentation.accent))
-        .shimmer(active: session.mode.isEndless && currentRank >= 5)
+        .shimmer(active: session.mode.isEndless && currentRank >= 5 && !reduceMotion && !store.settings.reducedFlashes)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(AbilityPresentation.title(ability)), \(presentation.current) to \(presentation.next)\(ability == recommended ? ", Recommended" : "")")
         .accessibilityHint(session.mode.isEndless ? "Applies for the rest of this endless run" : "Applies for the rest of this level")
@@ -216,7 +205,7 @@ private struct AbilityChoiceButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.975 : 1)
             .brightness(configuration.isPressed ? 0.08 : 0)
             .shadow(color: configuration.isPressed ? accent.opacity(0.25) : .clear, radius: 14)
-            .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : GoalRushTheme.Motion.press, value: configuration.isPressed)
     }
 }
 

@@ -8,6 +8,7 @@ struct GameContainerView: View {
     @State private var session: GameSessionModel
     @State private var scene: GoalRushScene
     @State private var showQuitConfirmation = false
+    @State private var showingPauseMissions = false
     @State private var audio: GameAudio
     @State private var creditedRunTokens = 0
 
@@ -54,6 +55,12 @@ struct GameContainerView: View {
             }
         }
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: session.phase)
+        .sheet(isPresented: $showingPauseMissions) {
+            GameSheetScaffold(title: "Daily Missions") {
+                MissionsStrip()
+            }
+            .accessibilityIdentifier("pause-missions-sheet")
+        }
         .onChange(of: session.phase) { _, phase in
             if phase == .paused || phase.isDraft { checkpointRunTokens() }
             if phase == .finished { finishRun() }
@@ -210,38 +217,56 @@ struct GameContainerView: View {
     private var pauseOverlay: some View {
         Color.black.opacity(0.70).ignoresSafeArea()
             .overlay {
-                GameCard {
-                    VStack(spacing: 20) {
-                        Image(systemName: "pause.fill")
-                            .font(.title2.bold())
-                            .foregroundStyle(GoalRushTheme.navy)
-                            .frame(width: 54, height: 54)
-                            .background(GoalRushTheme.gold, in: .circle)
-                            .shadow(color: GoalRushTheme.gold.opacity(0.30), radius: 12)
-                        VStack(spacing: 5) {
-                            Text("Run Paused").font(.title.bold())
-                            Text(pauseSubtitle)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        if !store.progress.missions.isEmpty {
-                            MissionsStrip()
-                                .padding(.top, 4)
-                        }
-                        Button("Resume Run", systemImage: "play.fill") {
-                            store.uiAudio.play(.tap)
-                            session.togglePause()
-                        }
-                            .buttonStyle(PrimaryGameButton())
-                            .accessibilityIdentifier("Resume")
-                        Button("End Run", systemImage: "xmark.circle") {
-                            store.uiAudio.play(.tap)
-                            showQuitConfirmation = true
-                        }
-                            .buttonStyle(SecondaryGameButton())
-                            .tint(GoalRushTheme.orange)
+                VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
+                    Image(systemName: "pause.fill")
+                        .font(.title2.bold())
+                        .foregroundStyle(GoalRushTheme.navy)
+                        .frame(width: 54, height: 54)
+                        .background(GoalRushTheme.gold, in: .circle)
+                        .shadow(color: GoalRushTheme.gold.opacity(0.30), radius: 12)
+                        .accessibilityHidden(true)
+                    VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+                        Text("Run Paused").font(.title.bold())
+                        Text(pauseSubtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
+                    Button {
+                        showingPauseMissions = true
+                    } label: {
+                        HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
+                            Label("Daily Missions", systemImage: "target")
+                                .font(.headline)
+                            Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
+                            VStack(alignment: .trailing, spacing: 3) {
+                                if claimableMissionCount > 0 {
+                                    GameStatusBadge(text: "\(claimableMissionCount) READY", tone: .positive)
+                                }
+                                Text(missionSummary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .buttonStyle(SecondaryGameButton())
+                    .accessibilityIdentifier("pause-missions")
+
+                    Button("Resume Run", systemImage: "play.fill") {
+                        store.uiAudio.play(.tap)
+                        session.togglePause()
+                    }
+                    .buttonStyle(GameLaunchButtonStyle())
+                    .accessibilityIdentifier("Resume")
+
+                    Button("End Run", systemImage: "xmark.circle") {
+                        store.uiAudio.play(.tap)
+                        showQuitConfirmation = true
+                    }
+                    .buttonStyle(SecondaryGameButton())
+                    .tint(GoalRushTheme.orange)
                 }
+                .padding(GoalRushTheme.Metrics.sectionSpacing)
+                .gameSurface(.modal)
                 .frame(maxWidth: 360)
                 .padding(24)
             }
@@ -323,6 +348,17 @@ struct GameContainerView: View {
             return "Wave \(session.hudState.wave) • \(session.hudState.score.formatted()) score"
         }
         return "Level \(session.levelNumber ?? 1) • \(session.hudState.tokens) tokens earned"
+    }
+
+    private var claimableMissionCount: Int {
+        store.progress.missions.count { $0.isComplete && !$0.claimed }
+    }
+
+    private var missionSummary: String {
+        if claimableMissionCount > 0 {
+            return "Rewards waiting"
+        }
+        return store.progress.missions.isEmpty ? "Refreshes soon" : "View objectives"
     }
 }
 

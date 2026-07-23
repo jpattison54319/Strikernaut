@@ -3,6 +3,7 @@ import SwiftUI
 struct OnboardingView: View {
     @Environment(GameStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var page = 0
 
     private let pages: [(icon: String, accent: Color, title: String, message: String)] = [
@@ -15,77 +16,82 @@ struct OnboardingView: View {
     ]
 
     var body: some View {
-        ZStack {
-            GeometryReader { geometry in
-                Image("OnboardingHero")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
-            }
-            .ignoresSafeArea()
-            .accessibilityHidden(true)
+        AtmosphericGameScreen(backgroundImage: "OnboardingHero") {
+            VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
+                skipBar
 
-            LinearGradient(
-                colors: [GoalRushTheme.navy.opacity(0.25), GoalRushTheme.navy.opacity(0.55), GoalRushTheme.navy.opacity(0.97)],
-                startPoint: .top, endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            VStack(spacing: 24) {
-                HStack {
-                    Spacer()
-                    if page < pages.count - 1 {
-                        Button("Skip") { finish() }
-                            .font(.subheadline.bold())
-                            .foregroundStyle(.secondary)
-                            .frame(minWidth: 44, minHeight: 44)
-                            .accessibilityIdentifier("onboarding-skip")
+                if dynamicTypeSize.isAccessibilitySize {
+                    ScrollView {
+                        currentPageStage
+                            .padding(.vertical, GoalRushTheme.Metrics.compactSpacing)
                     }
-                }
-                .padding(.horizontal, 16)
-
-                TabView(selection: $page) {
-                    ForEach(pages.indices, id: \.self) { index in
-                        VStack(spacing: 22) {
-                            Spacer()
-                            Image(systemName: pages[index].icon)
-                                .font(.system(size: 84, weight: .bold))
-                                .foregroundStyle(pages[index].accent)
-                                .shadow(color: pages[index].accent.opacity(0.4), radius: 24)
-                            VStack(spacing: 10) {
-                                Text(pages[index].title)
-                                    .font(.largeTitle.bold())
-                                    .multilineTextAlignment(.center)
-                                Text(pages[index].message)
-                                    .font(.body)
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .frame(maxWidth: 300)
-                            }
-                            Spacer()
+                    .scrollBounceBehavior(.basedOnSize)
+                } else {
+                    TabView(selection: $page) {
+                        ForEach(pages.indices, id: \.self) { index in
+                            pageStage(at: index)
+                                .tag(index)
                         }
-                        .padding(.horizontal, 24)
-                        .tag(index)
                     }
+                    .tabViewStyle(.page(indexDisplayMode: .always))
+                    .indexViewStyle(.page(backgroundDisplayMode: .always))
                 }
-                .tabViewStyle(.page(indexDisplayMode: .always))
-                .indexViewStyle(.page(backgroundDisplayMode: .always))
-                .onChange(of: page) { _, _ in store.uiAudio.play(.whoosh, volume: 0.5) }
 
-                Button(page < pages.count - 1 ? "Continue" : "Kick Off", systemImage: page < pages.count - 1 ? "arrow.right" : "play.fill") {
-                    if page < pages.count - 1 {
-                        store.uiAudio.play(.tap)
-                        withAnimation(reduceMotion ? nil : .snappy) { page += 1 }
-                    } else {
-                        finish()
-                    }
-                }
-                .buttonStyle(PrimaryGameButton())
-                .padding(.horizontal, 24)
-                .padding(.bottom, 30)
+                Button(
+                    page < pages.count - 1 ? "Continue" : "Kick Off",
+                    systemImage: page < pages.count - 1 ? "arrow.right" : "play.fill",
+                    action: advance
+                )
+                .buttonStyle(GameLaunchButtonStyle())
+                .padding(.horizontal, GoalRushTheme.Metrics.horizontalPadding)
+                .padding(.bottom, GoalRushTheme.Metrics.sectionSpacing)
                 .accessibilityIdentifier("onboarding-next")
             }
+        }
+        .onChange(of: page) { _, _ in
+            store.uiAudio.play(.whoosh, volume: 0.5)
+        }
+    }
+
+    private var skipBar: some View {
+        HStack {
+            GameStatusBadge(text: "\(page + 1) OF \(pages.count)", tone: .neutral)
+            Spacer()
+            if page < pages.count - 1 {
+                Button("Skip", action: finish)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: GoalRushTheme.Metrics.minimumTapTarget, minHeight: GoalRushTheme.Metrics.minimumTapTarget)
+                    .accessibilityIdentifier("onboarding-skip")
+            }
+        }
+        .padding(.horizontal, GoalRushTheme.Metrics.horizontalPadding)
+        .padding(.top, GoalRushTheme.Metrics.compactSpacing)
+    }
+
+    private var currentPageStage: some View {
+        pageStage(at: page)
+    }
+
+    private func pageStage(at index: Int) -> some View {
+        OnboardingPageStage(
+            icon: pages[index].icon,
+            accent: pages[index].accent,
+            title: pages[index].title,
+            message: pages[index].message,
+            usesFlexibleSpacing: !dynamicTypeSize.isAccessibilitySize
+        )
+        .padding(.horizontal, GoalRushTheme.Metrics.horizontalPadding)
+    }
+
+    private func advance() {
+        if page < pages.count - 1 {
+            store.uiAudio.play(.tap)
+            withAnimation(reduceMotion ? nil : GoalRushTheme.Motion.transition) {
+                page += 1
+            }
+        } else {
+            finish()
         }
     }
 

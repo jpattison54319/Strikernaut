@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00B23E6DF3E52E8159E98132 /* ResultMoreActionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C157CF1D8675D959AD7E4181 /* ResultMoreActionsSheet.swift */; };
 		015D7076C26A0E73D36CDFEB /* EndlessRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8111D91D2CDE24ED0BF7DF0 /* EndlessRules.swift */; };
 		045D4AF240994AD4F8F36F83 /* GearView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 412293E008C6209B2DC5D3D9 /* GearView.swift */; };
 		0C0B2F3B81EA4832DFA476DF /* GameModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F9CE95D2AC3E9D3C172D91F /* GameModels.swift */; };
@@ -30,6 +31,7 @@
 		2D3452EAE0D65F891796649A /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F76E45A06AF4BCE321B4391C /* RootView.swift */; };
 		2D593781B8AA58ADBED8B09E /* defeat.wav in Resources */ = {isa = PBXBuildFile; fileRef = 3ABDDCE92D73B786A36E18D3 /* defeat.wav */; };
 		2E44D12F2E6BD923D7F96A61 /* WorldDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB4DBC3C42CBF44CB3DFFA6D /* WorldDefinition.swift */; };
+		2EDD042D9C8DF13ECED67D83 /* OnboardingPageStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF87D04B497165CF6F824DAA /* OnboardingPageStage.swift */; };
 		2EE1BFD4700A88EACB3C08B4 /* UpgradeRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27BED2ED95D9608216312408 /* UpgradeRules.swift */; };
 		2FDFAFC815598E938CDDAE81 /* GameDestinationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7092652A5F0CB12857A17EEC /* GameDestinationBar.swift */; };
 		30C2AD7028006E3F370FDC2D /* UpgradeCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1808F88B1ECFD76457D53259 /* UpgradeCardView.swift */; };
@@ -233,6 +235,7 @@
 		BBB612491F5F0EB4B8413509 /* GameSheetScaffold.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSheetScaffold.swift; sourceTree = "<group>"; };
 		BC9953461FB883594532016F /* GameSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSessionModel.swift; sourceTree = "<group>"; };
 		BD4995B9F5F2B4F82B5A82EA /* ToastBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastBanner.swift; sourceTree = "<group>"; };
+		C157CF1D8675D959AD7E4181 /* ResultMoreActionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultMoreActionsSheet.swift; sourceTree = "<group>"; };
 		C4B52BCB382D1BC4B3406788 /* GameLaunchButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameLaunchButtonStyle.swift; sourceTree = "<group>"; };
 		C6A5B037E575234094900933 /* CampaignBriefingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignBriefingTests.swift; sourceTree = "<group>"; };
 		C6BB62F04EF987875C9692FE /* ProgressStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressStoreTests.swift; sourceTree = "<group>"; };
@@ -256,6 +259,7 @@
 		E8111D91D2CDE24ED0BF7DF0 /* EndlessRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndlessRules.swift; sourceTree = "<group>"; };
 		EE5BEA8C0995AF586B5213FA /* EndlessRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndlessRecord.swift; sourceTree = "<group>"; };
 		EE9F01800A69C6423516416B /* ui-tap.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "ui-tap.wav"; sourceTree = "<group>"; };
+		EF87D04B497165CF6F824DAA /* OnboardingPageStage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPageStage.swift; sourceTree = "<group>"; };
 		F05E484FE04BBED64A3CF0D5 /* GoalRush.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GoalRush.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F0F4BDC9A0629FFEE3812589 /* UpgradePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradePresentation.swift; sourceTree = "<group>"; };
 		F2793599C1FE7813CD18898E /* HomeBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeBrand.swift; sourceTree = "<group>"; };
@@ -501,8 +505,10 @@
 				B853DF3EEBEFAE5ADD125AAC /* LockerStageComponents.swift */,
 				485C2B7AE559735A8478DBB2 /* MissionRow.swift */,
 				188CCBA8258454B9F7197CB8 /* MissionsStrip.swift */,
+				EF87D04B497165CF6F824DAA /* OnboardingPageStage.swift */,
 				D7D39DE7E299213025D591C1 /* OnboardingView.swift */,
 				2564F6F3361D710643F532AE /* ProgressCategorySheet.swift */,
+				C157CF1D8675D959AD7E4181 /* ResultMoreActionsSheet.swift */,
 				ADE9D892566B50E8FF2EDBA7 /* ResultView.swift */,
 				F76E45A06AF4BCE321B4391C /* RootView.swift */,
 				71CAA56D3E635DF1F9717B17 /* SettingsGroupSheet.swift */,
@@ -766,9 +772,11 @@
 				8388CBBB9DC997C467E5F08C /* Mission.swift in Sources */,
 				EB5AC106704500163285AAC9 /* MissionRow.swift in Sources */,
 				6932D05C21ACE87EBBF9BA69 /* MissionsStrip.swift in Sources */,
+				2EDD042D9C8DF13ECED67D83 /* OnboardingPageStage.swift in Sources */,
 				23763DD083D1838326F5038B /* OnboardingView.swift in Sources */,
 				946EE1730B6E8BDBC5BAC8CA /* ProgressCategorySheet.swift in Sources */,
 				FFB56C2CE3771673DF29E66D /* ProgressStore.swift in Sources */,
+				00B23E6DF3E52E8159E98132 /* ResultMoreActionsSheet.swift in Sources */,
 				28E8E5DAA8FA503E0C6DD004 /* ResultView.swift in Sources */,
 				2D3452EAE0D65F891796649A /* RootView.swift in Sources */,
 				137C5095A3DAE971446751D3 /* RunMode.swift in Sources */,

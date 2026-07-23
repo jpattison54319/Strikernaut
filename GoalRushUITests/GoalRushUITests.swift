@@ -70,7 +70,36 @@ final class GoalRushUITests: XCTestCase {
         app.buttons["pause"].tap()
         XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 2))
         app.buttons["Resume"].tap()
-        XCTAssertTrue(app.buttons["pause"].exists)
+        XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 2))
+    }
+
+    func testPauseProgressivelyDisclosesMissionsAndStaysPaused() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-save", "--level", "1", "--fixed-seed", "42"]
+        app.launch()
+
+        let kickOff = app.buttons["Kick Off"]
+        XCTAssertTrue(kickOff.waitForExistence(timeout: 3))
+        kickOff.tap()
+
+        let pause = app.buttons["pause"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 3))
+        pause.tap()
+
+        let missions = app.buttons["pause-missions"]
+        XCTAssertTrue(missions.waitForExistence(timeout: 2))
+        XCTAssertFalse(app.otherElements["pause-missions-sheet"].exists)
+        missions.tap()
+
+        XCTAssertTrue(app.otherElements["pause-missions-sheet"].waitForExistence(timeout: 2))
+        let done = app.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 2))
+        done.tap()
+
+        let resume = app.buttons["Resume"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 2))
+        resume.tap()
+        XCTAssertTrue(pause.waitForExistence(timeout: 2))
     }
 
     func testCampaignIntroducesNewEnemyBeforePlay() {
@@ -207,7 +236,11 @@ final class GoalRushUITests: XCTestCase {
         let next = app.buttons["onboarding-next"]
         XCTAssertTrue(next.waitForExistence(timeout: 3))
         next.tap()
+        XCTAssertTrue(app.staticTexts["Draft wild powers"].waitForExistence(timeout: 2))
+        XCTAssertTrue(next.waitForExistence(timeout: 2))
         next.tap()
+        XCTAssertTrue(app.staticTexts["Get stronger forever"].waitForExistence(timeout: 2))
+        XCTAssertTrue(next.waitForExistence(timeout: 2))
         next.tap() // "Kick Off" on the final page
         XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 5) || app.buttons["Kick Off"].waitForExistence(timeout: 2))
     }
@@ -231,6 +264,25 @@ final class GoalRushUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.staticTexts["result-new-best"].waitForExistence(timeout: 3)
                       || app.otherElements["result-new-best"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.buttons["result-primary"].exists)
+        XCTAssertTrue(app.buttons["result-primary"].waitForExistence(timeout: 2))
+    }
+
+    func testResultProgressivelyDisclosesSecondaryActions() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-save", "--screen", "result-endless"]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["result-primary"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.otherElements["result-more-actions"].exists)
+        XCTAssertFalse(app.buttons["Upgrades"].exists)
+        XCTAssertFalse(app.buttons["Locker"].exists)
+        XCTAssertFalse(app.buttons["Choose Arena"].exists)
+
+        let moreActions = app.buttons["result-more"]
+        XCTAssertTrue(moreActions.waitForExistence(timeout: 2))
+        moreActions.tap()
+
+        XCTAssertTrue(app.otherElements["result-more-actions"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["result-more-upgrades"].waitForExistence(timeout: 2))
     }
 }
