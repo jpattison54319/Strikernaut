@@ -6,6 +6,7 @@ struct HomeAccessibilityStage: View {
     let onMissions: () -> Void
     let onPrimary: () -> Void
     let onCampaign: () -> Void
+    let onProgress: () -> Void
     let onEndless: () -> Void
 
     var body: some View {
@@ -18,6 +19,15 @@ struct HomeAccessibilityStage: View {
                     title: content.primaryTitle,
                     action: onPrimary
                 )
+
+                HomeAccessibilityAction(
+                    title: "Campaign",
+                    subtitle: content.campaignStatus,
+                    systemImage: "map.fill",
+                    accent: GoalRushTheme.cyan,
+                    action: onCampaign
+                )
+                .accessibilityIdentifier("play")
 
                 VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
                     HomeAccessibilityAction(
@@ -43,13 +53,13 @@ struct HomeAccessibilityStage: View {
 
                 VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
                     HomeAccessibilityAction(
-                        title: "Campaign",
-                        subtitle: content.campaignStatus,
-                        systemImage: "map.fill",
+                        title: "Progress",
+                        subtitle: "Progress",
+                        systemImage: "trophy.fill",
                         accent: GoalRushTheme.cyan,
-                        action: onCampaign
+                        action: onProgress
                     )
-                    .accessibilityIdentifier("play")
+                    .accessibilityIdentifier("trophies")
 
                     HomeAccessibilityAction(
                         title: "Endless",
@@ -68,4 +78,5 @@ struct HomeAccessibilityStage: View {
         }
         .scrollBounceBehavior(.basedOnSize)
     }
+
 }

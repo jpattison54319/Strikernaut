@@ -1,8 +1,8 @@
-# Goal Rush Progressive Stadium UI Implementation Plan
+# Strikernaut Progressive Stadium UI Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Apply the approved stadium-command-deck design language across Goal Rush while preserving all engagement behavior and stable navigation identifiers.
+**Goal:** Apply the approved stadium-command-deck design language across Strikernaut while preserving all engagement behavior and stable navigation identifiers.
 
 **Architecture:** Add a small SwiftUI design-system layer, then migrate screens by family: Home disclosure, selection, management/progress, and focused overlays. `GameStore` and existing domain types remain authoritative; sheets and selections are ephemeral view state.
 

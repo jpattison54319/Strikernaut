@@ -7,7 +7,7 @@ struct RunResult: Equatable, Sendable {
     let remainingStamina: Double
     let wave: Int
     let score: Int
-    var gearEarned: [GearID]
+    var characterEarned: CharacterID?
     var targetsDefeated: Int
     var bossesDefeated: Int
     var bestCombo: Int
@@ -24,7 +24,7 @@ struct RunResult: Equatable, Sendable {
         remainingStamina: Double,
         wave: Int = 0,
         score: Int = 0,
-        gearEarned: [GearID] = [],
+        characterEarned: CharacterID? = nil,
         targetsDefeated: Int = 0,
         bossesDefeated: Int = 0,
         bestCombo: Int = 0,
@@ -40,7 +40,7 @@ struct RunResult: Equatable, Sendable {
         self.remainingStamina = remainingStamina
         self.wave = wave
         self.score = score
-        self.gearEarned = gearEarned
+        self.characterEarned = characterEarned
         self.targetsDefeated = targetsDefeated
         self.bossesDefeated = bossesDefeated
         self.bestCombo = bestCombo

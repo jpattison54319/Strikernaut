@@ -24,7 +24,7 @@ struct EndlessSelectionStage: View {
             EndlessRecordSummary(
                 world: world,
                 record: record,
-                equippedGearCount: progress.equippedGear.count,
+                characterName: CharacterCatalog.character(progress.selectedCharacter).name,
                 trainingRankCount: progress.upgradeRanks.values.reduce(0, +)
             )
         }
@@ -42,7 +42,7 @@ struct EndlessRulesSheet: View {
                 rule("Choose a power after every wave", icon: "sparkles")
                 rule("Boss wave every 5 waves", icon: "crown.fill")
                 rule("Run powers reset when the run ends", icon: "arrow.counterclockwise")
-                rule("Gear and Training upgrades always apply", icon: "checkmark.shield.fill")
+                rule("Your selected hero and Training upgrades always apply", icon: "checkmark.shield.fill")
             }
         }
     }
@@ -60,7 +60,7 @@ struct EndlessRulesSheet: View {
 private struct EndlessRecordSummary: View {
     let world: WorldDefinition
     let record: EndlessRecord
-    let equippedGearCount: Int
+    let characterName: String
     let trainingRankCount: Int
 
     var body: some View {
@@ -94,7 +94,7 @@ private struct EndlessRecordSummary: View {
                 .foregroundStyle(GoalRushTheme.cyan)
 
             Label(
-                "\(trainingRankCount) Training ranks • \(equippedGearCount) of 5 gear equipped",
+                "\(trainingRankCount) Training ranks • \(characterName) selected",
                 systemImage: "checkmark.shield.fill"
             )
             .font(.caption.bold())
@@ -110,6 +110,6 @@ private struct EndlessRecordSummary: View {
         let recordText = record.bestWave > 0
             ? "Best wave \(record.bestWave), \(record.bestScore) points"
             : "No run yet"
-        return "\(world.name) record, \(recordText). New power after every wave. \(trainingRankCount) Training ranks, \(equippedGearCount) of 5 gear equipped."
+        return "\(world.name) record, \(recordText). New power after every wave. \(trainingRankCount) Training ranks, \(characterName) selected."
     }
 }

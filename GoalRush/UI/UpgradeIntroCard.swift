@@ -12,7 +12,7 @@ struct UpgradeIntroCard: View {
                         .foregroundStyle(GoalRushTheme.gold)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Permanent Training").font(.title3.bold())
-                        Text("These upgrades stay active in every level. Each card shows the exact stat you have now and what the next rank changes.")
+                        Text("These unlimited upgrades stay active in every level. Prices rise through rank 5, then remain steady while your power keeps growing.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }

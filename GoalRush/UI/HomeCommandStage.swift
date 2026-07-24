@@ -6,6 +6,7 @@ struct HomeCommandStage: View {
     let onMissions: () -> Void
     let onPrimary: () -> Void
     let onCampaign: () -> Void
+    let onProgress: () -> Void
     let onEndless: () -> Void
 
     var body: some View {
@@ -19,20 +20,32 @@ struct HomeCommandStage: View {
                 content: content,
                 onDaily: onDaily,
                 onMissions: onMissions,
-                onCampaign: onCampaign,
+                onProgress: onProgress,
                 onEndless: onEndless
             )
+            .accessibilitySortPriority(50)
 
             Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
 
-            HomeLaunchControl(
-                eyebrow: content.primaryEyebrow,
-                title: content.primaryTitle,
-                action: onPrimary
-            )
+            HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
+                Button("Campaign", systemImage: "map.fill", action: onCampaign)
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(GameLaunchButtonStyle(circular: true))
+                    .accessibilityIdentifier("play")
+
+                HomeLaunchControl(
+                    eyebrow: content.primaryEyebrow,
+                    title: content.primaryTitle,
+                    action: onPrimary
+                )
+            }
+            .accessibilitySortPriority(100)
             HomeClubhouseDock()
+                .accessibilitySortPriority(10)
         }
+        .accessibilityElement(children: .contain)
         .padding(.horizontal, GoalRushTheme.Metrics.horizontalPadding)
         .padding(.vertical, GoalRushTheme.Metrics.compactSpacing)
     }
+
 }

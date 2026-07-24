@@ -41,10 +41,10 @@ enum CampaignBriefingCatalog {
 
     static func discovery(for enemy: EnemyKind) -> CampaignDiscovery {
         let presentation: (title: String, detail: String) = switch enemy {
-        case .coneRunner: ("Cone Runner", "Fast and fragile. Stop it before it reaches your line.")
-        case .dummyDefender: ("Dummy Defender", "Armored and slower. It takes several clean hits.")
+        case .coneRunner: ("Scout Runner", "Fast and fragile. Stop it before it reaches your line.")
+        case .dummyDefender: ("Blocker Defender", "Armored and slower. It takes several clean hits.")
         case .tackleBot: ("Tackle Bot", "Fast and erratic. It cuts sideways between lanes.")
-        case .keeperDrone: ("Keeper Drone", "Slow and heavily armored. Focus your kicks.")
+        case .keeperDrone: ("Aegis Keeper", "Slow and heavily armored. Focus your kicks.")
         case .ballLauncher: ("Ball Launcher", "Fires back from range. Move when a red ball appears.")
         case .titanKeeper: ("Titan Keeper", "Earth’s boss. It fires, changes phases, and calls reinforcements.")
         case .dustSprite: ("Dust Sprite", "Mars’s quickest grunt. Fragile, but dangerous in groups.")

@@ -11,10 +11,10 @@ struct HomeClubhouseDock: View {
 
         layout {
             HomeDockButton(
-                title: "Locker",
-                systemImage: "tshirt.fill",
-                identifier: "gear",
-                action: openLocker
+                title: "Characters",
+                systemImage: "person.3.fill",
+                identifier: "characters",
+                action: openCharacters
             )
             HomeDockButton(
                 title: "Upgrades",
@@ -22,27 +22,17 @@ struct HomeClubhouseDock: View {
                 identifier: "upgrades",
                 action: openUpgrades
             )
-            HomeDockButton(
-                title: "Progress",
-                systemImage: "trophy.fill",
-                identifier: "trophies",
-                action: openProgress
-            )
         }
         .padding(GoalRushTheme.Metrics.compactSpacing)
         .gameSurface(.hud)
     }
 
-    private func openLocker() {
-        open(.gear)
+    private func openCharacters() {
+        open(.characters)
     }
 
     private func openUpgrades() {
         open(.upgrades)
-    }
-
-    private func openProgress() {
-        open(.trophies)
     }
 
     private func open(_ route: GameStore.Route) {

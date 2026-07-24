@@ -8,7 +8,7 @@ final class GameStore {
         case home
         case levels
         case endless
-        case gear
+        case characters
         case upgrades
         case settings
         case onboarding
@@ -75,7 +75,7 @@ final class GameStore {
             switch arguments[screenIndex + 1] {
             case "levels": store.route = .levels
             case "endless": store.route = .endless
-            case "gear": store.route = .gear
+            case "gear", "characters": store.route = .characters
             case "upgrades": store.route = .upgrades
             case "settings": store.route = .settings
             case "onboarding": store.route = .onboarding
@@ -93,14 +93,13 @@ final class GameStore {
                     newBestScore: true
                 ))
             case "result-world":
-                let rewards = GameContent.world(.earth).gearRewards
-                store.progress.unlockedGear.formUnion(rewards)
+                store.progress.unlockedCharacters.insert(.volt)
                 store.route = .result(.init(
                     mode: .campaign(level: 10),
                     didWin: true,
                     tokensEarned: 612,
                     remainingStamina: 38,
-                    gearEarned: rewards
+                    characterEarned: .volt
                 ))
             default: break
             }
@@ -108,19 +107,18 @@ final class GameStore {
         if arguments.contains("--unlock-worlds") {
             store.progress.highestUnlockedLevel = GameContent.levels.count
         }
-        if arguments.contains("--unlock-gear") {
-            store.progress.unlockedGear = Set(GearID.allCases)
+        if arguments.contains("--unlock-gear") || arguments.contains("--unlock-characters") {
+            store.progress.unlockedCharacters = Set(CharacterID.allCases)
+        }
+        if let characterIndex = arguments.firstIndex(of: "--character"),
+           arguments.indices.contains(characterIndex + 1),
+           let character = CharacterID(rawValue: arguments[characterIndex + 1]) {
+            store.progress.unlockedCharacters.insert(character)
+            store.progress.selectedCharacter = character
         }
         if arguments.contains("--reset-onboarding") {
             store.progress.hasSeenOnboarding = false
             store.route = .onboarding
-        }
-        if let equipIndex = arguments.firstIndex(of: "--equip-world"),
-           arguments.indices.contains(equipIndex + 1),
-           let world = WorldID(rawValue: arguments[equipIndex + 1]) {
-            let items = GearCatalog.items(for: world)
-            store.progress.unlockedGear.formUnion(items.map(\.id))
-            store.progress.equippedGear = Dictionary(uniqueKeysWithValues: items.map { ($0.slot, $0.id) })
         }
 #endif
         if let levelIndex = arguments.firstIndex(of: "--level"),
@@ -177,12 +175,10 @@ final class GameStore {
             )
             if result.didWin {
                 progress.highestUnlockedLevel = min(GameContent.levels.count, max(progress.highestUnlockedLevel, levelNumber + 1))
-                let level = GameContent.level(levelNumber)
-                let world = GameContent.world(level.world)
-                if levelNumber == world.finalLevel {
-                    let newlyEarned = world.gearRewards.filter { !progress.unlockedGear.contains($0) }
-                    progress.unlockedGear.formUnion(newlyEarned)
-                    finalResult.gearEarned = newlyEarned
+                if let character = CharacterCatalog.characters.first(where: { $0.unlockLevel == levelNumber }),
+                   !progress.unlockedCharacters.contains(character.id) {
+                    progress.unlockedCharacters.insert(character.id)
+                    finalResult.characterEarned = character.id
                 }
             }
         case .endless(let world):
@@ -203,17 +199,11 @@ final class GameStore {
     func creditRunTokens(_ amount: Int) {
         guard amount > 0 else { return }
         progress.trainingTokens += amount
-        pendingSaveTask?.cancel()
-        pendingSaveTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled else { return }
-            self?.saveProgress()
-        }
+        scheduleProgressSave(after: .seconds(1))
     }
 
     func purchase(_ track: UpgradeTrack) -> Bool {
         let rank = progress.rank(for: track)
-        guard rank < UpgradeRules.maxRank else { return false }
         let cost = UpgradeRules.cost(forNextRank: rank)
         guard progress.trainingTokens >= cost else { return false }
         progress.trainingTokens -= cost
@@ -225,28 +215,11 @@ final class GameStore {
     }
 
     @discardableResult
-    func equip(_ id: GearID?, in slot: GearSlot) -> Bool {
-        guard let id else {
-            progress.equippedGear.removeValue(forKey: slot)
-            saveProgress()
-            evaluateAchievements()
-            return true
-        }
-        let item = GearCatalog.item(id)
-        guard item.slot == slot, progress.unlockedGear.contains(id) else { return false }
-        progress.equippedGear[slot] = id
-        saveProgress()
-        evaluateAchievements()
+    func selectCharacter(_ id: CharacterID) -> Bool {
+        guard progress.unlockedCharacters.contains(id) else { return false }
+        progress.selectedCharacter = id
+        scheduleProgressSave(after: .milliseconds(150))
         return true
-    }
-
-    func cycleGear(in slot: GearSlot, direction: Int) {
-        let choices: [GearID?] = [nil] + GearCatalog.items(for: slot, unlocked: progress.unlockedGear).map { Optional($0.id) }
-        guard !choices.isEmpty else { return }
-        let current = progress.equippedGear[slot]
-        let currentIndex = choices.firstIndex(where: { $0 == current }) ?? 0
-        let nextIndex = (currentIndex + direction % choices.count + choices.count) % choices.count
-        _ = equip(choices[nextIndex], in: slot)
     }
 
     func updateSettings(_ update: (inout GameSettings) -> Void) {
@@ -270,18 +243,18 @@ final class GameStore {
 
     // MARK: - Engagement
 
-    var dailyStreak: Int { progress.dailyReward.streak }
-
-    /// The streak day the next claim will land on (1 if the streak is broken).
-    var nextStreakDay: Int {
-        guard isDailyRewardClaimable else { return progress.dailyReward.streak }
+    var nextDailyRewardDay: Int {
+        guard isDailyRewardClaimable else {
+            return DailyRewardEngine.collectionDay(forClaimCount: progress.dailyReward.streak)
+        }
         let calendar = Calendar.current
         let yesterday = DailyRewardEngine.dayString(for: calendar.date(byAdding: .day, value: -1, to: .now) ?? .now, calendar: calendar)
-        return progress.dailyReward.lastClaimDay == yesterday ? progress.dailyReward.streak + 1 : 1
+        let nextClaimCount = progress.dailyReward.lastClaimDay == yesterday ? progress.dailyReward.streak + 1 : 1
+        return DailyRewardEngine.collectionDay(forClaimCount: nextClaimCount)
     }
 
     var nextDailyReward: Int {
-        DailyRewardEngine.reward(forStreakDay: nextStreakDay)
+        DailyRewardEngine.rewards[nextDailyRewardDay - 1]
     }
 
     var isDailyRewardClaimable: Bool {
@@ -356,8 +329,12 @@ final class GameStore {
         saveProgress()
     }
 
-    func markGearSeen(_ id: GearID) {
-        guard progress.seenGearIDs.insert(id).inserted else { return }
-        saveProgress()
+    private func scheduleProgressSave(after delay: Duration) {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            self?.saveProgress()
+        }
     }
 }

@@ -31,8 +31,7 @@ struct ProgressStoreTests {
         #expect(progress.schemaVersion == 2)
         #expect(progress.trainingTokens == 777)
         #expect(progress.highestUnlockedLevel == 6)
-        #expect(progress.unlockedGear.isEmpty)
-        #expect(progress.equippedGear.isEmpty)
+        #expect(progress.unlockedCharacters == [.ace])
         #expect(progress.endlessRecords.isEmpty)
     }
 
@@ -45,9 +44,30 @@ struct ProgressStoreTests {
         #expect(try store.load() == .newPlayer)
     }
 
-    @Test func upgradeCostTableIsMonotonic() {
+    @Test func upgradeCostsRiseThroughMasteryThenRemainSteadyForever() {
         #expect(UpgradeRules.costs == UpgradeRules.costs.sorted())
-        #expect(UpgradeRules.costs.count == UpgradeRules.maxRank)
+        #expect(UpgradeRules.costs.count == UpgradeRules.masteryRank)
+        #expect(UpgradeRules.cost(forNextRank: 0) == 100)
+        #expect(UpgradeRules.cost(forNextRank: 4) == 1_300)
+        #expect(UpgradeRules.cost(forNextRank: 5) == 1_300)
+        #expect(UpgradeRules.cost(forNextRank: 500) == 1_300)
+    }
+
+    @Test func permanentUpgradePurchasesContinueBeyondRankFive() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let persistence = FileProgressStore(fileURL: directory.appending(path: "save.json"))
+        var progress = PlayerProgress.newPlayer
+        progress.trainingTokens = 20_000
+        progress.setRank(5, for: .impact)
+        let gameStore = GameStore(progress: progress, settings: .init(), persistence: persistence)
+
+        for _ in 0..<5 {
+            #expect(gameStore.purchase(.impact))
+        }
+
+        #expect(gameStore.progress.rank(for: .impact) == 10)
+        #expect(gameStore.progress.trainingTokens == 13_500)
+        #expect(try persistence.load().rank(for: .impact) == 10)
     }
 
     @Test func finishRetainsCreditedRunTokensWithoutDoubleCounting() throws {
@@ -60,7 +80,7 @@ struct ProgressStoreTests {
         #expect(try persistence.load().trainingTokens == 12)
     }
 
-    @Test func clearingWorldAwardsGearOnlyOnceAndUnlocksMars() throws {
+    @Test func clearingEarthUnlocksVoltOnlyOnceAndUnlocksMars() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let persistence = FileProgressStore(fileURL: directory.appending(path: "save.json"))
         var progress = PlayerProgress.newPlayer
@@ -69,22 +89,22 @@ struct ProgressStoreTests {
 
         gameStore.finish(.init(level: 10, didWin: true, tokensEarned: 10, remainingStamina: 50))
         #expect(gameStore.progress.highestUnlockedLevel == 11)
-        #expect(gameStore.progress.unlockedGear == Set(GameContent.world(.earth).gearRewards))
+        #expect(gameStore.progress.unlockedCharacters.contains(.volt))
         if case .result(let result) = gameStore.route {
-            #expect(result.gearEarned.count == 5)
+            #expect(result.characterEarned == .volt)
         } else {
             Issue.record("Expected a result route")
         }
 
         gameStore.finish(.init(level: 10, didWin: true, tokensEarned: 0, remainingStamina: 50))
         if case .result(let result) = gameStore.route {
-            #expect(result.gearEarned.isEmpty)
+            #expect(result.characterEarned == nil)
         } else {
             Issue.record("Expected a result route")
         }
     }
 
-    @Test func existingEarthCompletionRetroactivelyUnlocksMarsAndGear() {
+    @Test func existingEarthCompletionRetroactivelyUnlocksMarsAndVolt() {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         var progress = PlayerProgress.newPlayer
         progress.highestUnlockedLevel = 10
@@ -95,7 +115,7 @@ struct ProgressStoreTests {
             persistence: FileProgressStore(fileURL: directory.appending(path: "save.json"))
         )
         #expect(gameStore.progress.highestUnlockedLevel == 11)
-        #expect(gameStore.progress.unlockedGear == Set(GameContent.world(.earth).gearRewards))
+        #expect(gameStore.progress.unlockedCharacters.contains(.volt))
     }
 
     @Test func worldSelectionAcceptsUnlockedMarsAndRejectsLockedMars() {
@@ -112,20 +132,17 @@ struct ProgressStoreTests {
         #expect(unlockedStore.selectedWorld == .mars)
     }
 
-    @Test func lockerRejectsLockedOrWrongSlotGear() throws {
+    @Test func rosterRejectsLockedCharacterAndPersistsUnlockedSelection() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let gameStore = GameStore(
             progress: .newPlayer,
             settings: .init(),
             persistence: FileProgressStore(fileURL: directory.appending(path: "save.json"))
         )
-        #expect(!gameStore.equip(.earthVisor, in: .head))
-        gameStore.progress.unlockedGear.insert(.earthVisor)
-        #expect(!gameStore.equip(.earthVisor, in: .feet))
-        #expect(gameStore.equip(.earthVisor, in: .head))
-        #expect(gameStore.progress.equippedGear[.head] == .earthVisor)
-        #expect(gameStore.equip(nil, in: .head))
-        #expect(gameStore.progress.equippedGear[.head] == nil)
+        #expect(!gameStore.selectCharacter(.nova))
+        gameStore.progress.unlockedCharacters.insert(.nova)
+        #expect(gameStore.selectCharacter(.nova))
+        #expect(gameStore.progress.selectedCharacter == .nova)
     }
 
     @Test func endlessRecordsAreIndependentPerWorld() throws {
@@ -149,7 +166,7 @@ struct ProgressStoreTests {
         }
     }
 
-    @Test func versionTwoSaveMigratesToThreeWithEngagementDefaults() throws {
+    @Test func versionTwoSaveMigratesToFourWithCharacterDefaults() throws {
         let json = """
         {
           "schemaVersion": 2,
@@ -165,14 +182,15 @@ struct ProgressStoreTests {
         """
         var progress = try JSONDecoder().decode(PlayerProgress.self, from: Data(json.utf8))
         progress.reconcileUnlockedContent()
-        #expect(progress.schemaVersion == 3)
+        #expect(progress.schemaVersion == 4)
         #expect(progress.trainingTokens == 321)
         #expect(progress.lifetimeStats == LifetimeStats())
         #expect(progress.dailyReward == DailyRewardState())
         #expect(progress.missions.isEmpty)
         #expect(progress.missionsDay.isEmpty)
         #expect(progress.unlockedAchievements.isEmpty)
-        #expect(progress.seenGearIDs.isEmpty)
+        #expect(progress.unlockedCharacters == [.ace])
+        #expect(progress.selectedCharacter == .ace)
         #expect(!progress.hasSeenOnboarding)
         #expect(progress.rank(for: .impact) == 2)
     }

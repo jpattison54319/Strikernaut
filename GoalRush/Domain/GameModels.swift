@@ -80,53 +80,50 @@ struct PlayerProgress: Codable, Equatable, Sendable {
     var upgradeRanks: [UpgradeTrack: Int]
     var levelRecords: [Int: LevelRecord]
     var hasMovedInTutorial: Bool
-    var unlockedGear: Set<GearID>
-    var equippedGear: [GearSlot: GearID]
     var endlessRecords: [WorldID: EndlessRecord]
     var lifetimeStats: LifetimeStats
     var dailyReward: DailyRewardState
     var missions: [MissionState]
     var missionsDay: String
     var unlockedAchievements: Set<AchievementID>
-    var seenGearIDs: Set<GearID>
     var hasSeenOnboarding: Bool
+    var unlockedCharacters: Set<CharacterID>
+    var selectedCharacter: CharacterID
 
     static let newPlayer = PlayerProgress(
-        schemaVersion: 3,
+        schemaVersion: 4,
         trainingTokens: 0,
         highestUnlockedLevel: 1,
         upgradeRanks: [:],
         levelRecords: [:],
         hasMovedInTutorial: false,
-        unlockedGear: [],
-        equippedGear: [:],
         endlessRecords: [:],
         lifetimeStats: LifetimeStats(),
         dailyReward: DailyRewardState(),
         missions: [],
         missionsDay: "",
         unlockedAchievements: [],
-        seenGearIDs: [],
-        hasSeenOnboarding: false
+        hasSeenOnboarding: false,
+        unlockedCharacters: [.ace],
+        selectedCharacter: .ace
     )
 
     func rank(for track: UpgradeTrack) -> Int { upgradeRanks[track, default: 0] }
     mutating func setRank(_ rank: Int, for track: UpgradeTrack) { upgradeRanks[track] = rank }
     func endlessRecord(for world: WorldID) -> EndlessRecord { endlessRecords[world, default: .empty] }
-    var loadout: GearLoadout { GearLoadout(equipped: equippedGear) }
-
     mutating func reconcileUnlockedContent() {
-        schemaVersion = 3
+        schemaVersion = 4
         highestUnlockedLevel = min(GameContent.levels.count, max(1, highestUnlockedLevel))
         for world in GameContent.worlds where levelRecords[world.finalLevel]?.completed == true {
-            unlockedGear.formUnion(world.gearRewards)
             highestUnlockedLevel = min(
                 GameContent.levels.count,
                 max(highestUnlockedLevel, world.finalLevel + 1)
             )
         }
-        equippedGear = equippedGear.filter { slot, id in
-            unlockedGear.contains(id) && GearCatalog.item(id).slot == slot
+        unlockedCharacters.formUnion(CharacterCatalog.unlockedCharacters(for: self))
+        unlockedCharacters.insert(.ace)
+        if !unlockedCharacters.contains(selectedCharacter) {
+            selectedCharacter = .ace
         }
     }
 
@@ -137,16 +134,15 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         case upgradeRanks
         case levelRecords
         case hasMovedInTutorial
-        case unlockedGear
-        case equippedGear
         case endlessRecords
         case lifetimeStats
         case dailyReward
         case missions
         case missionsDay
         case unlockedAchievements
-        case seenGearIDs
         case hasSeenOnboarding
+        case unlockedCharacters
+        case selectedCharacter
     }
 
     init(
@@ -156,16 +152,15 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         upgradeRanks: [UpgradeTrack: Int],
         levelRecords: [Int: LevelRecord],
         hasMovedInTutorial: Bool,
-        unlockedGear: Set<GearID>,
-        equippedGear: [GearSlot: GearID],
         endlessRecords: [WorldID: EndlessRecord],
         lifetimeStats: LifetimeStats = LifetimeStats(),
         dailyReward: DailyRewardState = DailyRewardState(),
         missions: [MissionState] = [],
         missionsDay: String = "",
         unlockedAchievements: Set<AchievementID> = [],
-        seenGearIDs: Set<GearID> = [],
-        hasSeenOnboarding: Bool = false
+        hasSeenOnboarding: Bool = false,
+        unlockedCharacters: Set<CharacterID> = [.ace],
+        selectedCharacter: CharacterID = .ace
     ) {
         self.schemaVersion = schemaVersion
         self.trainingTokens = trainingTokens
@@ -173,16 +168,15 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         self.upgradeRanks = upgradeRanks
         self.levelRecords = levelRecords
         self.hasMovedInTutorial = hasMovedInTutorial
-        self.unlockedGear = unlockedGear
-        self.equippedGear = equippedGear
         self.endlessRecords = endlessRecords
         self.lifetimeStats = lifetimeStats
         self.dailyReward = dailyReward
         self.missions = missions
         self.missionsDay = missionsDay
         self.unlockedAchievements = unlockedAchievements
-        self.seenGearIDs = seenGearIDs
         self.hasSeenOnboarding = hasSeenOnboarding
+        self.unlockedCharacters = unlockedCharacters
+        self.selectedCharacter = selectedCharacter
     }
 
     init(from decoder: Decoder) throws {
@@ -195,40 +189,34 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         upgradeRanks = container.decodeEnumKeyedMap(forKey: .upgradeRanks)
         levelRecords = try container.decodeIfPresent([Int: LevelRecord].self, forKey: .levelRecords) ?? [:]
         hasMovedInTutorial = try container.decodeIfPresent(Bool.self, forKey: .hasMovedInTutorial) ?? false
-        unlockedGear = try container.decodeIfPresent(Set<GearID>.self, forKey: .unlockedGear) ?? []
-        let decodedGear: [GearSlot: GearID] = container.decodeEnumKeyedMap(forKey: .equippedGear)
-        equippedGear = [:]
-        for (slot, id) in decodedGear where unlockedGear.contains(id) && GearCatalog.item(id).slot == slot {
-            equippedGear[slot] = id
-        }
         endlessRecords = container.decodeEnumKeyedMap(forKey: .endlessRecords)
         lifetimeStats = try container.decodeIfPresent(LifetimeStats.self, forKey: .lifetimeStats) ?? LifetimeStats()
         dailyReward = try container.decodeIfPresent(DailyRewardState.self, forKey: .dailyReward) ?? DailyRewardState()
         missions = try container.decodeIfPresent([MissionState].self, forKey: .missions) ?? []
         missionsDay = try container.decodeIfPresent(String.self, forKey: .missionsDay) ?? ""
         unlockedAchievements = try container.decodeIfPresent(Set<AchievementID>.self, forKey: .unlockedAchievements) ?? []
-        seenGearIDs = try container.decodeIfPresent(Set<GearID>.self, forKey: .seenGearIDs) ?? []
         hasSeenOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasSeenOnboarding) ?? false
+        unlockedCharacters = try container.decodeIfPresent(Set<CharacterID>.self, forKey: .unlockedCharacters) ?? [.ace]
+        selectedCharacter = try container.decodeIfPresent(CharacterID.self, forKey: .selectedCharacter) ?? .ace
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(3, forKey: .schemaVersion)
+        try container.encode(4, forKey: .schemaVersion)
         try container.encode(trainingTokens, forKey: .trainingTokens)
         try container.encode(highestUnlockedLevel, forKey: .highestUnlockedLevel)
         try container.encode(upgradeRanks, forKey: .upgradeRanks)
         try container.encode(levelRecords, forKey: .levelRecords)
         try container.encode(hasMovedInTutorial, forKey: .hasMovedInTutorial)
-        try container.encode(unlockedGear, forKey: .unlockedGear)
-        try container.encode(equippedGear, forKey: .equippedGear)
         try container.encode(endlessRecords, forKey: .endlessRecords)
         try container.encode(lifetimeStats, forKey: .lifetimeStats)
         try container.encode(dailyReward, forKey: .dailyReward)
         try container.encode(missions, forKey: .missions)
         try container.encode(missionsDay, forKey: .missionsDay)
         try container.encode(unlockedAchievements, forKey: .unlockedAchievements)
-        try container.encode(seenGearIDs, forKey: .seenGearIDs)
         try container.encode(hasSeenOnboarding, forKey: .hasSeenOnboarding)
+        try container.encode(unlockedCharacters, forKey: .unlockedCharacters)
+        try container.encode(selectedCharacter, forKey: .selectedCharacter)
     }
 }
 

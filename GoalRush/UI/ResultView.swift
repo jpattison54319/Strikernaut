@@ -4,7 +4,6 @@ struct ResultView: View {
     @Environment(GameStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
-    @State private var showingMoreActions = false
     let result: RunResult
 
     var body: some View {
@@ -30,9 +29,8 @@ struct ResultView: View {
                         newBestStatus
                         stars
                         resultStats
-                        missionProgress
-                        if !result.gearEarned.isEmpty {
-                            gearReward
+                        if result.characterEarned != nil {
+                            characterReward
                         }
                         actions
                         Spacer(minLength: GoalRushTheme.Metrics.sectionSpacing)
@@ -41,9 +39,6 @@ struct ResultView: View {
                 }
                 .scrollBounceBehavior(.basedOnSize)
             }
-        }
-        .sheet(isPresented: $showingMoreActions) {
-            ResultMoreActionsSheet(result: result)
         }
         .onAppear {
             appeared = true
@@ -137,70 +132,31 @@ struct ResultView: View {
             } else {
                 LabeledContent("Stamina remaining", value: "\(Int(result.remainingStamina))")
             }
-            Label("Progress and rewards saved", systemImage: "checkmark.circle.fill")
-                .font(.footnote.bold())
-                .foregroundStyle(GoalRushTheme.positive)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(GoalRushTheme.Metrics.standardSpacing)
         .gameSurface(.panel)
     }
 
-    @ViewBuilder
-    private var missionProgress: some View {
-        let progressed = store.progress.missions.filter { $0.progress > 0 }
-        if !progressed.isEmpty {
-            VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.compactSpacing) {
-                Label("Mission progress", systemImage: "target")
-                    .font(.subheadline.bold())
-                ForEach(progressed) { mission in
-                    HStack {
-                        Text(MissionCatalog.title(for: mission.kind))
-                            .font(.caption)
-                        Spacer()
-                        if mission.isComplete && !mission.claimed {
-                            Text("COMPLETE • claim on Home")
-                                .font(.caption.bold())
-                                .foregroundStyle(GoalRushTheme.positive)
-                        } else {
-                            Text("\(min(mission.progress, mission.goal))/\(mission.goal)")
-                                .font(.caption.bold().monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            .padding(GoalRushTheme.Metrics.standardSpacing)
-            .gameSurface(.panel)
-        }
-    }
-
-    private var gearReward: some View {
-        VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
-            Label("WORLD REWARD EARNED", systemImage: "sparkles")
+    private var characterReward: some View {
+        let character = result.characterEarned.map(CharacterCatalog.character)
+        return VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
+            Label("NEW CHARACTER UNLOCKED", systemImage: "sparkles")
                 .font(.caption.bold())
                 .tracking(1.1)
                 .foregroundStyle(GoalRushTheme.gold)
-            Text("\(GameContent.world(result.mode.world).gearSetName) Set")
+            if let character {
+                Image(character.assetStem + "Roster")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 180)
+                    .accessibilityHidden(true)
+            }
+            Text(character?.name ?? "New Hero")
                 .font(.title2.bold())
-            Text("Unlocked in your Locker.")
+            Text(character?.abilityName ?? "Unique ability unlocked")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
-                ForEach(result.gearEarned, id: \.self) { id in
-                    let item = GearCatalog.item(id)
-                    VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
-                        Image(systemName: item.slot.icon)
-                            .font(.headline)
-                            .frame(width: 42, height: 42)
-                            .background(result.mode.world.accentColor.opacity(0.16), in: .circle)
-                        Text(item.slot.title)
-                            .font(.caption.bold())
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-            }
         }
         .padding(GoalRushTheme.Metrics.sectionSpacing)
         .gameSurface(.modal)
@@ -217,13 +173,64 @@ struct ResultView: View {
                 .buttonStyle(GameLaunchButtonStyle())
                 .accessibilityIdentifier("result-primary")
 
-            Button("More Actions", systemImage: "ellipsis.circle") {
-                store.uiAudio.play(.tap)
-                showingMoreActions = true
+            HStack(alignment: .top, spacing: GoalRushTheme.Metrics.sectionSpacing) {
+                resultDestination(
+                    title: "Upgrades",
+                    systemImage: "arrow.up",
+                    accent: GoalRushTheme.cyan,
+                    identifier: "result-more-upgrades",
+                    action: openUpgrades
+                )
+                resultDestination(
+                    title: "Characters",
+                    systemImage: "person.3.fill",
+                    accent: GoalRushTheme.gold,
+                    identifier: "result-more-characters",
+                    action: openCharacters
+                )
+                resultDestination(
+                    title: result.mode.isEndless ? "Arenas" : "Map",
+                    systemImage: "map.fill",
+                    accent: result.mode.world.accentColor,
+                    identifier: "result-more-map",
+                    action: openModeSelection
+                )
             }
-            .buttonStyle(SecondaryGameButton())
-            .accessibilityIdentifier("result-more")
+            .frame(maxWidth: .infinity)
         }
+    }
+
+    private func resultDestination(
+        title: String,
+        systemImage: String,
+        accent: Color,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+                Image(systemName: systemImage)
+                    .font(.title2.bold())
+                    .foregroundStyle(.white)
+                    .frame(width: 64, height: 64)
+                    .background(.black.opacity(0.56), in: .circle)
+                    .overlay {
+                        Circle().stroke(accent.opacity(0.82), lineWidth: 2)
+                    }
+                    .shadow(color: accent.opacity(0.34), radius: 12, y: 5)
+
+                Text(title)
+                    .font(.caption.bold())
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier(identifier)
     }
 
     private func statRow(label: String, value: String, icon: String) -> some View {
@@ -275,9 +282,11 @@ struct ResultView: View {
     }
 
     private var primaryTitle: String {
-        switch result.mode {
+        if !result.didWin { return "Retry" }
+
+        return switch result.mode {
         case .endless: "Run It Back"
-        case .campaign(let level): result.didWin && level < GameContent.levels.count ? "Play Next Level" : "Play Again"
+        case .campaign(let level): level < GameContent.levels.count ? "Play Next Level" : "Play Again"
         }
     }
 
@@ -287,6 +296,21 @@ struct ResultView: View {
         case .campaign(let level):
             store.start(level: result.didWin ? min(level + 1, GameContent.levels.count) : level)
         }
+    }
+
+    private func openUpgrades() {
+        store.uiAudio.play(.tap)
+        store.route = .upgrades
+    }
+
+    private func openCharacters() {
+        store.uiAudio.play(.tap)
+        store.route = .characters
+    }
+
+    private func openModeSelection() {
+        store.uiAudio.play(.tap)
+        store.route = result.mode.isEndless ? .endless : .levels
     }
 }
 

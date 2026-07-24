@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 struct UpgradeEffect: Equatable {
     let metric: String
@@ -8,6 +8,17 @@ struct UpgradeEffect: Equatable {
 }
 
 enum UpgradePresentation {
+    static func accent(for track: UpgradeTrack) -> Color {
+        switch track {
+        case .conditioning: GoalRushTheme.positive
+        case .footwork: GoalRushTheme.cyan
+        case .tempo: GoalRushTheme.gold
+        case .impact: GoalRushTheme.orange
+        case .flight: GoalRushTheme.blue
+        case .spin: Color(red: 0.66, green: 0.36, blue: 1)
+        }
+    }
+
     static func icon(for track: UpgradeTrack) -> String {
         switch track {
         case .conditioning: "heart.fill"
@@ -30,8 +41,15 @@ enum UpgradePresentation {
         }
     }
 
+    static func systemLabel(for track: UpgradeTrack) -> String {
+        switch track.category {
+        case .player: "PLAYER SYSTEM"
+        case .ball: "BALL SYSTEM"
+        }
+    }
+
     static func effect(for track: UpgradeTrack, rank: Int) -> UpgradeEffect {
-        let nextRank = min(rank + 1, UpgradeRules.maxRank)
+        let nextRank = rank + 1
         switch track {
         case .conditioning:
             return .init(metric: "Maximum stamina", current: "\(stamina(rank))", next: "\(stamina(nextRank))", improvement: "+\(stamina(nextRank) - stamina(rank)) stamina")
@@ -46,11 +64,16 @@ enum UpgradePresentation {
         case .flight:
             return .init(metric: "Ball flight speed", current: "+\(rank * 6)%", next: "+\(nextRank * 6)%", improvement: "+6% flight speed")
         case .spin:
-            return .init(metric: "Critical chance", current: "\(5 + rank * 3)%", next: "\(5 + nextRank * 3)%", improvement: "+3% double-damage chance")
+            return .init(
+                metric: "Critical power",
+                current: "\(5 + rank * 3)%",
+                next: "\(5 + nextRank * 3)%",
+                improvement: "+3% critical power"
+            )
         }
     }
 
     private static func stamina(_ rank: Int) -> Int { Int((100 * (1 + 0.08 * Double(rank))).rounded()) }
-    private static func kicksPerMinute(_ rank: Int) -> Int { Int((60 / (1.12 * pow(0.88, Double(rank)))).rounded()) }
+    private static func kicksPerMinute(_ rank: Int) -> Int { Int((60 / UpgradeRules.kickCooldown(for: rank)).rounded()) }
     private static func damage(_ rank: Int) -> String { (10 * (1 + 0.10 * Double(rank))).formatted(.number.precision(.fractionLength(1))) }
 }

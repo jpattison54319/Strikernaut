@@ -1,6 +1,6 @@
-# Goal Rush
+# Strikernaut
 
-Goal Rush is a native portrait iPhone arcade game built with SwiftUI and
+Strikernaut is a native portrait iPhone arcade game built with SwiftUI and
 SpriteKit. Drag the player horizontally, automatically kick soccer balls into
 approaching opponents, draft temporary techniques during a run, and spend
 Training Tokens on permanent player and ball upgrades. Campaign spans the
@@ -14,6 +14,8 @@ waves that keep scaling. World clears award permanent equippable gear.
 - XcodeGen 2.45 or newer only when regenerating the project
 
 The generated `GoalRush.xcodeproj` is checked in and opens directly in Xcode.
+The internal project and bundle identifiers retain their original names so
+existing installations and local saves continue upgrading in place.
 
 ## Commands
 

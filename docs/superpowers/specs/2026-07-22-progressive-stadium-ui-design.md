@@ -1,11 +1,11 @@
-# Goal Rush Progressive Stadium UI — Design
+# Strikernaut Progressive Stadium UI — Design
 
 Date: 2026-07-22
 Status: Approved for implementation
 
 ## Goal
 
-Replace Goal Rush's card-heavy menu UI with an app-wide "stadium command
+Replace Strikernaut's card-heavy menu UI with an app-wide "stadium command
 deck" language: atmospheric art remains visible, compact labeled controls
 float above it, one action owns primary visual emphasis, and detailed
 information appears only after the player asks for it.
@@ -39,7 +39,7 @@ haptics, and celebration logic are reorganized rather than removed.
 Home uses `MenuHero` full-screen with:
 
 - a token pill at top-leading and Settings at top-trailing;
-- the Goal Rush title near the top;
+- the Strikernaut title near the top;
 - Daily and Missions as two labeled satellite buttons on the left;
 - Campaign and Endless as two labeled satellite buttons on the right;
 - one next-match launch button near the bottom;

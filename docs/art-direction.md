@@ -1,6 +1,6 @@
-# Goal Rush Art Direction
+# Strikernaut Art Direction
 
-Goal Rush uses an original all-ages toy-like 3D visual language: rounded forms,
+Strikernaut uses an original all-ages toy-like 3D visual language: rounded forms,
 large silhouettes, saturated turf, cobalt/teal player colors, orange training
 robots, and yellow boss accents. No real clubs, sponsors, flags, or player
 likenesses are used.
@@ -13,11 +13,18 @@ objects, interface, app icon, and audio are original.
 
 ### App icon
 
-Use case: `logo-brand`. Original polished iOS game icon with no text. A bright
-white-and-cobalt soccer ball streaks toward a stylized goal with a friendly
-orange training robot in the distance. Premium rounded toy-like 3D render,
-sunny stadium lighting, cobalt/teal/green/gold palette, safe icon padding, no
-real marks, sponsors, words, watermark, transparency, or border.
+Use case: `logo-brand`. A hand-directed graphic arcade-sports icon with no
+text. Ace is seen from behind in a powerful kick, launching one geometrically
+correct black-and-white ball up three converging lanes toward a compact
+futuristic portal-goal. The lower half reads as the green Earth stadium and the
+portal opens into the coral-red Mars world. Use a bold silhouette, intentional
+cel-shaded planes, crisp controlled edges, a poster-like large/medium/small
+hierarchy, restrained screen-print texture, and generous safe padding. Keep
+the palette to navy/cobalt/cyan, turf green, coral/rust/violet, and one warm
+gold impact accent. No words, marks, sponsors, flags, borders, transparency,
+robot mascot, extra characters or balls, sparkles, lens flare, excessive glow,
+glossy plastic, malformed anatomy, inconsistent ball panels, fuzzy edges, or
+generic fantasy detail.
 
 ### Menu hero
 
@@ -39,7 +46,7 @@ static depth layer beneath live SpriteKit characters and effects.
 
 Use case: `stylized-concept`
 
-Asset type: portrait iPhone gameplay arena background for Goal Rush
+Asset type: portrait iPhone gameplay arena background for Strikernaut
 
 Primary request: an empty futuristic soccer training stadium on Mars, designed
 as the second campaign world
@@ -110,6 +117,25 @@ cobalt/teal player dribbling a soccer ball toward friendly orange training
 robots upfield, subtle motion lines, sunny lighting, quiet empty lower third
 for UI overlay, elevated camera, no text, no UI, no watermark.
 
-All seven images were generated with the built-in image-generation tool in the
-prompt modes named above and
-copied into `GoalRush/Resources/Assets.xcassets` for the app target.
+The seven environment and UI images above were generated with the built-in
+image-generation tool in the prompt modes named above and copied into
+`GoalRush/Resources/Assets.xcassets` for the app target.
+
+## Soccer ball projectile sprites
+
+The standard projectile is an unmistakable black-and-white stitched soccer ball
+rendered in the same premium rounded toy-like 3D style. Six power variants
+preserve the same panel geometry and add a compact, readable effect:
+
+- `SoccerBallRapidFire`: golden electric corona and cobalt lightning.
+- `SoccerBallExplosive`: pressurized red-orange energy shell and impact spikes.
+- `SoccerBallFire`: yellow-orange arcade flames with no smoke.
+- `SoccerBallIce`: pale-cyan frost plates, rime, crystals, and icicles.
+- `SoccerBallReverse`: violet directional energy ring and reverse arrows.
+- `SoccerBallSplit`: emerald aura and five miniature soccer-ball echoes.
+
+Each sprite was generated with the built-in image-generation tool as a
+`stylized-concept` base or `precise-object-edit` variant on a flat `#ff00ff`
+background. The key background was removed locally, the output was downsampled
+to a transparent 384-pixel square PNG, and the final images were copied into
+individual image sets under `GoalRush/Resources/Assets.xcassets`.

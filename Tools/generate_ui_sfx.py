@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Goal Rush UI sound effects as 16-bit mono WAVs (no dependencies)."""
+"""Generate Strikernaut UI sound effects as 16-bit mono WAVs (no dependencies)."""
 import math
 import os
 import struct

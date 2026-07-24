@@ -3,6 +3,7 @@ import SwiftUI
 struct UpgradeCardView: View {
     @Environment(GameStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var successFeedback = 0
     @State private var justPurchased = false
     @State private var flashTask: Task<Void, Never>?
@@ -10,95 +11,105 @@ struct UpgradeCardView: View {
 
     var body: some View {
         let rank = store.progress.rank(for: track)
-        let maximum = rank == UpgradeRules.maxRank
         let cost = UpgradeRules.cost(forNextRank: rank)
         let affordable = store.progress.trainingTokens >= cost
+        let accent = UpgradePresentation.accent(for: track)
         let effect = UpgradePresentation.effect(for: track, rank: rank)
+        let headerLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: GoalRushTheme.Metrics.standardSpacing))
+        let controlLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: GoalRushTheme.Metrics.standardSpacing))
+        let effectLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: GoalRushTheme.Metrics.compactSpacing))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: GoalRushTheme.Metrics.compactSpacing))
 
-        GameCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 13) {
-                    Image(systemName: UpgradePresentation.icon(for: track))
-                        .font(.title2.bold())
-                        .foregroundStyle(GoalRushTheme.navy)
-                        .frame(width: 48, height: 48)
-                        .background(
-                            LinearGradient(colors: [GoalRushTheme.gold, GoalRushTheme.orange], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: .rect(cornerRadius: 14)
-                        )
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(UpgradeRules.title(for: track)).font(.headline)
-                        Text(UpgradePresentation.benefit(for: track))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing) {
+            headerLayout {
+                Image(systemName: UpgradePresentation.icon(for: track))
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(GoalRushTheme.navy)
+                    .frame(width: 50, height: 50)
+                    .background(
+                        LinearGradient(
+                            colors: [accent, accent.opacity(0.66)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        in: .rect(cornerRadius: GoalRushTheme.Metrics.smallRadius)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.smallRadius)
+                            .stroke(.white.opacity(0.40))
                     }
-                    Spacer(minLength: 0)
-                }
+                    .shadow(color: accent.opacity(0.28), radius: 8, y: 4)
 
-                RankPips(rank: rank)
-
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(effect.metric.uppercased())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(UpgradePresentation.systemLabel(for: track))
                         .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                    HStack(spacing: 8) {
-                        Text(effect.current).font(.title3.bold()).monospacedDigit()
-                        Image(systemName: maximum ? "checkmark.circle.fill" : "arrow.right")
-                            .foregroundStyle(maximum ? GoalRushTheme.positive : GoalRushTheme.gold)
-                        Text(maximum ? "MAX" : effect.next)
-                            .font(.title3.bold())
-                            .foregroundStyle(maximum ? GoalRushTheme.positive : .white)
-                            .monospacedDigit()
-                        Spacer()
-                        if !maximum {
-                            Text(effect.improvement)
-                                .font(.caption.bold())
-                                .foregroundStyle(GoalRushTheme.positive)
-                        }
-                    }
+                        .tracking(0.8)
+                        .foregroundStyle(accent)
+                    Text(UpgradeRules.title(for: track))
+                        .font(.title3.bold())
+                        .foregroundStyle(.white)
+                    Text(UpgradePresentation.benefit(for: track))
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.70))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(12)
-                .background(.black.opacity(0.22), in: .rect(cornerRadius: 14))
-
-                if maximum {
-                    Label("MAX", systemImage: "seal.fill")
-                        .font(.headline)
-                        .foregroundStyle(GoalRushTheme.gold)
-                        .frame(maxWidth: .infinity, minHeight: 54)
-                        .background(GoalRushTheme.gold.opacity(0.14), in: .rect(cornerRadius: 18))
-                        .overlay { RoundedRectangle(cornerRadius: 18).stroke(GoalRushTheme.gold.opacity(0.45)) }
-                } else {
-                    if affordable {
-                        Text("READY")
-                            .font(.caption.bold())
-                            .tracking(1.1)
-                            .foregroundStyle(GoalRushTheme.navy)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(GoalRushTheme.gold, in: .capsule)
-                    }
-                    Button("Upgrade for \(cost) Tokens", systemImage: "arrow.up.circle.fill", action: purchase)
-                        .buttonStyle(PrimaryGameButton())
-                        .disabled(!affordable)
-                        .accessibilityIdentifier("upgrade-purchase-\(track.rawValue)")
-
-                    if !affordable {
-                        ProgressView(value: min(1, Double(store.progress.trainingTokens) / Double(cost))) {
-                            Label("\(store.progress.trainingTokens)/\(cost)", systemImage: "lock.fill")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        .tint(GoalRushTheme.gold)
-                    }
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+
+            Divider().overlay(.white.opacity(0.12))
+
+            controlLayout {
+                VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.compactSpacing) {
+                    Text("RANK \(rank) • UNLIMITED")
+                        .font(.caption.bold().monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.72))
+                    UpgradeRankSockets(rank: rank, accent: accent)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button(action: purchase) {
+                    Label {
+                        Text(affordable ? cost.formatted() : "Need \(cost.formatted())")
+                            .monospacedDigit()
+                    } icon: {
+                        Image(systemName: affordable ? "hexagon.fill" : "lock.fill")
+                    }
+                }
+                .buttonStyle(UpgradePurchaseButtonStyle(accent: accent))
+                .disabled(!affordable)
+                .accessibilityLabel("Upgrade \(UpgradeRules.title(for: track)) for \(cost) Training Tokens")
+                .accessibilityValue(affordable ? "Available" : "Not enough Training Tokens")
+                .accessibilityIdentifier("upgrade-purchase-\(track.rawValue)")
+            }
+
+            effectLayout {
+                Image(systemName: "arrow.up.right.circle.fill")
+                    .foregroundStyle(accent)
+                    .accessibilityHidden(true)
+                Text("\(effect.current) → \(effect.next)")
+                Text(effect.improvement)
+                    .foregroundStyle(accent)
+            }
+            .font(.caption.bold().monospacedDigit())
+            .foregroundStyle(.white.opacity(0.74))
+            .fixedSize(horizontal: false, vertical: true)
         }
+        .padding(GoalRushTheme.Metrics.standardSpacing)
+        .background {
+            UpgradeModuleSurface(accent: accent)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("upgrade-\(track.rawValue)")
         .overlay {
             RoundedRectangle(cornerRadius: 22)
                 .stroke(GoalRushTheme.gold, lineWidth: 2)
                 .opacity(justPurchased ? 1 : 0)
         }
-        .pulseGlow(affordable && !maximum && !store.settings.reducedFlashes, color: GoalRushTheme.gold)
         .sensoryFeedback(trigger: successFeedback) { _, _ in
             store.settings.hapticsEnabled ? .success : nil
         }
@@ -128,19 +139,150 @@ struct UpgradeCardView: View {
     }
 }
 
-private struct RankPips: View {
-    let rank: Int
+private struct UpgradeModuleSurface: View {
+    let accent: Color
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text("RANK \(rank) OF \(UpgradeRules.maxRank)")
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
-            ForEach(0..<UpgradeRules.maxRank, id: \.self) { index in
-                Capsule()
-                    .fill(index < rank ? GoalRushTheme.gold : .white.opacity(0.13))
-                    .frame(maxWidth: .infinity, minHeight: 6, maxHeight: 6)
+        ZStack {
+            LinearGradient(
+                colors: [
+                    GoalRushTheme.surfaceRaised.opacity(0.985),
+                    GoalRushTheme.surface.opacity(0.985),
+                    GoalRushTheme.navy.opacity(0.985)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Image(systemName: "circle.hexagongrid.fill")
+                .font(.system(size: 154))
+                .foregroundStyle(.white.opacity(0.026))
+                .offset(x: 118, y: 54)
+
+            VStack {
+                LinearGradient(
+                    colors: [accent.opacity(0.88), accent.opacity(0.08), .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(height: 4)
+                Spacer(minLength: 0)
+            }
+
+            HStack {
+                WorkshopBolt()
+                Spacer(minLength: 0)
+                WorkshopBolt()
+            }
+            .padding(GoalRushTheme.Metrics.compactSpacing)
+            .frame(maxHeight: .infinity, alignment: .bottom)
+        }
+        .clipShape(.rect(cornerRadius: 22))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22)
+                .stroke(accent.opacity(0.34), lineWidth: GoalRushTheme.Metrics.strokeWidth)
+        }
+        .shadow(color: .black.opacity(0.30), radius: GoalRushTheme.Metrics.shadowRadius, y: 7)
+    }
+}
+
+private struct WorkshopBolt: View {
+    var body: some View {
+        Circle()
+            .fill(.white.opacity(0.18))
+            .frame(width: 6, height: 6)
+            .overlay {
+                Rectangle()
+                    .fill(GoalRushTheme.navy.opacity(0.72))
+                    .frame(width: 4, height: 1)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+private struct UpgradeRankSockets: View {
+    let rank: Int
+    let accent: Color
+
+    var body: some View {
+        HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+            ForEach(0..<UpgradeRules.masteryRank, id: \.self) { index in
+                ZStack {
+                    Circle()
+                        .fill(socketFill(index: index))
+                    Circle()
+                        .stroke(socketStroke(index: index), lineWidth: index == rank ? 2 : 1)
+                    Image(systemName: rank > UpgradeRules.masteryRank && index == UpgradeRules.masteryRank - 1
+                        ? "infinity"
+                        : socketIcon(index: index))
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(socketIconColor(index: index))
+                }
+                .frame(width: 26, height: 26)
+                .shadow(color: index < rank ? accent.opacity(0.26) : .clear, radius: 5)
             }
         }
+        .frame(minHeight: GoalRushTheme.Metrics.minimumTapTarget, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Purchased upgrades")
+        .accessibilityValue("Rank \(rank), unlimited")
+    }
+
+    private func socketFill(index: Int) -> Color {
+        if index < rank { return accent }
+        if index == rank { return accent.opacity(0.12) }
+        return .black.opacity(0.24)
+    }
+
+    private func socketStroke(index: Int) -> Color {
+        if index <= rank { return accent.opacity(0.84) }
+        return .white.opacity(0.22)
+    }
+
+    private func socketIcon(index: Int) -> String {
+        if index < rank { return "checkmark" }
+        if index == rank { return "plus" }
+        return "circle.fill"
+    }
+
+    private func socketIconColor(index: Int) -> Color {
+        if index < rank { return GoalRushTheme.navy }
+        if index == rank { return accent }
+        return .white.opacity(0.16)
+    }
+}
+
+private struct UpgradePurchaseButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let accent: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.bold())
+            .foregroundStyle(isEnabled ? GoalRushTheme.navy : .white.opacity(0.78))
+            .padding(.horizontal, 13)
+            .frame(minHeight: GoalRushTheme.Metrics.minimumTapTarget)
+            .background(buttonFill, in: .capsule)
+            .overlay {
+                Capsule()
+                    .stroke(isEnabled ? .white.opacity(0.34) : accent.opacity(0.46))
+            }
+            .shadow(color: isEnabled ? accent.opacity(0.30) : .clear, radius: 8, y: 4)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: configuration.isPressed)
+    }
+
+    private var buttonFill: AnyShapeStyle {
+        if isEnabled {
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [accent, accent.opacity(0.72)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        }
+        return AnyShapeStyle(GoalRushTheme.navy.opacity(0.88))
     }
 }

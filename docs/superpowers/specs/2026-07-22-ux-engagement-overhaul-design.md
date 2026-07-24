@@ -1,11 +1,11 @@
-# Goal Rush UX & Engagement Overhaul — Design
+# Strikernaut UX & Engagement Overhaul — Design
 
 Date: 2026-07-22
 Status: Approved (Approach A: Foundation → Systems → Screens → Art/Polish)
 
 ## Goal
 
-Turn Goal Rush from a well-built arcade game into a highly polished, highly
+Turn Strikernaut from a well-built arcade game into a highly polished, highly
 engaging one by applying modern UX/UI principles to every screen and modern
 interaction design to every flow, plus ethical compulsion loops (variable
 rewards, visible progress, always-a-next-goal) from contemporary game design.
@@ -132,7 +132,7 @@ safe defaults. Debug launch arg `--reset-onboarding` re-arms the FTUE.
 
 ### Onboarding (new, shows once)
 
-Three swipeable pages over generated art: (1) "Welcome to Goal Rush" — fantasy
+Three swipeable pages over generated art: (1) "Welcome to Strikernaut" — fantasy
 + drag-to-aim; (2) "Draft powers every run" — roguelite promise; (3) "Get
 stronger forever" — tokens → upgrades → gear. Final CTA drops into Level 1.
 Coach marks during the first run reuse the existing "Drag to aim" pill, then a

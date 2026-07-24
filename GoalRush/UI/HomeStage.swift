@@ -18,6 +18,7 @@ struct HomeStage: View {
                     onMissions: onMissions,
                     onPrimary: performPrimaryAction,
                     onCampaign: openCampaign,
+                    onProgress: openProgress,
                     onEndless: openEndless
                 )
             } else {
@@ -27,6 +28,7 @@ struct HomeStage: View {
                     onMissions: onMissions,
                     onPrimary: performPrimaryAction,
                     onCampaign: openCampaign,
+                    onProgress: openProgress,
                     onEndless: openEndless
                 )
             }
@@ -49,5 +51,10 @@ struct HomeStage: View {
     private func openEndless() {
         store.uiAudio.play(.tap)
         store.route = .endless
+    }
+
+    private func openProgress() {
+        store.uiAudio.play(.tap)
+        store.route = .trophies
     }
 }

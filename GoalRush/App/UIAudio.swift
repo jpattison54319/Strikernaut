@@ -17,18 +17,31 @@ final class UIAudio {
     var isEnabled: Bool
     private var pools: [Sound: [AVAudioPlayer]] = [:]
     private var indices: [Sound: Int] = [:]
+    private var isPreparing = false
 
     init(soundEnabled: Bool) {
         self.isEnabled = soundEnabled
+    }
+
+    /// Prepares UI sounds without delaying initial view construction. Missing
+    /// sounds are intentionally skipped until ready rather than decoded inside
+    /// a button action, keeping interaction latency deterministic.
+    func prepare() async {
+        guard pools.isEmpty, !isPreparing else { return }
+        isPreparing = true
         try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+        await Task.yield()
         for sound in Sound.allCases {
+            guard !Task.isCancelled else { break }
             guard let url = Bundle.main.url(forResource: sound.rawValue, withExtension: "wav") else { continue }
             pools[sound] = (0..<3).compactMap { _ in
                 guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
                 player.prepareToPlay()
                 return player
             }
+            await Task.yield()
         }
+        isPreparing = false
     }
 
     func play(_ sound: Sound, volume: Float = 1.0) {

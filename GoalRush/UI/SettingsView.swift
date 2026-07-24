@@ -19,7 +19,7 @@ struct SettingsView: View {
 
                 ScrollView {
                     VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
-                        Text("Tune Goal Rush to feel right for you.")
+                        Text("Tune Strikernaut to feel right for you.")
                             .font(.headline)
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -35,7 +35,7 @@ struct SettingsView: View {
                         .frame(maxWidth: .infinity, minHeight: 52)
                         .gameSurface(.panel)
 
-                        Text("This permanently removes campaign progress, Endless records, gear, upgrades, and Training Tokens from this device.")
+                        Text("This permanently removes campaign progress, Endless records, characters, upgrades, and Training Tokens from this device.")
                             .font(.footnote)
                             .foregroundStyle(.white.opacity(0.72))
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -54,7 +54,7 @@ struct SettingsView: View {
             Button("Reset Progress", role: .destructive) { store.resetProgress() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Campaign progress, Endless records, gear, upgrades, and Training Tokens cannot be recovered.")
+            Text("Campaign progress, Endless records, characters, upgrades, and Training Tokens cannot be recovered.")
         }
         .onChange(of: store.settings) { _, newValue in
             newValue.save()

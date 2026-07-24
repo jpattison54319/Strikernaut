@@ -16,6 +16,8 @@ struct LevelDefinition: Identifiable, Sendable {
     let replayBonus: Int
 
     var id: Int { number }
+    var waveCount: Int { CampaignBalance.waveCount(worldLevel: worldLevel) }
+    var waveDuration: TimeInterval { duration / Double(waveCount) }
 
     init(
         number: Int,
@@ -58,9 +60,7 @@ enum GameContent {
             levelRange: 1...10,
             gameplayAsset: "GameplayArena",
             heroAsset: "GameplayArena",
-            boss: .titanKeeper,
-            gearSetName: "Earth Vanguard",
-            gearRewards: GearID.allCases.filter { GearCatalog.item($0).world == .earth }
+            boss: .titanKeeper
         ),
         .init(
             id: .mars,
@@ -70,9 +70,7 @@ enum GameContent {
             levelRange: 11...20,
             gameplayAsset: "MarsArena",
             heroAsset: "MarsArena",
-            boss: .marsColossus,
-            gearSetName: "Mars Pioneer",
-            gearRewards: GearID.allCases.filter { GearCatalog.item($0).world == .mars }
+            boss: .marsColossus
         )
     ]
 

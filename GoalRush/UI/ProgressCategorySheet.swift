@@ -3,7 +3,6 @@ import SwiftUI
 enum ProgressCategory: String, CaseIterable, Identifiable {
     case trophies
     case lifetime
-    case streak
     case collections
 
     var id: String { rawValue }
@@ -12,7 +11,6 @@ enum ProgressCategory: String, CaseIterable, Identifiable {
         switch self {
         case .trophies: "Trophies"
         case .lifetime: "Lifetime"
-        case .streak: "Streak"
         case .collections: "Collections"
         }
     }
@@ -21,8 +19,7 @@ enum ProgressCategory: String, CaseIterable, Identifiable {
         switch self {
         case .trophies: "Achievements"
         case .lifetime: "Journey totals"
-        case .streak: "Daily rewards"
-        case .collections: "World gear"
+        case .collections: "Characters"
         }
     }
 
@@ -30,8 +27,7 @@ enum ProgressCategory: String, CaseIterable, Identifiable {
         switch self {
         case .trophies: "trophy.fill"
         case .lifetime: "chart.bar.fill"
-        case .streak: "flame.fill"
-        case .collections: "tshirt.fill"
+        case .collections: "person.3.fill"
         }
     }
 
@@ -39,7 +35,6 @@ enum ProgressCategory: String, CaseIterable, Identifiable {
         switch self {
         case .trophies: GoalRushTheme.gold
         case .lifetime: GoalRushTheme.cyan
-        case .streak: GoalRushTheme.orange
         case .collections: GoalRushTheme.positive
         }
     }
@@ -56,8 +51,6 @@ struct ProgressCategorySheet: View {
                 trophies
             case .lifetime:
                 lifetime
-            case .streak:
-                streak
             case .collections:
                 collections
             }
@@ -137,78 +130,22 @@ struct ProgressCategorySheet: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var streak: some View {
-        VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing) {
-            HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
-                Image(systemName: "flame.fill")
-                    .font(.title.bold())
-                    .foregroundStyle(GoalRushTheme.orange)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("CURRENT STREAK")
-                        .font(.caption.bold())
-                        .foregroundStyle(.white.opacity(0.68))
-                    Text("\(store.dailyStreak) day\(store.dailyStreak == 1 ? "" : "s")")
-                        .font(.title2.weight(.heavy))
-                        .foregroundStyle(.white)
-                }
-            }
-
-            Divider().overlay(.white.opacity(0.18))
-
-            Label(claimStatus, systemImage: store.isDailyRewardClaimable ? "gift.fill" : "checkmark.seal.fill")
-                .font(.headline)
-                .foregroundStyle(store.isDailyRewardClaimable ? GoalRushTheme.gold : GoalRushTheme.positive)
-
-            Text(streakGuidance)
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.76))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(GoalRushTheme.Metrics.standardSpacing)
-        .gameSurface(.panel)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var claimStatus: String {
-        if store.isDailyRewardClaimable {
-            return "Day \(store.nextStreakDay) claim: \(store.nextDailyReward) Tokens"
-        }
-        let nextDay = min(store.dailyStreak + 1, DailyRewardEngine.rewards.count)
-        return "Today secured • Next claim: \(DailyRewardEngine.reward(forStreakDay: nextDay)) Tokens"
-    }
-
-    private var streakGuidance: String {
-        if !store.isDailyRewardClaimable {
-            return "Come back tomorrow to continue your streak."
-        }
-        if store.dailyStreak > 0 && store.nextStreakDay == 1 {
-            return "Your previous streak ended. Claim today's daily reward to begin a new one."
-        }
-        if store.dailyStreak == 0 {
-            return "Claim today's daily reward from Home to start your streak."
-        }
-        return "Claim today's daily reward from Home to extend your streak."
-    }
-
     private var collections: some View {
         VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
-            ForEach(GameContent.worlds) { world in
-                let earned = world.gearRewards.filter { store.progress.unlockedGear.contains($0) }.count
-                let equipped = world.gearRewards.filter { store.progress.equippedGear.values.contains($0) }.count
-
+            ForEach(CharacterCatalog.characters) { character in
+                let unlocked = store.progress.unlockedCharacters.contains(character.id)
                 VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.compactSpacing) {
-                    Label(world.gearSetName, systemImage: world.id.icon)
+                    Label(character.name, systemImage: unlocked ? "person.crop.circle.fill.badge.checkmark" : "lock.fill")
                         .font(.headline.bold())
-                        .foregroundStyle(world.id.accentColor)
-                    Text(GearCatalog.setBonus(for: world.id))
+                        .foregroundStyle(unlocked ? GoalRushTheme.cyan : .secondary)
+                    Text("\(character.abilityName): \(character.abilityDescription)")
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.76))
                         .fixedSize(horizontal: false, vertical: true)
-                    HStack {
-                        GameStatusBadge(text: "\(earned)/5 EARNED", tone: earned == 5 ? .positive : .neutral)
-                        GameStatusBadge(text: "\(equipped)/5 EQUIPPED", tone: equipped == 5 ? .positive : .neutral)
-                    }
+                    GameStatusBadge(
+                        text: unlocked ? (store.progress.selectedCharacter == character.id ? "SELECTED" : "UNLOCKED") : character.unlockDescription.uppercased(),
+                        tone: unlocked ? .positive : .neutral
+                    )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(GoalRushTheme.Metrics.standardSpacing)

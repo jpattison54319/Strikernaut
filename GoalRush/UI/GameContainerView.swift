@@ -7,8 +7,6 @@ struct GameContainerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var session: GameSessionModel
     @State private var scene: GoalRushScene
-    @State private var showQuitConfirmation = false
-    @State private var showingPauseMissions = false
     @State private var audio: GameAudio
     @State private var creditedRunTokens = 0
 
@@ -26,6 +24,17 @@ struct GameContainerView: View {
                 .accessibilityLabel("Active soccer training run")
             VStack(spacing: 10) {
                 hud
+                if let ability = session.hudState.activeTemporaryAbility {
+                    HStack {
+                        Spacer()
+                        TemporaryAbilityTimerView(
+                            ability: ability,
+                            remaining: session.hudState.temporaryAbilityRemaining,
+                            duration: session.hudState.temporaryAbilityDuration
+                        )
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                }
                 Spacer()
                 if session.mode.isEndless && session.hudState.elapsed < 5 && session.phase == .playing {
                     Label("Drag to aim", systemImage: "hand.draw.fill")
@@ -41,6 +50,22 @@ struct GameContainerView: View {
             .padding(.horizontal, 14)
             .padding(.top, 8)
 
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    CharacterAbilityButton(
+                        character: session.character,
+                        charge: session.hudState.characterAbilityCharge,
+                        isReady: session.hudState.characterAbilityReady,
+                        activate: activateCharacterAbility
+                    )
+                }
+            }
+            .padding(.trailing, 18)
+            .padding(.bottom, 116)
+            .allowsHitTesting(session.phase == .playing)
+
             if case .briefing(let discoveries) = session.phase, let level = session.level {
                 CampaignBriefingView(level: level, discoveries: discoveries, session: session)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
@@ -55,20 +80,14 @@ struct GameContainerView: View {
             }
         }
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: session.phase)
-        .sheet(isPresented: $showingPauseMissions) {
-            GameSheetScaffold(title: "Daily Missions") {
-                MissionsStrip()
-            }
-            .accessibilityIdentifier("pause-missions-sheet")
-        }
         .onChange(of: session.phase) { _, phase in
             if phase == .paused || phase.isDraft { checkpointRunTokens() }
             if phase == .finished { finishRun() }
         }
-        .onChange(of: session.eventPulse) { _, _ in
-            for event in session.recentEvents { audio.handle(event) }
-            let progress = session.hudState.elapsed / session.hudState.duration
-            audio.updateIntensity(progress: progress, bossActive: session.hudState.bossActive)
+        .task {
+            scene.eventHandler = handleSimulationEvents
+            await Task.yield()
+            await audio.prepare()
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active {
@@ -76,17 +95,10 @@ struct GameContainerView: View {
                 checkpointRunTokens()
             }
         }
-        .confirmationDialog("End this run?", isPresented: $showQuitConfirmation, titleVisibility: .visible) {
-            Button("End Run", role: .destructive) {
-                store.finish(buildResult(didWin: false), tokensAlreadyCredited: creditedRunTokens)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(session.mode.isEndless
-                 ? "Training Tokens and your best wave are saved. Run powers reset."
-                 : "Collected Training Tokens are kept, but level progress is lost.")
+        .onDisappear {
+            scene.eventHandler = nil
+            audio.stop()
         }
-        .onDisappear { audio.stop() }
     }
 
     private var hud: some View {
@@ -207,70 +219,109 @@ struct GameContainerView: View {
             }
         }
         .padding(12)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 20))
-        .background(GoalRushTheme.navy.opacity(0.40), in: .rect(cornerRadius: 20))
-        .overlay { RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.15)) }
-        .shadow(color: .black.opacity(0.28), radius: 14, y: 7)
+        // A live material samples and blurs the SpriteKit surface whenever this
+        // frequently-changing HUD redraws. An opaque game surface preserves the
+        // visual hierarchy without forcing that expensive cross-framework pass.
+        .background(hudBackground, in: .rect(cornerRadius: 20))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(hudBorderColor, lineWidth: session.world.id == .mars ? 1.5 : 1)
+        }
+        .shadow(color: hudShadowColor, radius: 14, y: 7)
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: session.hudState.combo > 0)
+    }
+
+    private var hudBackground: AnyShapeStyle {
+        if session.world.id == .mars {
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.12, green: 0.035, blue: 0.20).opacity(0.95),
+                        Color(red: 0.035, green: 0.09, blue: 0.18).opacity(0.93)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        }
+        return AnyShapeStyle(GoalRushTheme.navy.opacity(0.90))
+    }
+
+    private var hudBorderColor: Color {
+        session.world.id == .mars
+            ? Color(red: 0.25, green: 0.88, blue: 1).opacity(0.42)
+            : .white.opacity(0.15)
+    }
+
+    private var hudShadowColor: Color {
+        session.world.id == .mars
+            ? Color(red: 0.18, green: 0.72, blue: 1).opacity(0.18)
+            : .black.opacity(0.28)
     }
 
     private var pauseOverlay: some View {
         Color.black.opacity(0.70).ignoresSafeArea()
             .overlay {
                 VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
-                    Image(systemName: "pause.fill")
-                        .font(.title2.bold())
-                        .foregroundStyle(GoalRushTheme.navy)
-                        .frame(width: 54, height: 54)
-                        .background(GoalRushTheme.gold, in: .circle)
-                        .shadow(color: GoalRushTheme.gold.opacity(0.30), radius: 12)
-                        .accessibilityHidden(true)
-                    VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
-                        Text("Run Paused").font(.title.bold())
-                        Text(pauseSubtitle)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Button {
-                        store.uiAudio.play(.tap)
-                        showingPauseMissions = true
-                    } label: {
-                        HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
-                            Label("Daily Missions", systemImage: "target")
-                                .font(.headline)
-                            Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
-                            VStack(alignment: .trailing, spacing: 3) {
-                                if claimableMissionCount > 0 {
-                                    GameStatusBadge(text: "\(claimableMissionCount) READY", tone: .positive)
-                                }
-                                Text(missionSummary)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .buttonStyle(SecondaryGameButton())
-                    .accessibilityIdentifier("pause-missions")
+                    Text("Run Paused")
+                        .font(.title.bold())
 
-                    Button("Resume Run", systemImage: "play.fill") {
-                        store.uiAudio.play(.tap)
-                        session.togglePause()
-                    }
+                    Button("Continue", action: continueRun)
                     .buttonStyle(GameLaunchButtonStyle())
-                    .accessibilityIdentifier("Resume")
+                    .accessibilityIdentifier("pause-continue")
 
-                    Button("End Run", systemImage: "xmark.circle") {
-                        store.uiAudio.play(.tap)
-                        showQuitConfirmation = true
+                    HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
+                        Button("Home", action: leaveForHome)
+                            .buttonStyle(SecondaryGameButton())
+                            .accessibilityIdentifier("pause-home")
+
+                        Button("Retry", action: retryRun)
+                            .buttonStyle(SecondaryGameButton())
+                            .accessibilityIdentifier("pause-retry")
                     }
-                    .buttonStyle(SecondaryGameButton())
-                    .tint(GoalRushTheme.orange)
                 }
                 .padding(GoalRushTheme.Metrics.sectionSpacing)
                 .gameSurface(.modal)
                 .frame(maxWidth: 360)
                 .padding(24)
             }
+    }
+
+    private func continueRun() {
+        store.uiAudio.play(.tap)
+        session.togglePause()
+    }
+
+    private func activateCharacterAbility() {
+        guard session.hudState.characterAbilityReady else { return }
+        store.uiAudio.play(.fanfare, volume: 0.75)
+        session.activateCharacterAbility()
+    }
+
+    private func leaveForHome() {
+        store.uiAudio.play(.tap)
+        checkpointRunTokens()
+        store.route = .home
+    }
+
+    private func retryRun() {
+        store.uiAudio.play(.tap)
+        checkpointRunTokens()
+        scene.eventHandler = nil
+
+        let replacementSession = GameSessionModel(
+            mode: session.mode,
+            progress: store.progress,
+            settings: store.settings
+        )
+        let replacementScene = GoalRushScene(
+            session: replacementSession,
+            reducedEffects: store.settings.reducedFlashes
+        )
+        replacementScene.eventHandler = handleSimulationEvents
+        creditedRunTokens = 0
+        session = replacementSession
+        scene = replacementScene
     }
 
     private var staminaColor: Color {
@@ -289,10 +340,7 @@ struct GameContainerView: View {
     }
 
     private var levelProgress: Double {
-        if session.mode.isEndless {
-            return min(1, max(0, session.hudState.waveElapsed / max(1, session.hudState.waveDuration)))
-        }
-        return min(1, max(0, session.hudState.elapsed / max(1, session.hudState.duration)))
+        min(1, max(0, session.hudState.waveElapsed / max(1, session.hudState.waveDuration)))
     }
 
     private func buildResult(didWin: Bool, bonus: Int = 0) -> RunResult {
@@ -334,33 +382,30 @@ struct GameContainerView: View {
         store.saveProgress()
     }
 
+    private func handleSimulationEvents(_ events: [SimulationEvent], snapshot: SimulationSnapshot) {
+        for event in events { audio.handle(event) }
+        audio.updateIntensity(
+            progress: snapshot.waveElapsed / max(1, snapshot.waveDuration),
+            bossActive: snapshot.targets.contains { target in
+                target.bossTier != .standard
+            }
+        )
+    }
+
     private var progressLabel: String {
-        if session.hudState.bossActive { return session.mode.isEndless ? "BOSS WAVE \(session.hudState.wave)" : "BOSS" }
+        if session.hudState.bossActive {
+            return session.mode.isEndless
+                ? "BOSS WAVE \(session.hudState.wave)"
+                : "BOSS • WAVE \(session.hudState.wave) OF \(session.hudState.waveCount)"
+        }
         if session.mode.isEndless {
             return session.hudState.waveElapsed >= session.hudState.waveDuration
                 ? "CLEAR WAVE \(session.hudState.wave)"
                 : "WAVE \(session.hudState.wave)"
         }
-        return "LEVEL \(session.levelNumber ?? 1)"
+        return "WAVE \(session.hudState.wave) OF \(session.hudState.waveCount)"
     }
 
-    private var pauseSubtitle: String {
-        if session.mode.isEndless {
-            return "Wave \(session.hudState.wave) • \(session.hudState.score.formatted()) score"
-        }
-        return "Level \(session.levelNumber ?? 1) • \(session.hudState.tokens) tokens earned"
-    }
-
-    private var claimableMissionCount: Int {
-        store.progress.missions.count { $0.isComplete && !$0.claimed }
-    }
-
-    private var missionSummary: String {
-        if claimableMissionCount > 0 {
-            return "Rewards waiting"
-        }
-        return store.progress.missions.isEmpty ? "Refreshes soon" : "View objectives"
-    }
 }
 
 private extension GameSessionModel.Phase {

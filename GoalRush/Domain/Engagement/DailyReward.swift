@@ -6,10 +6,14 @@ struct DailyRewardState: Codable, Equatable, Sendable {
 }
 
 enum DailyRewardEngine {
-    static let rewards = [40, 60, 80, 100, 140, 180, 250]
+    static let rewards = [40, 40, 80, 80, 140, 140, 250]
+
+    static func collectionDay(forClaimCount claimCount: Int) -> Int {
+        ((max(claimCount, 1) - 1) % rewards.count) + 1
+    }
 
     static func reward(forStreakDay day: Int) -> Int {
-        rewards[min(max(day, 1), rewards.count) - 1]
+        rewards[collectionDay(forClaimCount: day) - 1]
     }
 
     static func isClaimable(state: DailyRewardState, today: String) -> Bool {

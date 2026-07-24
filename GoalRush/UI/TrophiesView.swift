@@ -33,8 +33,8 @@ struct TrophiesView: View {
                 .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showingOverview) {
-            GameSheetScaffold(title: "Progress", subtitle: "Your journey across every Goal Rush mode.") {
-                Text("Open a category to review milestones, lifetime totals, your daily streak, or world gear collections.")
+            GameSheetScaffold(title: "Progress", subtitle: "Your journey across every Strikernaut mode.") {
+                Text("Open a category to review milestones, lifetime totals, or unlocked characters.")
                     .font(.headline)
                     .foregroundStyle(.white)
                     .padding(GoalRushTheme.Metrics.standardSpacing)

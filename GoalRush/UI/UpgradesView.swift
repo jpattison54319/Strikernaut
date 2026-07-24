@@ -2,11 +2,11 @@ import SwiftUI
 
 struct UpgradesView: View {
     @Environment(GameStore.self) private var store
-    @State private var selectedTrack: UpgradeTrack?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showingInfo = false
 
     var body: some View {
-        AtmosphericGameScreen(backgroundImage: "MenuHero") {
+        AtmosphericGameScreen(backgroundImage: "UpgradeBay") {
             VStack(spacing: 0) {
                 GameDestinationBar(
                     title: "Upgrades",
@@ -18,27 +18,13 @@ struct UpgradesView: View {
                 ScrollView {
                     VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
                         tokenSummary
-                        UpgradeTrackStage { track in
-                            store.uiAudio.play(.tap)
-                            selectedTrack = track
-                        }
+                        UpgradeTrackStage()
                     }
                     .padding(.horizontal, GoalRushTheme.Metrics.horizontalPadding)
                     .padding(.vertical, GoalRushTheme.Metrics.sectionSpacing)
                 }
                 .scrollBounceBehavior(.basedOnSize)
             }
-        }
-        .sheet(item: $selectedTrack) { track in
-            GameSheetScaffold(
-                title: UpgradeRules.title(for: track),
-                subtitle: UpgradePresentation.benefit(for: track)
-            ) {
-                UpgradeCardView(track: track)
-            }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("upgrade-detail")
-            .presentationDetents([.large])
         }
         .sheet(isPresented: $showingInfo) {
             UpgradeInfoView()
@@ -48,28 +34,74 @@ struct UpgradesView: View {
     }
 
     private var tokenSummary: some View {
-        HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
-            Image(systemName: "hexagon.fill")
-                .font(.title2.bold())
-                .foregroundStyle(GoalRushTheme.gold)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: GoalRushTheme.Metrics.standardSpacing))
+
+        return layout {
+            Image(systemName: "wrench.and.screwdriver.fill")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(GoalRushTheme.navy)
+                .frame(width: GoalRushTheme.Metrics.minimumTapTarget, height: GoalRushTheme.Metrics.minimumTapTarget)
+                .background(
+                    LinearGradient(
+                        colors: [GoalRushTheme.gold, GoalRushTheme.orange],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: .rect(cornerRadius: GoalRushTheme.Metrics.smallRadius)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.smallRadius)
+                        .stroke(.white.opacity(0.34))
+                }
                 .accessibilityHidden(true)
+
             VStack(alignment: .leading, spacing: 2) {
-                Text("TRAINING TOKENS")
+                Text("WORKSHOP RESERVES")
                     .font(.caption.bold())
+                    .tracking(0.8)
+                    .foregroundStyle(.white.opacity(0.72))
+                Text("Training Tokens")
+                    .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.68))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Label {
                 Text(store.progress.trainingTokens.formatted())
                     .font(.title2.weight(.heavy).monospacedDigit())
-                    .foregroundStyle(.white)
+            } icon: {
+                Image(systemName: "hexagon.fill")
+                    .foregroundStyle(GoalRushTheme.gold)
             }
-            Spacer(minLength: 0)
-            Text("Choose a track")
-                .font(.subheadline.bold())
-                .foregroundStyle(GoalRushTheme.cyan)
+            .foregroundStyle(.white)
         }
         .padding(GoalRushTheme.Metrics.standardSpacing)
-        .gameSurface(.hud)
+        .background {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        GoalRushTheme.surfaceRaised.opacity(0.96),
+                        GoalRushTheme.navy.opacity(0.96)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                Image(systemName: "circle.hexagongrid.fill")
+                    .font(.system(size: 88))
+                    .foregroundStyle(.white.opacity(0.025))
+                    .offset(x: 92)
+            }
+            .clipShape(.rect(cornerRadius: GoalRushTheme.Metrics.controlRadius))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.controlRadius)
+                .stroke(GoalRushTheme.gold.opacity(0.48), lineWidth: GoalRushTheme.Metrics.strokeWidth)
+        }
+        .shadow(color: .black.opacity(0.28), radius: GoalRushTheme.Metrics.shadowRadius, y: 6)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(store.progress.trainingTokens) Training Tokens. Choose a track.")
+        .accessibilityLabel("\(store.progress.trainingTokens) Training Tokens")
     }
 
     private func goHome() {
@@ -89,7 +121,9 @@ private struct UpgradeInfoView: View {
             VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing) {
                 Label("Upgrades are permanent", systemImage: "checkmark.shield.fill")
                 Label("Active in Campaign and Endless", systemImage: "gamecontroller.fill")
-                Label("Details show current and next values", systemImage: "arrow.right")
+                Label("Ranks are unlimited", systemImage: "infinity")
+                Label("Five lit sockets mark track mastery", systemImage: "circle.grid.2x2.fill")
+                Label("Rank 6+ costs \(UpgradeRules.sustainedCost.formatted()) tokens", systemImage: "hexagon.fill")
             }
             .font(.headline)
             .foregroundStyle(.white)

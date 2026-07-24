@@ -104,8 +104,8 @@ struct SettingsGroupSheet: View {
         }
         .buttonStyle(SecondaryGameButton())
 
-        Button("Unlock All Gear") {
-            store.progress.unlockedGear = Set(GearID.allCases)
+        Button("Unlock All Characters") {
+            store.progress.unlockedCharacters = Set(CharacterID.allCases)
             store.saveProgress()
         }
         .buttonStyle(SecondaryGameButton())

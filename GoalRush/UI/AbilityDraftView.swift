@@ -63,12 +63,6 @@ struct AbilityDraftView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var recommended: AbilityKind? {
-        abilities.min { lhs, rhs in
-            session.simulation.abilityRank(lhs) < session.simulation.abilityRank(rhs)
-        }
-    }
-
     private func abilityButton(_ ability: AbilityKind) -> some View {
         let currentRank = session.simulation.abilityRank(ability)
         let presentation = AbilityPresentation.effect(
@@ -98,10 +92,6 @@ struct AbilityDraftView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(AbilityPresentation.title(ability))
                             .font(.headline)
-                        if ability == recommended {
-                            GameStatusBadge(text: "RECOMMENDED", tone: .positive)
-                                .fixedSize()
-                        }
                         Text(AbilityPresentation.benefit(ability))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -150,7 +140,7 @@ struct AbilityDraftView: View {
         .buttonStyle(AbilityChoiceButtonStyle(accent: presentation.accent))
         .shimmer(active: session.mode.isEndless && currentRank >= 5 && !reduceMotion && !store.settings.reducedFlashes)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(AbilityPresentation.title(ability)), \(presentation.current) to \(presentation.next)\(ability == recommended ? ", Recommended" : "")")
+        .accessibilityLabel("\(AbilityPresentation.title(ability)), \(presentation.current) to \(presentation.next)")
         .accessibilityHint(session.mode.isEndless ? "Applies for the rest of this endless run" : "Applies for the rest of this level")
         .accessibilityIdentifier("ability-\(ability.rawValue)")
     }
@@ -158,13 +148,13 @@ struct AbilityDraftView: View {
     private var headerTitle: String {
         if session.isStarterDraft { return "Choose Your First Power" }
         if session.mode.isEndless { return "Wave \(session.snapshot.wave) Upgrade" }
-        return "Choose a Run Upgrade"
+        return "Upgrade for Wave \(session.snapshot.wave) of \(session.snapshot.waveCount)"
     }
 
     private var headerSubtitle: String {
         session.mode.isEndless
             ? "Run only • no rank cap"
-            : "For this level"
+            : "Choose one power for the rest of this level"
     }
 }
 
@@ -365,9 +355,9 @@ enum AbilityPresentation {
 
     private static func volleyLabel(rank: Int) -> String {
         if rank <= 3 {
-            return ["1 straight ball", "3-ball spread", "3-ball wide spread", "5-ball wide spread"][max(rank, 0)]
+            return ["1 straight ball", "2-ball spread", "3-ball spread", "4-ball wide spread"][max(rank, 0)]
         }
-        return "5 balls • +\((rank - 3) * 12)% side damage"
+        return "4 balls • +\((rank - 3) * 12)% side damage"
     }
 
     private static func slowLabel(rank: Int) -> String {

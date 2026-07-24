@@ -18,24 +18,24 @@ struct PlayerStats: Equatable, Sendable {
     let tokenMultiplier: Double
 
     init(progress: PlayerProgress) {
-        let gear = GearCatalog.modifiers(for: progress.loadout)
-        maxStamina = 100 * (1 + 0.08 * Double(progress.rank(for: .conditioning))) + gear.staminaBonus
-        movementResponse = 8 * (1 + 0.07 * Double(progress.rank(for: .footwork))) * gear.movementMultiplier
-        kickCooldown = 1.12 * pow(0.88, Double(progress.rank(for: .tempo))) * gear.kickCooldownMultiplier
-        ballDamage = 10 * (1 + 0.10 * Double(progress.rank(for: .impact))) * gear.damageMultiplier
-        ballSpeed = 0.88 * (1 + 0.06 * Double(progress.rank(for: .flight))) * gear.ballSpeedMultiplier
-        criticalChance = min(0.85, 0.05 + 0.03 * Double(progress.rank(for: .spin)) + gear.criticalChanceBonus)
-        homingStrength = gear.homingStrength
-        startingShields = gear.startingShields
-        extraPierce = gear.extraPierce
-        tokenMultiplier = gear.tokenMultiplier
+        maxStamina = 100 * (1 + 0.08 * Double(progress.rank(for: .conditioning)))
+        movementResponse = 8 * (1 + 0.07 * Double(progress.rank(for: .footwork)))
+        kickCooldown = UpgradeRules.kickCooldown(for: progress.rank(for: .tempo))
+        ballDamage = 10 * (1 + 0.10 * Double(progress.rank(for: .impact)))
+        ballSpeed = 0.88 * (1 + 0.06 * Double(progress.rank(for: .flight)))
+        criticalChance = 0.05 + 0.03 * Double(progress.rank(for: .spin))
+        homingStrength = 0
+        startingShields = 0
+        extraPierce = 0
+        tokenMultiplier = 1
     }
 }
 
 struct TargetState: Identifiable, Equatable, Sendable {
-    enum Kind: Equatable, Sendable {
+    enum Kind: Hashable, Sendable {
         case enemy(EnemyKind)
         case fieldObject(FieldObjectKind)
+        case powerUp(TemporaryBallAbility)
     }
 
     let id: Int
@@ -44,6 +44,41 @@ struct TargetState: Identifiable, Equatable, Sendable {
     var hitPoints: Double
     var maximumHitPoints: Double
     var phase: Double
+    var bossTier: CampaignBossTier = .standard
+    var burnRemaining: Double = 0
+    var burnTickClock: Double = 0
+    var freezeRemaining: Double = 0
+    var reverseRemaining: Double = 0
+    var stunRemaining: Double = 0
+}
+
+enum CharacterProjectileKind: Equatable, Sendable {
+    case pinballBlitz
+}
+
+enum CharacterAttackKind: Equatable, Sendable {
+    case meteor
+    case shockwave
+}
+
+struct CharacterAttackState: Identifiable, Equatable, Sendable {
+    let id: Int
+    let kind: CharacterAttackKind
+    var position: Vector2
+    let startPosition: Vector2
+    var destination: Vector2
+    let targetID: Int?
+    let damage: Double
+    var delayRemaining: Double
+    var elapsed: Double
+    let duration: Double
+    var width: Double
+    var contactedTargetIDs: Set<Int> = []
+
+    var progress: Double {
+        guard duration > 0 else { return 1 }
+        return min(1, max(0, elapsed / duration))
+    }
 }
 
 struct ProjectileState: Identifiable, Equatable, Sendable {
@@ -54,6 +89,11 @@ struct ProjectileState: Identifiable, Equatable, Sendable {
     var remainingPierces: Int
     var hostile: Bool
     var isCritical: Bool
+    var temporaryAbility: TemporaryBallAbility?
+    var canSplit: Bool
+    var characterProjectile: CharacterProjectileKind? = nil
+    var remainingLifetime: Double = .infinity
+    var contactedTargetIDs: Set<Int> = []
 }
 
 struct SimulationSnapshot: Equatable, Sendable {
@@ -65,6 +105,7 @@ struct SimulationSnapshot: Equatable, Sendable {
     var tokens: Int
     var targets: [TargetState]
     var projectiles: [ProjectileState]
+    var characterAttacks: [CharacterAttackState]
     var shieldCharges: Int
     var wave: Int
     var waveElapsed: Double
@@ -76,6 +117,12 @@ struct SimulationSnapshot: Equatable, Sendable {
     var bestCombo: Int
     var targetsDefeated: Int
     var bossesDefeated: Int
+    var waveCount: Int
+    var activeTemporaryAbility: TemporaryBallAbility?
+    var temporaryAbilityRemaining: Double
+    var temporaryAbilityDuration: Double
+    var characterAbilityCharge: Double
+    var characterAbilityReady: Bool
 }
 
 struct HUDState: Equatable, Sendable {
@@ -93,6 +140,12 @@ struct HUDState: Equatable, Sendable {
     var isEndless: Bool
     var combo: Int
     var comboFraction: Double
+    var waveCount: Int
+    var activeTemporaryAbility: TemporaryBallAbility?
+    var temporaryAbilityRemaining: Double
+    var temporaryAbilityDuration: Double
+    var characterAbilityCharge: Double
+    var characterAbilityReady: Bool
 
     init(snapshot: SimulationSnapshot) {
         stamina = snapshot.stamina
@@ -108,9 +161,14 @@ struct HUDState: Equatable, Sendable {
         isEndless = snapshot.isEndless
         combo = snapshot.combo
         comboFraction = snapshot.comboFraction
+        waveCount = snapshot.waveCount
+        activeTemporaryAbility = snapshot.activeTemporaryAbility
+        temporaryAbilityRemaining = snapshot.temporaryAbilityRemaining
+        temporaryAbilityDuration = snapshot.temporaryAbilityDuration
+        characterAbilityCharge = snapshot.characterAbilityCharge
+        characterAbilityReady = snapshot.characterAbilityReady
         bossActive = snapshot.targets.contains { target in
-            guard case .enemy(let enemy) = target.kind else { return false }
-            return enemy == .titanKeeper || enemy == .marsColossus
+            target.bossTier != .standard
         }
     }
 }
@@ -119,7 +177,8 @@ enum SimulationEvent: Equatable, Sendable {
     case checkpoint(Int)
     case damage
     case kick
-    case impact(Vector2, Bool)
+    case impact(Vector2, Double, DamageFlavor, Bool)
+    case elementalReaction(Vector2)
     case reward(Int, Vector2)
     case heal(Double, Vector2)
     case abilityChosen(AbilityKind)
@@ -128,6 +187,13 @@ enum SimulationEvent: Equatable, Sendable {
     case meteorKick
     case comboChanged(Int)
     case comboMilestone(Int)
+    case temporaryAbilityActivated(TemporaryBallAbility, TimeInterval, Vector2)
+    case characterAbilityActivated(CharacterAbility)
+    case characterAbilityTargets(CharacterAbility, [Vector2])
+    case characterProjectileRicochet(Vector2)
+    case characterMeteorImpact(Vector2)
+    case characterShockwaveBurst(Vector2)
+    case characterShockwaveHit(Vector2)
     case finished(Bool)
 }
 

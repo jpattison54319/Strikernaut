@@ -1,8 +1,8 @@
-# Goal Rush UX & Engagement Overhaul Implementation Plan
+# Strikernaut UX & Engagement Overhaul Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Transform Goal Rush into a highly polished, highly engaging game via a daily-hub Home, combo scoring, missions, achievements, daily streaks, FTUE onboarding, menu audio, and celebration juice on every screen.
+**Goal:** Transform Strikernaut into a highly polished, highly engaging game via a daily-hub Home, combo scoring, missions, achievements, daily streaks, FTUE onboarding, menu audio, and celebration juice on every screen.
 
 **Architecture:** Pure testable domain engines (missions/daily/achievements) + `PlayerProgress` schema v3 migration, combo + run-stat counters in the deterministic simulation, `UIAudio` pooled menu SFX, reusable SwiftUI juice components, then screen-by-screen application. Spec: `docs/superpowers/specs/2026-07-22-ux-engagement-overhaul-design.md`.
 
@@ -555,7 +555,7 @@ Expected: FAIL — `ui-*` files missing.
 
 ```python
 #!/usr/bin/env python3
-"""Generate Goal Rush UI sound effects as 16-bit mono WAVs (no dependencies)."""
+"""Generate Strikernaut UI sound effects as 16-bit mono WAVs (no dependencies)."""
 import math
 import os
 import struct

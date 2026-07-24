@@ -4,13 +4,13 @@ import Testing
 
 @MainActor
 struct EngagementTests {
-    @Test func dailyRewardClaimAdvancesStreakAndPaysTableValue() {
+    @Test func dailyRewardClaimAdvancesCollectionAndPaysTieredValues() {
         var state = DailyRewardState()
         let day1 = DailyRewardEngine.claim(state: &state, today: "2026-07-20", yesterday: "2026-07-19")
         #expect(day1 == 40)
         #expect(state.streak == 1)
         let day2 = DailyRewardEngine.claim(state: &state, today: "2026-07-21", yesterday: "2026-07-20")
-        #expect(day2 == 60)
+        #expect(day2 == 40)
         #expect(state.streak == 2)
     }
 
@@ -24,9 +24,12 @@ struct EngagementTests {
         #expect(state.streak == 1)
     }
 
-    @Test func dailyRewardCapsAtDaySevenValue() {
+    @Test func dailyRewardUsesPairedTiersAndCyclesAfterDaySeven() {
+        #expect(DailyRewardEngine.rewards == [40, 40, 80, 80, 140, 140, 250])
         #expect(DailyRewardEngine.reward(forStreakDay: 7) == 250)
-        #expect(DailyRewardEngine.reward(forStreakDay: 30) == 250)
+        #expect(DailyRewardEngine.reward(forStreakDay: 8) == 40)
+        #expect(DailyRewardEngine.collectionDay(forClaimCount: 14) == 7)
+        #expect(DailyRewardEngine.collectionDay(forClaimCount: 15) == 1)
     }
 
     @Test func dailyMissionsAreDeterministicPerDayAndDistinct() {
@@ -155,13 +158,13 @@ struct EngagementTests {
     @Test func dailyRewardPreviewMatchesClaimAfterMissedDay() {
         let store = makeStore()
         store.progress.dailyReward = DailyRewardState(lastClaimDay: "2000-01-01", streak: 5)
-        #expect(store.nextStreakDay == 1)
+        #expect(store.nextDailyRewardDay == 1)
         #expect(store.nextDailyReward == 40)
         let calendar = Calendar.current
         let yesterday = DailyRewardEngine.dayString(for: calendar.date(byAdding: .day, value: -1, to: .now) ?? .now, calendar: calendar)
         store.progress.dailyReward = DailyRewardState(lastClaimDay: yesterday, streak: 5)
-        #expect(store.nextStreakDay == 6)
-        #expect(store.nextDailyReward == 180)
+        #expect(store.nextDailyRewardDay == 6)
+        #expect(store.nextDailyReward == 140)
     }
 
     @Test func missionRolloverReplacesYesterdaysMissions() {

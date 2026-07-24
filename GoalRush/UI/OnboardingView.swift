@@ -12,7 +12,7 @@ struct OnboardingView: View {
         ("sparkles", GoalRushTheme.gold, "Draft wild powers",
          "Every run, choose upgrades that stack into ridiculous builds. No two runs play the same."),
         ("arrow.up.circle.fill", GoalRushTheme.positive, "Get stronger forever",
-         "Earn Training Tokens every run and spend them on permanent upgrades, gear, and glory."),
+         "Earn Training Tokens every run, build permanent upgrades, and unlock heroes with unique super abilities."),
     ]
 
     var body: some View {

@@ -137,12 +137,20 @@ struct CampaignInfoSheet: View {
                     value: "Clear each challenge to unlock the next. Clear Earth challenge 10 to reach Mars."
                 )
                 PreviewFact(
-                    icon: "tshirt.fill",
+                    icon: "person.crop.circle.badge.plus",
                     title: "\(world.name) Reward",
-                    value: "Clear \(world.name) to earn the \(world.gearSetName) set."
+                    value: rewardDescription
                 )
             }
         }
+    }
+
+    private var rewardDescription: String {
+        let level = world.finalLevel
+        if let character = CharacterCatalog.characters.first(where: { $0.unlockLevel == level }) {
+            return "Clear \(world.name) to unlock \(character.name) and \(character.abilityName)."
+        }
+        return "Clear \(world.name) to unlock the next arena."
     }
 }
 
@@ -190,10 +198,11 @@ private struct CampaignWorldSummary: View {
     }
 
     private var rewardText: String {
-        let earned = progress.unlockedGear.isSuperset(of: Set(world.gearRewards))
+        let character = CharacterCatalog.characters.first { $0.unlockLevel == world.finalLevel }
+        let earned = character.map { progress.unlockedCharacters.contains($0.id) } ?? false
         return earned
-            ? "\(world.gearSetName) unlocked"
-            : "World reward: \(world.gearSetName)"
+            ? "\(character?.name ?? "Hero") unlocked"
+            : "World reward: \(character?.name ?? "New hero")"
     }
 }
 

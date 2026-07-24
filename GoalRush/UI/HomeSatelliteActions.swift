@@ -4,7 +4,7 @@ struct HomeSatelliteActions: View {
     let content: HomeStageContent
     let onDaily: () -> Void
     let onMissions: () -> Void
-    let onCampaign: () -> Void
+    let onProgress: () -> Void
     let onEndless: () -> Void
 
     var body: some View {
@@ -35,13 +35,12 @@ struct HomeSatelliteActions: View {
 
             VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
                 FloatingGameActionButton(
-                    title: "Campaign",
-                    subtitle: content.campaignStatus,
-                    systemImage: "map.fill",
+                    title: "Progress",
+                    systemImage: "trophy.fill",
                     accent: GoalRushTheme.cyan,
-                    action: onCampaign
+                    action: onProgress
                 )
-                .accessibilityIdentifier("play")
+                .accessibilityIdentifier("trophies")
 
                 FloatingGameActionButton(
                     title: "Endless",

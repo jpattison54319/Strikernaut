@@ -9,8 +9,5 @@ struct WorldDefinition: Identifiable, Sendable {
     let gameplayAsset: String
     let heroAsset: String
     let boss: EnemyKind
-    let gearSetName: String
-    let gearRewards: [GearID]
-
     var finalLevel: Int { levelRange.upperBound }
 }

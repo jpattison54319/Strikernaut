@@ -20,12 +20,12 @@ struct HomeView: View {
                 GameSheetScaffold(
                     title: "Daily Reward",
                     subtitle: store.isDailyRewardClaimable
-                        ? "Preview today's reward, then collect when you're ready."
-                        : "Today's reward is safely in your locker."
+                        ? "Collect today and work toward the Day 7 prize."
+                        : "Today's reward is collected. Come back tomorrow."
                 ) {
                     DailyRewardCard()
                 }
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
 
             case .missions:
                 GameSheetScaffold(

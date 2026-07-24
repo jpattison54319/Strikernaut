@@ -12,7 +12,7 @@ struct RootView: View {
                 case .home: HomeView()
                 case .levels: LevelSelectView()
                 case .endless: EndlessHubView()
-                case .gear: GearView()
+                case .characters: CharacterRosterView()
                 case .upgrades: UpgradesView()
                 case .settings: SettingsView()
                 case .onboarding: OnboardingView()
@@ -22,7 +22,6 @@ struct RootView: View {
                 }
             }
             .id(store.route.transitionIdentity)
-            .transition(.opacity.combined(with: .scale(scale: 0.99)))
             if let celebration = store.celebrations.first {
                 VStack {
                     CelebrationToast(celebration: celebration) {
@@ -36,10 +35,13 @@ struct RootView: View {
             }
         }
         .tint(GoalRushTheme.gold)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.route)
         .animation(reduceMotion ? nil : .snappy(duration: 0.3), value: store.celebrations)
         .sensoryFeedback(trigger: store.route) { _, _ in
             store.settings.hapticsEnabled ? .selection : nil
+        }
+        .task {
+            await Task.yield()
+            await store.uiAudio.prepare()
         }
     }
 }
@@ -50,7 +52,7 @@ private extension GameStore.Route {
         case .home: "home"
         case .levels: "levels"
         case .endless: "endless"
-        case .gear: "gear"
+        case .characters: "characters"
         case .upgrades: "upgrades"
         case .settings: "settings"
         case .onboarding: "onboarding"
