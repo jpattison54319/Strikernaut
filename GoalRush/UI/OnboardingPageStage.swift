@@ -21,10 +21,10 @@ struct OnboardingPageStage: View {
 
             VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
                 Text(title)
-                    .font(.largeTitle.bold())
+                    .font(GoalRushTheme.Typography.display)
                     .multilineTextAlignment(.center)
                 Text(message)
-                    .font(.body)
+                    .font(GoalRushTheme.Typography.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 340)

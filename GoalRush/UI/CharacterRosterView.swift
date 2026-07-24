@@ -18,11 +18,11 @@ struct CharacterRosterView: View {
                     LazyVStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
                     VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
                         Text("BUILD POWER. UNLEASH THE MOMENT.")
-                            .font(.caption.bold())
+                            .font(GoalRushTheme.Typography.captionEmphasized)
                             .tracking(1.1)
                             .foregroundStyle(GoalRushTheme.gold)
                         Text("Every hero charges a unique super ability by defeating enemies.")
-                            .font(.headline)
+                            .font(GoalRushTheme.Typography.headline)
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.white.opacity(0.82))
                     }

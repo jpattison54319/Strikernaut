@@ -19,7 +19,7 @@ struct CampaignSelectionStage: View {
 
             VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing) {
                 Text("\(world.name) Levels")
-                    .font(.title2.weight(.heavy))
+                    .font(GoalRushTheme.Typography.title2)
                     .foregroundStyle(.white)
 
                 CampaignLevelGrid(
@@ -60,7 +60,7 @@ struct CampaignLevelPreview: View {
             record?.completed == true ? "Challenge cleared" : "Ready to play",
             systemImage: record?.completed == true ? "checkmark.seal.fill" : "flag.checkered"
         )
-        .font(.headline.bold())
+        .font(GoalRushTheme.Typography.headline)
         .foregroundStyle(record?.completed == true ? GoalRushTheme.positive : GoalRushTheme.cyan)
     }
 
@@ -83,7 +83,7 @@ struct CampaignLevelPreview: View {
     private var starPanel: some View {
         VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.compactSpacing) {
             Text("Best Result")
-                .font(.caption.bold())
+                .font(GoalRushTheme.Typography.captionEmphasized)
                 .foregroundStyle(.white.opacity(0.68))
 
             HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
@@ -96,7 +96,7 @@ struct CampaignLevelPreview: View {
                 .accessibilityHidden(true)
 
                 Text(record?.completed == true ? "\(stars) of 3 stars • \(record?.bestTokens ?? 0) tokens" : "No result yet")
-                    .font(.subheadline.bold())
+                    .font(GoalRushTheme.Typography.subheadlineEmphasized)
                     .foregroundStyle(.white)
             }
         }
@@ -161,20 +161,20 @@ private struct CampaignWorldSummary: View {
     var body: some View {
         HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
             Image(systemName: world.id.icon)
-                .font(.title2.bold())
+                .font(GoalRushTheme.Typography.title2)
                 .foregroundStyle(world.id.accentColor)
                 .frame(width: GoalRushTheme.Metrics.minimumTapTarget)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(world.chapter) • \(world.subtitle)")
-                    .font(.caption.bold())
+                    .font(GoalRushTheme.Typography.captionEmphasized)
                     .foregroundStyle(world.id.accentColor)
                 Text("\(completedCount) of \(levelCount) challenges cleared")
-                    .font(.headline.bold())
+                    .font(GoalRushTheme.Typography.headline)
                     .foregroundStyle(.white)
                 Text(rewardText)
-                    .font(.caption)
+                    .font(GoalRushTheme.Typography.caption)
                     .foregroundStyle(.white.opacity(0.72))
             }
 
@@ -245,13 +245,13 @@ private struct CampaignLevelNode: View {
         Button(action: onSelect) {
             HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
                 Text("\(level.worldLevel)")
-                    .font(.title2.weight(.heavy).monospacedDigit())
+                    .font(GoalRushTheme.Typography.metric(size: 24, relativeTo: .title2))
                     .foregroundStyle(unlocked ? level.world.accentColor : .white.opacity(0.44))
                     .frame(minWidth: 30)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(level.name)
-                        .font(.subheadline.bold())
+                        .font(GoalRushTheme.Typography.subheadlineEmphasized)
                         .foregroundStyle(unlocked ? .white : .white.opacity(0.54))
                         .lineLimit(2)
                     statusLabel
@@ -335,16 +335,16 @@ private struct PreviewFact: View {
     var body: some View {
         HStack(alignment: .top, spacing: GoalRushTheme.Metrics.standardSpacing) {
             Image(systemName: icon)
-                .font(.headline.bold())
+                .font(GoalRushTheme.Typography.headline)
                 .foregroundStyle(GoalRushTheme.gold)
                 .frame(width: 28)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.caption.bold())
+                    .font(GoalRushTheme.Typography.captionEmphasized)
                     .foregroundStyle(.white.opacity(0.68))
                 Text(value)
-                    .font(.headline)
+                    .font(GoalRushTheme.Typography.headline)
                     .foregroundStyle(.white)
             }
             Spacer(minLength: 0)

@@ -9,11 +9,8 @@ struct CharacterRosterCard: View {
     var body: some View {
         VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
             ZStack(alignment: .bottom) {
-                LinearGradient(
-                    colors: [accent.opacity(0.34), GoalRushTheme.navy.opacity(0.92)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+                accent.opacity(0.22)
+                ComicInkTexture(opacity: 0.10)
                 Image(character.assetStem + "Roster")
                     .resizable()
                     .scaledToFit()
@@ -24,23 +21,23 @@ struct CharacterRosterCard: View {
 
                 if !isUnlocked {
                     Label(character.unlockDescription, systemImage: "lock.fill")
-                        .font(.subheadline.bold())
+                        .font(GoalRushTheme.Typography.subheadlineEmphasized)
                         .padding(.horizontal, 14)
                         .frame(minHeight: 44)
-                        .background(.black.opacity(0.78), in: .capsule)
+                        .background(.black.opacity(0.86), in: ComicPanelShape(cut: 7))
                         .padding(.bottom, 12)
                 }
             }
             .frame(maxWidth: .infinity)
-            .clipShape(.rect(cornerRadius: GoalRushTheme.Metrics.panelRadius))
+            .clipShape(ComicPanelShape(cut: GoalRushTheme.Metrics.panelRadius))
 
             VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(character.name)
-                            .font(.title2.bold())
+                            .font(GoalRushTheme.Typography.title2)
                         Text(character.role)
-                            .font(.subheadline)
+                            .font(GoalRushTheme.Typography.subheadline)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -51,15 +48,15 @@ struct CharacterRosterCard: View {
 
                 HStack(alignment: .top, spacing: GoalRushTheme.Metrics.standardSpacing) {
                     Image(systemName: abilityIcon)
-                        .font(.title2.bold())
+                        .font(GoalRushTheme.Typography.title2)
                         .foregroundStyle(accent)
                         .frame(width: 48, height: 48)
                         .background(accent.opacity(0.14), in: .circle)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(character.abilityName)
-                            .font(.headline)
+                            .font(GoalRushTheme.Typography.headline)
                         Text(character.abilityDescription)
-                            .font(.subheadline)
+                            .font(GoalRushTheme.Typography.subheadline)
                             .foregroundStyle(.white.opacity(0.72))
                     }
                     Spacer(minLength: 0)
@@ -78,7 +75,7 @@ struct CharacterRosterCard: View {
         .padding(GoalRushTheme.Metrics.standardSpacing)
         .gameSurface(.modal)
         .overlay {
-            RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.panelRadius)
+            ComicPanelShape(cut: GoalRushTheme.Metrics.panelRadius)
                 .stroke(isSelected ? accent : .white.opacity(0.10), lineWidth: isSelected ? 2 : 1)
         }
         .accessibilityElement(children: .contain)

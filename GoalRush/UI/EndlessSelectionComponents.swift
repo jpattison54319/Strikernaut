@@ -10,7 +10,7 @@ struct EndlessSelectionStage: View {
         VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.sectionSpacing) {
             VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing) {
                 Text("Choose Arena")
-                    .font(.title2.weight(.heavy))
+                    .font(GoalRushTheme.Typography.title2)
                     .foregroundStyle(.white)
 
                 WorldSelectionBar(
@@ -49,7 +49,7 @@ struct EndlessRulesSheet: View {
 
     private func rule(_ text: String, icon: String) -> some View {
         Label(text, systemImage: icon)
-            .font(.headline)
+            .font(GoalRushTheme.Typography.headline)
             .foregroundStyle(.white)
             .padding(GoalRushTheme.Metrics.standardSpacing)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -68,20 +68,20 @@ private struct EndlessRecordSummary: View {
             HStack(alignment: .top, spacing: GoalRushTheme.Metrics.standardSpacing) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("\(world.name) Record")
-                        .font(.caption.bold())
+                        .font(GoalRushTheme.Typography.captionEmphasized)
                         .foregroundStyle(world.id.accentColor)
                     Text(record.bestWave > 0 ? "Best Wave \(record.bestWave)" : "No run yet")
-                        .font(.title2.weight(.heavy))
+                        .font(GoalRushTheme.Typography.title2)
                         .foregroundStyle(.white)
                     Text(record.bestScore > 0 ? "\(record.bestScore.formatted()) points" : "Start a run to set your first record")
-                        .font(.subheadline)
+                        .font(GoalRushTheme.Typography.subheadline)
                         .foregroundStyle(.white.opacity(0.72))
                 }
 
                 Spacer(minLength: 0)
 
                 Image(systemName: record.bestWave > 0 ? "crown.fill" : "infinity")
-                    .font(.title.bold())
+                    .font(GoalRushTheme.Typography.title)
                     .foregroundStyle(record.bestWave > 0 ? GoalRushTheme.gold : world.id.accentColor)
                     .accessibilityHidden(true)
             }
@@ -90,14 +90,14 @@ private struct EndlessRecordSummary: View {
                 .overlay(GoalRushTheme.surfaceStroke)
 
             Label("New power after every wave", systemImage: "sparkles")
-                .font(.subheadline.bold())
+                .font(GoalRushTheme.Typography.subheadlineEmphasized)
                 .foregroundStyle(GoalRushTheme.cyan)
 
             Label(
                 "\(trainingRankCount) Training ranks • \(characterName) selected",
                 systemImage: "checkmark.shield.fill"
             )
-            .font(.caption.bold())
+            .font(GoalRushTheme.Typography.captionEmphasized)
             .foregroundStyle(.white.opacity(0.76))
         }
         .padding(GoalRushTheme.Metrics.sectionSpacing)

@@ -35,12 +35,11 @@ struct DailyRewardTile: View {
             }
         }
         .foregroundStyle(.white)
-        .background(background, in: .rect(cornerRadius: GoalRushTheme.Metrics.smallRadius))
+        .background(background, in: ComicPanelShape(cut: GoalRushTheme.Metrics.smallRadius))
         .overlay {
-            RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.smallRadius)
+            ComicPanelShape(cut: GoalRushTheme.Metrics.smallRadius)
                 .stroke(borderColor, lineWidth: isCurrent ? 2 : 1)
         }
-        .shadow(color: isCurrent ? GoalRushTheme.gold.opacity(0.28) : .clear, radius: 8, y: 3)
         .opacity(isCollected || isCurrent ? 1 : 0.66)
     }
 
@@ -50,7 +49,7 @@ struct DailyRewardTile: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: 64, height: 64)
-                .clipShape(.rect(cornerRadius: GoalRushTheme.Metrics.smallRadius))
+                .clipShape(ComicPanelShape(cut: GoalRushTheme.Metrics.smallRadius))
                 .accessibilityHidden(true)
             rewardDetails
             Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
@@ -64,12 +63,12 @@ struct DailyRewardTile: View {
         VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
             HStack {
                 Text("DAY \(day)")
-                    .font(.caption.bold())
+                    .font(GoalRushTheme.Typography.captionEmphasized)
                 Spacer(minLength: 2)
                 statusIcon
             }
             Label(reward.formatted(), systemImage: "hexagon.fill")
-                .font(.headline.bold().monospacedDigit())
+                .font(GoalRushTheme.Typography.metric(size: 18))
                 .foregroundStyle(GoalRushTheme.gold)
         }
         .padding(GoalRushTheme.Metrics.compactSpacing)
@@ -79,9 +78,9 @@ struct DailyRewardTile: View {
     private var rewardDetails: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("DAY 7")
-                .font(.headline.bold())
+                .font(GoalRushTheme.Typography.headline)
             Label(reward.formatted(), systemImage: "hexagon.fill")
-                .font(.title2.bold().monospacedDigit())
+                .font(GoalRushTheme.Typography.metric(size: 24, relativeTo: .title2))
                 .foregroundStyle(GoalRushTheme.gold)
         }
     }

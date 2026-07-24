@@ -29,22 +29,22 @@ struct FloatingGameActionButton: View {
             VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: systemImage)
-                        .font(.title3.weight(.heavy))
+                        .font(GoalRushTheme.Typography.title3)
                         .foregroundStyle(accent)
                         .frame(
                             width: GoalRushTheme.Metrics.floatingControlSize,
                             height: GoalRushTheme.Metrics.floatingControlSize
                         )
-                        .background(GoalRushTheme.navy.opacity(0.88), in: .circle)
+                        .background(GoalRushTheme.navy.opacity(0.92), in: ComicPanelShape(cut: 11))
+                        .background {
+                            ComicPanelShape(cut: 11)
+                                .fill(GoalRushTheme.ink)
+                                .offset(x: 4, y: 4)
+                        }
                         .overlay {
-                            Circle()
+                            ComicPanelShape(cut: 11)
                                 .stroke(accent.opacity(0.65), lineWidth: GoalRushTheme.Metrics.strokeWidth)
                         }
-                        .shadow(
-                            color: GoalRushTheme.surfaceShadow,
-                            radius: GoalRushTheme.Metrics.shadowRadius,
-                            y: 5
-                        )
 
                     if let badge, !badge.isEmpty {
                         GameStatusBadge(text: badge, tone: .attention)
@@ -55,12 +55,12 @@ struct FloatingGameActionButton: View {
 
                 VStack(spacing: 2) {
                     Text(title)
-                        .font(.subheadline.bold())
+                        .font(GoalRushTheme.Typography.subheadlineEmphasized)
                         .foregroundStyle(.white)
 
                     if let subtitle, !subtitle.isEmpty {
                         Text(subtitle)
-                            .font(.caption)
+                            .font(GoalRushTheme.Typography.caption)
                             .foregroundStyle(.white.opacity(0.78))
                     }
                 }

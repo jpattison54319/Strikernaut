@@ -75,6 +75,16 @@ final class GameSessionModel {
         if ProcessInfo.processInfo.arguments.contains("--show-draft") {
             phase = .draft(mode.isEndless ? [.oneTwo, .meteorStrike, .goldenGoal] : [.oneTwo, .quickRelease, .powerDrive])
         }
+        if ProcessInfo.processInfo.arguments.contains("--auto-kick-off") {
+            if case .briefing = phase {
+                phase = .playing
+            } else if case .draft(let abilities) = phase, let ability = abilities.first {
+                simulation.apply(ability)
+                snapshot = simulation.snapshot
+                hudState = HUDState(snapshot: simulation.snapshot)
+                phase = .playing
+            }
+        }
 #endif
     }
 

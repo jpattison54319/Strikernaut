@@ -17,14 +17,9 @@ struct CampaignDiscoveryPreview: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 18)
-                .fill(
-                    LinearGradient(
-                        colors: [accent.opacity(0.26), GoalRushTheme.navy.opacity(0.92)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+            ComicPanelShape(cut: 9)
+                .fill(accent.opacity(0.24))
+            ComicInkTexture(opacity: 0.10)
 
             if let scene {
                 SpriteView(
@@ -40,10 +35,10 @@ struct CampaignDiscoveryPreview: View {
             }
         }
         .frame(width: 106, height: 96)
-        .clipShape(.rect(cornerRadius: 18))
+        .clipShape(ComicPanelShape(cut: 9))
         .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(accent.opacity(0.55), lineWidth: 1)
+            ComicPanelShape(cut: 9)
+                .stroke(accent.opacity(0.72), lineWidth: 2)
         }
         .accessibilityHidden(true)
     }

@@ -44,16 +44,16 @@ struct AbilityDraftView: View {
     private var header: some View {
         VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
             Image(systemName: session.mode.isEndless ? "infinity" : "sparkles")
-                .font(.title.bold())
+                .font(GoalRushTheme.Typography.title)
                 .foregroundStyle(GoalRushTheme.gold)
                 .frame(width: 56, height: 56)
                 .background(GoalRushTheme.gold.opacity(0.13), in: .circle)
                 .overlay { Circle().stroke(GoalRushTheme.gold.opacity(0.38)) }
                 .shadow(color: GoalRushTheme.gold.opacity(0.30), radius: 15)
             Text(headerTitle)
-                .font(.title2.bold())
+                .font(GoalRushTheme.Typography.title2)
             Label(headerSubtitle, systemImage: "timer")
-                .font(.subheadline)
+                .font(GoalRushTheme.Typography.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
@@ -78,22 +78,18 @@ struct AbilityDraftView: View {
             VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing) {
                 HStack(alignment: .top, spacing: GoalRushTheme.Metrics.standardSpacing) {
                     Image(systemName: AbilityPresentation.icon(ability))
-                        .font(.title2.bold())
+                        .font(GoalRushTheme.Typography.title2)
                         .foregroundStyle(GoalRushTheme.navy)
                         .frame(width: 48, height: 48)
                         .background(
-                            LinearGradient(
-                                colors: [presentation.accent, presentation.accent.opacity(0.66)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            in: .rect(cornerRadius: 14)
+                            presentation.accent,
+                            in: ComicPanelShape(cut: 7)
                         )
                     VStack(alignment: .leading, spacing: 6) {
                         Text(AbilityPresentation.title(ability))
-                            .font(.headline)
+                            .font(GoalRushTheme.Typography.headline)
                         Text(AbilityPresentation.benefit(ability))
-                            .font(.subheadline)
+                            .font(GoalRushTheme.Typography.subheadline)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -104,35 +100,35 @@ struct AbilityDraftView: View {
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(presentation.metric.uppercased())
-                            .font(.caption2.bold())
+                            .font(GoalRushTheme.Typography.caption2)
                             .foregroundStyle(.secondary)
                         HStack(spacing: 7) {
                             Text(presentation.current)
                                 .foregroundStyle(.secondary)
                             Image(systemName: "arrow.right")
-                                .font(.caption.bold())
+                                .font(GoalRushTheme.Typography.captionEmphasized)
                                 .foregroundStyle(presentation.accent)
                             Text(presentation.next)
                                 .bold()
                                 .foregroundStyle(.white)
                         }
-                        .font(.subheadline)
+                        .font(GoalRushTheme.Typography.subheadline)
                     }
                     Spacer(minLength: 8)
                     Label("Choose", systemImage: "chevron.right")
                         .labelStyle(.titleAndIcon)
-                        .font(.subheadline.bold())
+                        .font(GoalRushTheme.Typography.subheadlineEmphasized)
                         .foregroundStyle(presentation.accent)
                 }
                 .padding(GoalRushTheme.Metrics.standardSpacing)
-                .background(.black.opacity(0.22), in: .rect(cornerRadius: 14))
+                .background(.black.opacity(0.32), in: ComicPanelShape(cut: 7))
             }
             .padding(GoalRushTheme.Metrics.standardSpacing)
             .frame(maxWidth: .infinity, alignment: .leading)
             .gameSurface(.panel)
             .overlay {
                 if session.mode.isEndless && currentRank >= 5 {
-                    RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.controlRadius)
+                    ComicPanelShape(cut: GoalRushTheme.Metrics.controlRadius)
                         .stroke(GoalRushTheme.gold.opacity(0.75), lineWidth: 2)
                 }
             }
@@ -165,11 +161,11 @@ private struct AbilityRankPips: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
             Text("RANK \(currentRank + 1)")
-                .font(.caption2.bold())
+                .font(GoalRushTheme.Typography.caption2)
                 .foregroundStyle(.secondary)
             if isEndless {
                 Label("NO CAP", systemImage: "infinity")
-                    .font(.caption2.bold())
+                    .font(GoalRushTheme.Typography.caption2)
                     .foregroundStyle(GoalRushTheme.cyan)
             } else {
                 HStack(spacing: 3) {

@@ -25,17 +25,18 @@ struct GameDestinationBar: View {
         }
         .padding(.horizontal, GoalRushTheme.Metrics.horizontalPadding)
         .padding(.vertical, GoalRushTheme.Metrics.compactSpacing)
-        .background(GoalRushTheme.navy.opacity(0.72))
+        .background(GoalRushTheme.ink.opacity(0.90))
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(GoalRushTheme.surfaceStroke)
-                .frame(height: GoalRushTheme.Metrics.strokeWidth)
+                .fill(GoalRushTheme.paper.opacity(0.60))
+                .frame(height: GoalRushTheme.Metrics.inkStrokeWidth)
         }
+        .overlay { ComicInkTexture(opacity: 0.07).allowsHitTesting(false) }
     }
 
     private var titleLabel: some View {
         Text(title)
-            .font(.headline.weight(.heavy))
+            .font(GoalRushTheme.Typography.headline)
             .foregroundStyle(.white)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
@@ -89,7 +90,7 @@ struct GameDestinationBar: View {
     private var homeButton: some View {
         Button(action: onHome) {
             Label("Home", systemImage: "house.fill")
-                .font(.subheadline.bold())
+                .font(GoalRushTheme.Typography.subheadlineEmphasized)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)
@@ -110,7 +111,7 @@ struct GameDestinationBar: View {
                 Image(systemName: "info.circle.fill")
                     .accessibilityHidden(true)
             }
-            .font(.subheadline.bold())
+            .font(GoalRushTheme.Typography.subheadlineEmphasized)
             .multilineTextAlignment(.leading)
             .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)
             .frame(

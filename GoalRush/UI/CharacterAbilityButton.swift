@@ -45,11 +45,11 @@ private struct CharacterAbilityLabelStyle: LabelStyle {
             .shadow(color: (isReady ? GoalRushTheme.gold : GoalRushTheme.cyan).opacity(isReady ? 0.65 : 0.25), radius: 13)
 
             Text(isReady ? "READY" : "\(Int(charge))%")
-                .font(.caption2.bold())
+                .font(GoalRushTheme.Typography.caption2)
                 .foregroundStyle(isReady ? GoalRushTheme.gold : .white)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 4)
-                .background(.black.opacity(0.72), in: .capsule)
+                .background(.black.opacity(0.78), in: ComicPanelShape(cut: 5))
         }
         .contentShape(.rect)
     }

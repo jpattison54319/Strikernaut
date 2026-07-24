@@ -63,7 +63,7 @@ struct SettingsGroupSheet: View {
                     Toggle("Reduce Flashes", isOn: $store.settings.reducedFlashes)
                     Toggle("Assist Mode", isOn: $store.settings.assistMode)
                     Text("Assist Mode widens shots and slows hostile projectiles without reducing rewards.")
-                        .font(.footnote)
+                        .font(GoalRushTheme.Typography.caption)
                         .foregroundStyle(.white.opacity(0.72))
 
                 case .support:

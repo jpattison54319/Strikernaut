@@ -34,10 +34,10 @@ struct HomeAccessibilityAction: View {
                     Image(systemName: systemImage)
                         .foregroundStyle(accent)
                 }
-                .font(.headline.bold())
+                .font(GoalRushTheme.Typography.headline)
 
                 Text(subtitle)
-                    .font(.subheadline)
+                    .font(GoalRushTheme.Typography.subheadline)
                     .foregroundStyle(.white.opacity(0.72))
 
                 if let badge {

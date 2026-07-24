@@ -13,13 +13,13 @@ struct GameStatusBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.caption2.weight(.heavy))
+            .font(GoalRushTheme.Typography.caption2)
             .foregroundStyle(foregroundColor)
             .padding(.horizontal, GoalRushTheme.Metrics.compactSpacing)
             .padding(.vertical, 4)
-            .background(backgroundColor, in: .capsule)
+            .background(backgroundColor, in: ComicPanelShape(cut: 5))
             .overlay {
-                Capsule()
+                ComicPanelShape(cut: 5)
                     .stroke(borderColor, lineWidth: GoalRushTheme.Metrics.strokeWidth)
             }
     }

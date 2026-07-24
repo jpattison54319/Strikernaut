@@ -35,6 +35,7 @@ struct RootView: View {
             }
         }
         .tint(GoalRushTheme.gold)
+        .font(GoalRushTheme.Typography.body)
         .animation(reduceMotion ? nil : .snappy(duration: 0.3), value: store.celebrations)
         .sensoryFeedback(trigger: store.route) { _, _ in
             store.settings.hapticsEnabled ? .selection : nil

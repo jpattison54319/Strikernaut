@@ -4,10 +4,11 @@ struct HomeBrand: View {
     var body: some View {
         VStack(spacing: 1) {
             Text("STRIKERNAUT")
-                .font(.system(.largeTitle, design: .rounded, weight: .black))
-                .tracking(1.6)
-                .foregroundStyle(.white)
-                .shadow(color: GoalRushTheme.blue.opacity(0.8), radius: 10)
+                .font(GoalRushTheme.Typography.display(size: 44, relativeTo: .largeTitle))
+                .tracking(1.1)
+                .foregroundStyle(GoalRushTheme.paper)
+                .shadow(color: GoalRushTheme.ink, radius: 0, x: 3, y: 3)
+                .shadow(color: GoalRushTheme.cyan.opacity(0.82), radius: 0, x: -2, y: 2)
         }
         .multilineTextAlignment(.center)
         .accessibilityElement(children: .combine)

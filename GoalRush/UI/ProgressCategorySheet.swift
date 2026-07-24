@@ -70,7 +70,7 @@ struct ProgressCategorySheet: View {
 
         return HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
             Image(systemName: AchievementCatalog.icon(for: id))
-                .font(.title3.bold())
+                .font(GoalRushTheme.Typography.title3)
                 .foregroundStyle(unlocked ? GoalRushTheme.navy : .white.opacity(0.48))
                 .frame(width: 44, height: 44)
                 .background(unlocked ? GoalRushTheme.gold : .white.opacity(0.08), in: .circle)
@@ -78,10 +78,10 @@ struct ProgressCategorySheet: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(AchievementCatalog.title(for: id))
-                    .font(.headline)
+                    .font(GoalRushTheme.Typography.headline)
                     .foregroundStyle(unlocked ? .white : .white.opacity(0.62))
                 Text(AchievementCatalog.subtitle(for: id))
-                    .font(.caption)
+                    .font(GoalRushTheme.Typography.caption)
                     .foregroundStyle(.white.opacity(0.62))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -118,11 +118,11 @@ struct ProgressCategorySheet: View {
                 .background(GoalRushTheme.cyan.opacity(0.12), in: .circle)
                 .accessibilityHidden(true)
             Text(title)
-                .font(.headline)
+                .font(GoalRushTheme.Typography.headline)
                 .foregroundStyle(.white)
             Spacer(minLength: 8)
             Text(value)
-                .font(.headline.bold().monospacedDigit())
+                .font(GoalRushTheme.Typography.metric(size: 18))
                 .foregroundStyle(GoalRushTheme.gold)
         }
         .padding(GoalRushTheme.Metrics.standardSpacing)
@@ -136,10 +136,10 @@ struct ProgressCategorySheet: View {
                 let unlocked = store.progress.unlockedCharacters.contains(character.id)
                 VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.compactSpacing) {
                     Label(character.name, systemImage: unlocked ? "person.crop.circle.fill.badge.checkmark" : "lock.fill")
-                        .font(.headline.bold())
+                        .font(GoalRushTheme.Typography.headline)
                         .foregroundStyle(unlocked ? GoalRushTheme.cyan : .secondary)
                     Text("\(character.abilityName): \(character.abilityDescription)")
-                        .font(.subheadline)
+                        .font(GoalRushTheme.Typography.subheadline)
                         .foregroundStyle(.white.opacity(0.76))
                         .fixedSize(horizontal: false, vertical: true)
                     GameStatusBadge(

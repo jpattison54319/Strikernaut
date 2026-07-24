@@ -44,33 +44,29 @@ struct UpgradesView: View {
                 .foregroundStyle(GoalRushTheme.navy)
                 .frame(width: GoalRushTheme.Metrics.minimumTapTarget, height: GoalRushTheme.Metrics.minimumTapTarget)
                 .background(
-                    LinearGradient(
-                        colors: [GoalRushTheme.gold, GoalRushTheme.orange],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: .rect(cornerRadius: GoalRushTheme.Metrics.smallRadius)
+                    GoalRushTheme.gold,
+                    in: ComicPanelShape(cut: GoalRushTheme.Metrics.smallRadius)
                 )
                 .overlay {
-                    RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.smallRadius)
-                        .stroke(.white.opacity(0.34))
+                    ComicPanelShape(cut: GoalRushTheme.Metrics.smallRadius)
+                        .stroke(GoalRushTheme.ink, lineWidth: 2)
                 }
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("WORKSHOP RESERVES")
-                    .font(.caption.bold())
+                    .font(GoalRushTheme.Typography.captionEmphasized)
                     .tracking(0.8)
                     .foregroundStyle(.white.opacity(0.72))
                 Text("Training Tokens")
-                    .font(.subheadline)
+                    .font(GoalRushTheme.Typography.subheadline)
                     .foregroundStyle(.white.opacity(0.68))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Label {
                 Text(store.progress.trainingTokens.formatted())
-                    .font(.title2.weight(.heavy).monospacedDigit())
+                    .font(GoalRushTheme.Typography.metric(size: 24, relativeTo: .title2))
             } icon: {
                 Image(systemName: "hexagon.fill")
                     .foregroundStyle(GoalRushTheme.gold)
@@ -80,26 +76,24 @@ struct UpgradesView: View {
         .padding(GoalRushTheme.Metrics.standardSpacing)
         .background {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        GoalRushTheme.surfaceRaised.opacity(0.96),
-                        GoalRushTheme.navy.opacity(0.96)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                GoalRushTheme.surfaceRaised.opacity(0.97)
+                ComicInkTexture(opacity: 0.09)
                 Image(systemName: "circle.hexagongrid.fill")
                     .font(.system(size: 88))
                     .foregroundStyle(.white.opacity(0.025))
                     .offset(x: 92)
             }
-            .clipShape(.rect(cornerRadius: GoalRushTheme.Metrics.controlRadius))
+            .clipShape(ComicPanelShape(cut: GoalRushTheme.Metrics.controlRadius))
+        }
+        .background {
+            ComicPanelShape(cut: GoalRushTheme.Metrics.controlRadius)
+                .fill(GoalRushTheme.ink)
+                .offset(x: 4, y: 5)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.controlRadius)
+            ComicPanelShape(cut: GoalRushTheme.Metrics.controlRadius)
                 .stroke(GoalRushTheme.gold.opacity(0.48), lineWidth: GoalRushTheme.Metrics.strokeWidth)
         }
-        .shadow(color: .black.opacity(0.28), radius: GoalRushTheme.Metrics.shadowRadius, y: 6)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(store.progress.trainingTokens) Training Tokens")
     }
@@ -125,7 +119,7 @@ private struct UpgradeInfoView: View {
                 Label("Five lit sockets mark track mastery", systemImage: "circle.grid.2x2.fill")
                 Label("Rank 6+ costs \(UpgradeRules.sustainedCost.formatted()) tokens", systemImage: "hexagon.fill")
             }
-            .font(.headline)
+            .font(GoalRushTheme.Typography.headline)
             .foregroundStyle(.white)
             .padding(GoalRushTheme.Metrics.standardSpacing)
             .gameSurface(.panel)

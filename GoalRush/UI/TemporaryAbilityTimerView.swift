@@ -11,7 +11,7 @@ struct TemporaryAbilityTimerView: View {
 
     var body: some View {
         Image(systemName: TemporaryAbilityRules.icon(for: ability))
-            .font(.headline.bold())
+            .font(GoalRushTheme.Typography.headline)
             .foregroundStyle(.white)
             .frame(width: 48, height: 48)
             .background(.black.opacity(0.72), in: .circle)

@@ -12,7 +12,7 @@ struct CharacterInfoView: View {
                 Label("Charge resets after use and builds again immediately.", systemImage: "arrow.clockwise")
                 Label("Characters change abilities, not permanent Training upgrades.", systemImage: "arrow.up.circle.fill")
             }
-            .font(.headline)
+            .font(GoalRushTheme.Typography.headline)
             .foregroundStyle(.white)
         }
     }

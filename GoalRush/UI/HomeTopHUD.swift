@@ -11,7 +11,7 @@ struct HomeTopHUD: View {
 
         layout {
             Label("\(store.progress.trainingTokens)", systemImage: "hexagon.fill")
-                .font(.headline.bold().monospacedDigit())
+                .font(GoalRushTheme.Typography.metric(size: 18))
                 .foregroundStyle(GoalRushTheme.gold)
                 .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)
                 .frame(minHeight: GoalRushTheme.Metrics.minimumTapTarget)
@@ -29,7 +29,7 @@ struct HomeTopHUD: View {
 
             Button(action: openSettings) {
                 Label("Settings", systemImage: "gearshape.fill")
-                    .font(.subheadline.bold())
+                    .font(GoalRushTheme.Typography.subheadlineEmphasized)
                     .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)
                     .frame(minHeight: GoalRushTheme.Metrics.minimumTapTarget)
                     .gameSurface(.hud)

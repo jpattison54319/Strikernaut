@@ -35,7 +35,7 @@ struct TrophiesView: View {
         .sheet(isPresented: $showingOverview) {
             GameSheetScaffold(title: "Progress", subtitle: "Your journey across every Strikernaut mode.") {
                 Text("Open a category to review milestones, lifetime totals, or unlocked characters.")
-                    .font(.headline)
+                    .font(GoalRushTheme.Typography.headline)
                     .foregroundStyle(.white)
                     .padding(GoalRushTheme.Metrics.standardSpacing)
                     .gameSurface(.panel)
@@ -51,11 +51,11 @@ struct TrophiesView: View {
         return VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.compactSpacing) {
             HStack {
                 Label("MILESTONE COMPLETION", systemImage: "trophy.fill")
-                    .font(.caption.bold())
+                    .font(GoalRushTheme.Typography.captionEmphasized)
                     .foregroundStyle(GoalRushTheme.gold)
                 Spacer(minLength: 8)
                 Text("\(unlocked)/\(total)")
-                    .font(.headline.bold().monospacedDigit())
+                    .font(GoalRushTheme.Typography.metric(size: 18))
                     .foregroundStyle(.white)
             }
             ProgressView(value: Double(unlocked), total: Double(total))
@@ -73,13 +73,13 @@ struct TrophiesView: View {
         if let next = AchievementCatalog.ordered.first(where: { !store.progress.unlockedAchievements.contains($0) }) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("NEXT MILESTONE")
-                    .font(.caption.bold())
+                    .font(GoalRushTheme.Typography.captionEmphasized)
                     .foregroundStyle(.white.opacity(0.68))
                 Text(AchievementCatalog.title(for: next))
-                    .font(.title3.weight(.heavy))
+                    .font(GoalRushTheme.Typography.title3)
                     .foregroundStyle(.white)
                 Text(AchievementCatalog.subtitle(for: next))
-                    .font(.subheadline)
+                    .font(GoalRushTheme.Typography.subheadline)
                     .foregroundStyle(.white.opacity(0.76))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -88,7 +88,7 @@ struct TrophiesView: View {
             .accessibilityElement(children: .combine)
         } else {
             Label("Every milestone complete", systemImage: "checkmark.seal.fill")
-                .font(.headline.bold())
+                .font(GoalRushTheme.Typography.headline)
                 .foregroundStyle(GoalRushTheme.positive)
                 .frame(maxWidth: .infinity, minHeight: 56)
                 .gameSurface(.panel)

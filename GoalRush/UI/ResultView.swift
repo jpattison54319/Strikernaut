@@ -64,10 +64,10 @@ struct ResultView: View {
                 .accessibilityHidden(true)
             VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
                 Text(heroTitle)
-                    .font(.largeTitle.bold())
+                    .font(GoalRushTheme.Typography.display)
                     .multilineTextAlignment(.center)
                 Text(heroSubtitle)
-                    .font(.headline)
+                    .font(GoalRushTheme.Typography.headline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -93,7 +93,7 @@ struct ResultView: View {
             HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
                 ForEach(0..<3, id: \.self) { index in
                     Image(systemName: index < StarRating.stars(staminaFraction: result.staminaFraction) ? "star.fill" : "star")
-                        .font(.title.bold())
+                        .font(GoalRushTheme.Typography.title)
                         .foregroundStyle(GoalRushTheme.gold)
                         .scaleEffect(appeared ? 1 : 0.2)
                         .animation(
@@ -116,7 +116,7 @@ struct ResultView: View {
                 Spacer()
                 HStack(spacing: 4) {
                     Text("+")
-                        .font(.title2.bold())
+                        .font(GoalRushTheme.Typography.title2)
                         .foregroundStyle(GoalRushTheme.gold)
                     CountUpText(value: result.tokensEarned, color: GoalRushTheme.gold)
                 }
@@ -141,7 +141,7 @@ struct ResultView: View {
         let character = result.characterEarned.map(CharacterCatalog.character)
         return VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
             Label("NEW CHARACTER UNLOCKED", systemImage: "sparkles")
-                .font(.caption.bold())
+                .font(GoalRushTheme.Typography.captionEmphasized)
                 .tracking(1.1)
                 .foregroundStyle(GoalRushTheme.gold)
             if let character {
@@ -152,16 +152,16 @@ struct ResultView: View {
                     .accessibilityHidden(true)
             }
             Text(character?.name ?? "New Hero")
-                .font(.title2.bold())
+                .font(GoalRushTheme.Typography.title2)
             Text(character?.abilityName ?? "Unique ability unlocked")
-                .font(.subheadline)
+                .font(GoalRushTheme.Typography.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .padding(GoalRushTheme.Metrics.sectionSpacing)
         .gameSurface(.modal)
         .overlay {
-            RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.panelRadius)
+            ComicPanelShape(cut: GoalRushTheme.Metrics.panelRadius)
                 .stroke(GoalRushTheme.gold.opacity(0.38))
         }
         .accessibilityElement(children: .contain)
@@ -210,7 +210,7 @@ struct ResultView: View {
         Button(action: action) {
             VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
                 Image(systemName: systemImage)
-                    .font(.title2.bold())
+                    .font(GoalRushTheme.Typography.title2)
                     .foregroundStyle(.white)
                     .frame(width: 64, height: 64)
                     .background(.black.opacity(0.56), in: .circle)
@@ -220,7 +220,7 @@ struct ResultView: View {
                     .shadow(color: accent.opacity(0.34), radius: 12, y: 5)
 
                 Text(title)
-                    .font(.caption.bold())
+                    .font(GoalRushTheme.Typography.captionEmphasized)
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)

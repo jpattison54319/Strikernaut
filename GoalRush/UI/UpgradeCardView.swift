@@ -32,29 +32,24 @@ struct UpgradeCardView: View {
                     .foregroundStyle(GoalRushTheme.navy)
                     .frame(width: 50, height: 50)
                     .background(
-                        LinearGradient(
-                            colors: [accent, accent.opacity(0.66)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        in: .rect(cornerRadius: GoalRushTheme.Metrics.smallRadius)
+                        accent,
+                        in: ComicPanelShape(cut: GoalRushTheme.Metrics.smallRadius)
                     )
                     .overlay {
-                        RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.smallRadius)
-                            .stroke(.white.opacity(0.40))
+                        ComicPanelShape(cut: GoalRushTheme.Metrics.smallRadius)
+                            .stroke(GoalRushTheme.ink, lineWidth: 2)
                     }
-                    .shadow(color: accent.opacity(0.28), radius: 8, y: 4)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(UpgradePresentation.systemLabel(for: track))
-                        .font(.caption.bold())
+                        .font(GoalRushTheme.Typography.captionEmphasized)
                         .tracking(0.8)
                         .foregroundStyle(accent)
                     Text(UpgradeRules.title(for: track))
-                        .font(.title3.bold())
+                        .font(GoalRushTheme.Typography.title3)
                         .foregroundStyle(.white)
                     Text(UpgradePresentation.benefit(for: track))
-                        .font(.subheadline)
+                        .font(GoalRushTheme.Typography.subheadline)
                         .foregroundStyle(.white.opacity(0.70))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -66,7 +61,7 @@ struct UpgradeCardView: View {
             controlLayout {
                 VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.compactSpacing) {
                     Text("RANK \(rank) • UNLIMITED")
-                        .font(.caption.bold().monospacedDigit())
+                        .font(GoalRushTheme.Typography.metric(size: 12, relativeTo: .caption))
                         .foregroundStyle(.white.opacity(0.72))
                     UpgradeRankSockets(rank: rank, accent: accent)
                 }
@@ -95,7 +90,7 @@ struct UpgradeCardView: View {
                 Text(effect.improvement)
                     .foregroundStyle(accent)
             }
-            .font(.caption.bold().monospacedDigit())
+            .font(GoalRushTheme.Typography.metric(size: 12, relativeTo: .caption))
             .foregroundStyle(.white.opacity(0.74))
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -106,7 +101,7 @@ struct UpgradeCardView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("upgrade-\(track.rawValue)")
         .overlay {
-            RoundedRectangle(cornerRadius: 22)
+            ComicPanelShape(cut: 11)
                 .stroke(GoalRushTheme.gold, lineWidth: 2)
                 .opacity(justPurchased ? 1 : 0)
         }
@@ -144,15 +139,8 @@ private struct UpgradeModuleSurface: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    GoalRushTheme.surfaceRaised.opacity(0.985),
-                    GoalRushTheme.surface.opacity(0.985),
-                    GoalRushTheme.navy.opacity(0.985)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            GoalRushTheme.surfaceRaised.opacity(0.985)
+            ComicInkTexture(opacity: 0.10)
 
             Image(systemName: "circle.hexagongrid.fill")
                 .font(.system(size: 154))
@@ -177,12 +165,16 @@ private struct UpgradeModuleSurface: View {
             .padding(GoalRushTheme.Metrics.compactSpacing)
             .frame(maxHeight: .infinity, alignment: .bottom)
         }
-        .clipShape(.rect(cornerRadius: 22))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22)
-                .stroke(accent.opacity(0.34), lineWidth: GoalRushTheme.Metrics.strokeWidth)
+        .clipShape(ComicPanelShape(cut: 11))
+        .background {
+            ComicPanelShape(cut: 11)
+                .fill(GoalRushTheme.ink)
+                .offset(x: 5, y: 6)
         }
-        .shadow(color: .black.opacity(0.30), radius: GoalRushTheme.Metrics.shadowRadius, y: 7)
+        .overlay {
+            ComicPanelShape(cut: 11)
+                .stroke(accent.opacity(0.58), lineWidth: GoalRushTheme.Metrics.strokeWidth)
+        }
     }
 }
 
@@ -259,29 +251,22 @@ private struct UpgradePurchaseButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.subheadline.bold())
+            .font(GoalRushTheme.Typography.subheadlineEmphasized)
             .foregroundStyle(isEnabled ? GoalRushTheme.navy : .white.opacity(0.78))
             .padding(.horizontal, 13)
             .frame(minHeight: GoalRushTheme.Metrics.minimumTapTarget)
-            .background(buttonFill, in: .capsule)
+            .background(buttonFill, in: ComicPanelShape(cut: 7))
             .overlay {
-                Capsule()
+                ComicPanelShape(cut: 7)
                     .stroke(isEnabled ? .white.opacity(0.34) : accent.opacity(0.46))
             }
-            .shadow(color: isEnabled ? accent.opacity(0.30) : .clear, radius: 8, y: 4)
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: configuration.isPressed)
     }
 
     private var buttonFill: AnyShapeStyle {
         if isEnabled {
-            return AnyShapeStyle(
-                LinearGradient(
-                    colors: [accent, accent.opacity(0.72)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
+            return AnyShapeStyle(accent)
         }
         return AnyShapeStyle(GoalRushTheme.navy.opacity(0.88))
     }

@@ -38,12 +38,14 @@ struct GameContainerView: View {
                 Spacer()
                 if session.mode.isEndless && session.hudState.elapsed < 5 && session.phase == .playing {
                     Label("Drag to aim", systemImage: "hand.draw.fill")
-                        .font(.subheadline.bold())
+                        .font(GoalRushTheme.Typography.subheadlineEmphasized)
                         .padding(.horizontal, 16)
                         .frame(minHeight: 44)
-                        .background(.ultraThinMaterial, in: .capsule)
-                        .overlay { Capsule().stroke(GoalRushTheme.cyan.opacity(0.45)) }
-                        .shadow(color: GoalRushTheme.cyan.opacity(0.22), radius: 10)
+                        .background(GoalRushTheme.surfaceRaised.opacity(0.94), in: ComicPanelShape(cut: 7))
+                        .overlay {
+                            ComicPanelShape(cut: 7)
+                                .stroke(GoalRushTheme.cyan.opacity(0.62), lineWidth: 2)
+                        }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -109,11 +111,11 @@ struct GameContainerView: View {
                         Image(systemName: "heart.fill")
                             .foregroundStyle(staminaColor)
                         Text("STAMINA")
-                            .font(.caption2.bold())
+                            .font(GoalRushTheme.Typography.caption2)
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 4)
                         Text("\(Int(session.hudState.stamina))")
-                            .font(.subheadline.bold())
+                            .font(GoalRushTheme.Typography.subheadlineEmphasized)
                             .monospacedDigit()
                             .contentTransition(.numericText())
                     }
@@ -132,10 +134,10 @@ struct GameContainerView: View {
 
                 VStack(alignment: .trailing, spacing: 3) {
                     Text("TOKENS")
-                        .font(.caption2.bold())
+                        .font(GoalRushTheme.Typography.caption2)
                         .foregroundStyle(.secondary)
                     Label("\(session.hudState.tokens)", systemImage: "hexagon.fill")
-                        .font(.headline)
+                        .font(GoalRushTheme.Typography.headline)
                         .monospacedDigit()
                         .contentTransition(.numericText())
                         .animation(.snappy, value: session.hudState.tokens)
@@ -148,7 +150,7 @@ struct GameContainerView: View {
                         .foregroundStyle(GoalRushTheme.cyan)
                         .overlay(alignment: .topTrailing) {
                             Text("\(session.hudState.shieldCharges)")
-                                .font(.caption2.bold())
+                                .font(GoalRushTheme.Typography.caption2)
                                 .padding(3)
                                 .background(GoalRushTheme.navy, in: .circle)
                                 .offset(x: 8, y: -7)
@@ -162,7 +164,7 @@ struct GameContainerView: View {
                     session.togglePause()
                 }
                     .labelStyle(.iconOnly)
-                    .font(.headline)
+                    .font(GoalRushTheme.Typography.headline)
                     .frame(width: 44, height: 44)
                     .background(.white.opacity(0.11), in: .circle)
                     .overlay { Circle().stroke(.white.opacity(0.18)) }
@@ -173,10 +175,10 @@ struct GameContainerView: View {
             if session.hudState.combo > 0 {
                 HStack(spacing: 8) {
                     Image(systemName: "bolt.fill")
-                        .font(.caption.bold())
+                        .font(GoalRushTheme.Typography.captionEmphasized)
                         .foregroundStyle(comboColor)
                     Text("COMBO ×\(session.hudState.combo)")
-                        .font(.caption.bold())
+                        .font(GoalRushTheme.Typography.captionEmphasized)
                         .foregroundStyle(comboColor)
                         .contentTransition(.numericText())
                     GeometryReader { geometry in
@@ -197,21 +199,21 @@ struct GameContainerView: View {
 
             HStack(spacing: 9) {
                 Text(progressLabel)
-                    .font(.caption2.bold())
+                    .font(GoalRushTheme.Typography.caption2)
                     .foregroundStyle(session.hudState.bossActive ? GoalRushTheme.orange : .secondary)
                 ProgressView(value: levelProgress)
                     .tint(session.hudState.bossActive ? GoalRushTheme.orange : GoalRushTheme.cyan)
                     .accessibilityIdentifier("run-progress")
                 if session.mode.isEndless {
                     Label(session.hudState.score.formatted(), systemImage: "trophy.fill")
-                        .font(.caption2.bold())
+                        .font(GoalRushTheme.Typography.caption2)
                         .monospacedDigit()
                         .foregroundStyle(GoalRushTheme.gold)
                         .frame(minWidth: 58, alignment: .trailing)
                         .accessibilityLabel("Score \(session.hudState.score)")
                 } else {
                     Text("\(Int(levelProgress * 100))%")
-                        .font(.caption2.bold())
+                        .font(GoalRushTheme.Typography.caption2)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                         .frame(width: 34, alignment: .trailing)
@@ -222,12 +224,15 @@ struct GameContainerView: View {
         // A live material samples and blurs the SpriteKit surface whenever this
         // frequently-changing HUD redraws. An opaque game surface preserves the
         // visual hierarchy without forcing that expensive cross-framework pass.
-        .background(hudBackground, in: .rect(cornerRadius: 20))
+        .background(hudBackground, in: ComicPanelShape(cut: 10))
         .overlay {
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(hudBorderColor, lineWidth: session.world.id == .mars ? 1.5 : 1)
+            ComicInkTexture(opacity: 0.07)
+                .clipShape(ComicPanelShape(cut: 10))
         }
-        .shadow(color: hudShadowColor, radius: 14, y: 7)
+        .overlay {
+            ComicPanelShape(cut: 10)
+                .stroke(hudBorderColor, lineWidth: session.world.id == .mars ? 2.5 : 2)
+        }
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: session.hudState.combo > 0)
     }
 
@@ -253,18 +258,12 @@ struct GameContainerView: View {
             : .white.opacity(0.15)
     }
 
-    private var hudShadowColor: Color {
-        session.world.id == .mars
-            ? Color(red: 0.18, green: 0.72, blue: 1).opacity(0.18)
-            : .black.opacity(0.28)
-    }
-
     private var pauseOverlay: some View {
         Color.black.opacity(0.70).ignoresSafeArea()
             .overlay {
                 VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
                     Text("Run Paused")
-                        .font(.title.bold())
+                        .font(GoalRushTheme.Typography.title)
 
                     Button("Continue", action: continueRun)
                     .buttonStyle(GameLaunchButtonStyle())

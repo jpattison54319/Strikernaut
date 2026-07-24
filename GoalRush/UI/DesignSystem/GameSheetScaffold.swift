@@ -19,12 +19,12 @@ struct GameSheetScaffold<Content: View>: View {
                 VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.sectionSpacing) {
                     VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.compactSpacing) {
                         Text(title)
-                            .font(.largeTitle.weight(.heavy))
+                            .font(GoalRushTheme.Typography.display)
                             .foregroundStyle(.white)
 
                         if let subtitle, !subtitle.isEmpty {
                             Text(subtitle)
-                                .font(.subheadline)
+                                .font(GoalRushTheme.Typography.subheadline)
                                 .foregroundStyle(.white.opacity(0.72))
                         }
                     }

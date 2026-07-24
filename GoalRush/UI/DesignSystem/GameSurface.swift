@@ -19,30 +19,28 @@ private struct GameSurfaceModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(fill, in: .rect(cornerRadius: cornerRadius))
+            .background(fill, in: ComicPanelShape(cut: cornerRadius))
+            .background {
+                ComicPanelShape(cut: cornerRadius)
+                    .fill(shadowColor)
+                    .offset(x: shadowOffset, y: shadowOffset)
+            }
             .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius)
+                ComicInkTexture(opacity: style == .hud ? 0.07 : 0.12)
+                    .clipShape(ComicPanelShape(cut: cornerRadius))
+            }
+            .overlay {
+                ComicPanelShape(cut: cornerRadius)
                     .stroke(stroke, lineWidth: GoalRushTheme.Metrics.strokeWidth)
             }
-            .shadow(
-                color: shadowColor,
-                radius: GoalRushTheme.Metrics.shadowRadius,
-                y: shadowOffset
-            )
     }
 
     private var fill: AnyShapeStyle {
         switch style {
         case .hud:
-            AnyShapeStyle(GoalRushTheme.navy.opacity(0.78))
+            AnyShapeStyle(GoalRushTheme.ink.opacity(0.86))
         case .panel:
-            AnyShapeStyle(
-                LinearGradient(
-                    colors: [GoalRushTheme.surfaceRaised.opacity(0.96), GoalRushTheme.surface.opacity(0.94)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
+            AnyShapeStyle(GoalRushTheme.surfaceRaised.opacity(0.97))
         case .modal:
             AnyShapeStyle(GoalRushTheme.surface.opacity(0.98))
         }
@@ -69,10 +67,10 @@ private struct GameSurfaceModifier: ViewModifier {
     }
 
     private var shadowColor: Color {
-        style == .hud ? .clear : GoalRushTheme.surfaceShadow
+        style == .hud ? GoalRushTheme.ink.opacity(0.45) : GoalRushTheme.surfaceShadow
     }
 
     private var shadowOffset: CGFloat {
-        style == .modal ? 8 : 5
+        style == .modal ? 6 : 4
     }
 }

@@ -13,31 +13,31 @@ struct HomeLaunchControl: View {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.compactSpacing) {
                         Label(eyebrow, systemImage: "play.fill")
-                            .font(.headline.weight(.heavy))
+                            .font(GoalRushTheme.Typography.headline)
                         Text(title)
-                            .font(.title3.weight(.heavy))
+                            .font(GoalRushTheme.Typography.title3)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
                         Image(systemName: "play.fill")
-                            .font(.title2.bold())
+                            .font(GoalRushTheme.Typography.title2)
                             .frame(width: 44, height: 44)
                             .background(.white.opacity(0.88), in: .circle)
                             .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 3) {
                             Text(eyebrow)
-                                .font(.caption.weight(.heavy))
+                                .font(GoalRushTheme.Typography.captionEmphasized)
                                 .tracking(1.1)
                             Text(title)
-                                .font(.headline.weight(.heavy))
+                                .font(GoalRushTheme.Typography.headline)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
                         Image(systemName: "chevron.right")
-                            .font(.headline.bold())
+                            .font(GoalRushTheme.Typography.headline)
                             .accessibilityHidden(true)
                     }
                 }

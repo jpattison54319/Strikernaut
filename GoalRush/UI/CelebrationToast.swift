@@ -18,7 +18,7 @@ struct CelebrationToast: View {
                 )
             }
         }
-        .contentShape(Capsule())
+        .contentShape(ComicPanelShape(cut: 10))
         .onTapGesture { dismiss() }
         .sensoryFeedback(.success, trigger: celebration)
         .onAppear {

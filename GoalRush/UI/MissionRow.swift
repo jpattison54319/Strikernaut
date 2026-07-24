@@ -18,16 +18,16 @@ struct MissionRow: View {
                     )
                     .rotationEffect(.degrees(-90))
                 Image(systemName: MissionCatalog.icon(for: mission.kind))
-                    .font(.caption.bold())
+                    .font(GoalRushTheme.Typography.captionEmphasized)
                     .foregroundStyle(mission.isComplete ? GoalRushTheme.positive : .white)
             }
             .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(MissionCatalog.title(for: mission.kind))
-                    .font(.subheadline.bold())
+                    .font(GoalRushTheme.Typography.subheadlineEmphasized)
                 Text(MissionCatalog.goalText(for: mission.kind, goal: mission.goal))
-                    .font(.caption)
+                    .font(GoalRushTheme.Typography.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
@@ -37,23 +37,23 @@ struct MissionRow: View {
                     .foregroundStyle(GoalRushTheme.positive)
             } else if mission.isComplete {
                 Button("+\(mission.reward)", action: claimMission)
-                    .font(.subheadline.bold().monospacedDigit())
+                    .font(GoalRushTheme.Typography.metric(size: 15, relativeTo: .subheadline))
                     .foregroundStyle(GoalRushTheme.navy)
                     .padding(.horizontal, 12)
                     .frame(minHeight: Self.minimumClaimHeight)
-                    .background(GoalRushTheme.gold, in: .capsule)
+                    .background(GoalRushTheme.gold, in: ComicPanelShape(cut: 5))
                     .pulseGlow(true)
                     .accessibilityLabel("Claim \(mission.reward) tokens, \(MissionCatalog.title(for: mission.kind))")
                     .accessibilityIdentifier("mission-claim-\(mission.kind.rawValue)")
             } else {
                 Text("\(min(mission.progress, mission.goal))/\(mission.goal)")
-                    .font(.caption.bold().monospacedDigit())
+                    .font(GoalRushTheme.Typography.metric(size: 12, relativeTo: .caption))
                     .foregroundStyle(.secondary)
             }
         }
         .padding(12)
-        .background(.white.opacity(0.06), in: .rect(cornerRadius: 16))
-        .overlay { RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.10)) }
+        .background(.white.opacity(0.06), in: ComicPanelShape(cut: 8))
+        .overlay { ComicPanelShape(cut: 8).stroke(.white.opacity(0.16), lineWidth: 2) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mission-\(mission.kind.rawValue)")
     }

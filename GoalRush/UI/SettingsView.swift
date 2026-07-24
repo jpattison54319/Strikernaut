@@ -20,7 +20,7 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
                         Text("Tune Strikernaut to feel right for you.")
-                            .font(.headline)
+                            .font(GoalRushTheme.Typography.headline)
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -30,13 +30,13 @@ struct SettingsView: View {
                             store.uiAudio.play(.tap)
                             store.pendingResetConfirmation = true
                         }
-                        .font(.headline.bold())
+                        .font(GoalRushTheme.Typography.headline)
                         .foregroundStyle(.red)
                         .frame(maxWidth: .infinity, minHeight: 52)
                         .gameSurface(.panel)
 
                         Text("This permanently removes campaign progress, Endless records, characters, upgrades, and Training Tokens from this device.")
-                            .font(.footnote)
+                            .font(GoalRushTheme.Typography.caption)
                             .foregroundStyle(.white.opacity(0.72))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }

@@ -10,9 +10,9 @@ struct HomeDockButton: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: systemImage)
-                    .font(.headline.bold())
+                    .font(GoalRushTheme.Typography.headline)
                 Text(title)
-                    .font(.caption.bold())
+                    .font(GoalRushTheme.Typography.captionEmphasized)
                     .lineLimit(2)
                     .minimumScaleFactor(0.75)
             }

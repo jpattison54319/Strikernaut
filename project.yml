@@ -15,22 +15,36 @@ targets:
   GoalRush:
     type: application
     platform: iOS
+    info:
+      path: GoalRush/Info.plist
+      properties:
+        CFBundleDisplayName: Strikernaut
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        ITSAppUsesNonExemptEncryption: false
+        UIAppFonts:
+          - BarlowCondensed-BlackItalic.otf
+          - BarlowCondensed-Bold.otf
+          - BarlowSemiCondensed-SemiBold.otf
+          - BarlowSemiCondensed-Medium.otf
+        UIApplicationSupportsIndirectInputEvents: true
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
     sources:
       - path: GoalRush
+        excludes:
+          - Resources/ArtArchive
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: iCloud.org.xpetsllc.GoalRush
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "10"
+        CURRENT_PROJECT_VERSION: "11"
         PRODUCT_NAME: Strikernaut
         PRODUCT_MODULE_NAME: GoalRush
         TARGETED_DEVICE_FAMILY: "1"
-        INFOPLIST_KEY_CFBundleDisplayName: Strikernaut
-        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        INFOPLIST_KEY_UIRequiresFullScreen: YES
+        GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         SWIFT_STRICT_CONCURRENCY: complete

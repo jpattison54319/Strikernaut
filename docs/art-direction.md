@@ -1,13 +1,18 @@
 # Strikernaut Art Direction
 
-Strikernaut uses an original all-ages toy-like 3D visual language: rounded forms,
-large silhouettes, saturated turf, cobalt/teal player colors, orange training
-robots, and yellow boss accents. No real clubs, sponsors, flags, or player
-likenesses are used.
+Strikernaut uses an original dimensional sports-comic visual language: heavy
+controlled black ink, hand-painted depth, restrained crosshatching, saturated
+turf, cobalt/cyan player colors, weathered cream surfaces, and world-specific
+coral or violet accents. No real clubs, sponsors, flags, player likenesses, or
+borrowed game branding are used.
 
-The gameplay reference supplied by the product owner informed only the elevated
-portrait composition and lane-based mechanics. Production characters, stadium,
-objects, interface, app icon, and audio are original.
+The gameplay reference supplied by the product owner informed the elevated
+portrait composition and lane-based mechanics. Graphic-novel references inform
+technique only. Production characters, stadiums, panel geometry, textures,
+typography, objects, interface, app icon, and audio remain Strikernaut designs.
+
+The production workflow and rejection checklist live in
+`docs/inked-comic-art-pipeline.md`.
 
 ## Image-generation prompts
 
@@ -30,15 +35,16 @@ generic fantasy detail.
 
 Use case: `stylized-concept`. Portrait futuristic soccer training stadium with
 three converging turf lanes, a small cobalt/teal player from behind, friendly
-orange training robots upfield, soccer balls and equipment carts. Premium
-rounded toy-like 3D render, elevated camera, clear lower negative space for
+orange training robots upfield, soccer balls and equipment carts. Dimensional
+hand-painted inked sports-comic illustration, elevated camera, clear lower
+negative space for
 native controls, no text, UI, real club marks, sponsors, flags, or watermark.
 
 ### Gameplay arena
 
 Use case: `stylized-concept`. Empty portrait soccer training arena with three
 clear converging turf lanes, padded cobalt-and-white rails, a centered distant
-goal, crowd shapes, and bright daylight. Premium rounded low-poly 3D render;
+goal, crowd shapes, and bright daylight. Dimensional hand-painted sports-comic environment with controlled black ink and restrained shadow hatching;
 no players, robots, balls, equipment, pickups, text, logos, or UI. This is the
 static depth layer beneath live SpriteKit characters and effects.
 
@@ -56,8 +62,8 @@ a Martian crater, translucent cyan safety rails, distant sci-fi goal, rounded
 habitat domes and soft alien rock formations, subtle view of space and a small
 moon overhead
 
-Style/medium: premium rounded toy-like low-poly 3D game render matching a
-colorful all-ages mobile arcade game
+Style/medium: dimensional hand-painted sports-comic game illustration matching a
+colorful teen-friendly mobile arcade game
 
 Composition/framing: portrait 2:3, elevated camera looking up three lanes,
 close foreground kept empty for the player, midground and lanes readable for
@@ -87,8 +93,8 @@ equipment alcoves, circular presentation platform centered in the lower-middle,
 subtle trophy silhouettes and warm gold accent lighting, no actual gear
 displayed
 
-Style/medium: premium rounded toy-like low-poly 3D mobile game render matching
-a colorful all-ages soccer sci-fi arcade game
+Style/medium: dimensional hand-painted inked sports-comic mobile game
+illustration matching an energetic teen-friendly soccer sci-fi arcade game
 
 Composition/framing: portrait 2:3, centered character-sized negative space from
 head to feet, darker edges for native UI controls, clear empty left and right
@@ -104,14 +110,14 @@ arrows, logos, sponsors, flags, real clubs, watermark, or border
 
 ### Daily reward chest
 
-Use case: `stylized-concept`. Premium rounded toy-like 3D render of a glowing
+Use case: `stylized-concept`. Dimensional hand-painted sports-comic illustration with controlled black ink and restrained shadow hatching of a glowing
 treasure chest slightly open with golden light and soccer-ball-patterned coins
 spilling out, cobalt and gold palette, dark navy background, centered
 composition, no text, no watermark.
 
 ### Onboarding hero
 
-Use case: `stylized-concept`. Premium rounded toy-like 3D render, portrait 2:3
+Use case: `stylized-concept`. Dimensional hand-painted sports-comic illustration with controlled black ink and restrained shadow hatching, portrait 2:3
 futuristic soccer training stadium, three converging turf lanes, small
 cobalt/teal player dribbling a soccer ball toward friendly orange training
 robots upfield, subtle motion lines, sunny lighting, quiet empty lower third
@@ -124,7 +130,7 @@ image-generation tool in the prompt modes named above and copied into
 ## Soccer ball projectile sprites
 
 The standard projectile is an unmistakable black-and-white stitched soccer ball
-rendered in the same premium rounded toy-like 3D style. Six power variants
+rendered in the same dimensional inked sports-comic style. Six power variants
 preserve the same panel geometry and add a compact, readable effect:
 
 - `SoccerBallRapidFire`: golden electric corona and cobalt lightning.

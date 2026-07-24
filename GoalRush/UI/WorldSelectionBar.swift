@@ -43,13 +43,13 @@ private struct WorldSelectionButton: View {
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .font(.subheadline.bold())
+            .font(GoalRushTheme.Typography.subheadlineEmphasized)
             .foregroundStyle(foregroundColor)
             .frame(maxWidth: .infinity, minHeight: GoalRushTheme.Metrics.minimumTapTarget)
             .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)
-            .background(backgroundStyle, in: .rect(cornerRadius: GoalRushTheme.Metrics.smallRadius))
+            .background(backgroundStyle, in: ComicPanelShape(cut: GoalRushTheme.Metrics.smallRadius))
             .overlay {
-                RoundedRectangle(cornerRadius: GoalRushTheme.Metrics.smallRadius)
+                ComicPanelShape(cut: GoalRushTheme.Metrics.smallRadius)
                     .stroke(borderColor, lineWidth: selected ? 2 : GoalRushTheme.Metrics.strokeWidth)
             }
         }

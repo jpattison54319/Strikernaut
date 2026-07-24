@@ -59,7 +59,7 @@ struct OnboardingView: View {
             Spacer()
             if page < pages.count - 1 {
                 Button("Skip", action: finish)
-                    .font(.subheadline.bold())
+                    .font(GoalRushTheme.Typography.subheadlineEmphasized)
                     .foregroundStyle(.secondary)
                     .frame(minWidth: GoalRushTheme.Metrics.minimumTapTarget, minHeight: GoalRushTheme.Metrics.minimumTapTarget)
                     .accessibilityIdentifier("onboarding-skip")
