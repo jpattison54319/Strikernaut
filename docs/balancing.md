@@ -5,8 +5,15 @@
 - Levels 4–6 reward focused upgrades but do not intentionally require replay.
 - Levels 7–9 may require one or two replays for an average player.
 - The Titan Keeper expects a developed build but has readable, avoidable attacks.
-- Earth occupies Levels 1–10. Mars occupies Levels 11–20, introduces a new
-  enemy/object family, and ends with the Mars Colossus.
+- Earth occupies Levels 1–10, the Moon occupies Levels 11–20, and Mars occupies
+  Levels 21–30. Each world introduces a new enemy/object family and ends with
+  its own boss.
+- Earth has no world modifier. The Moon alternates between normal gravity and
+  a six-second zero-G phase. Mars spawns a Volatile Core after every six
+  standard defeats and on boss-phase changes.
+- Temporary pickup pools are world-specific: Rapid Fire/Split Shot/Heat Seeking
+  on Earth, Reverse/Ice/Orbit Shot on the Moon, and Fire/Explosive/Solar Pierce
+  on Mars.
 - Defeats retain earned Training Tokens. Enemy and equipment rewards are granted
   immediately on destruction, with no pickup step. Replays have smaller
   completion bonuses but full enemy and object rewards. There are no energy
@@ -23,7 +30,7 @@
   safety floor asymptotically so every Quick Release rank still improves it.
   Boss waves occur every fifth wave.
 - Equipped gear stacks multiplicatively with permanent Training upgrades before
-  either Campaign or Endless begins. Earth and Mars full sets add a shield and
+  either Campaign or Endless begins. World rewards add a shield and
   projectile pierce respectively.
 
 Permanent upgrade costs are centralized in `UpgradeRules`; level rewards and

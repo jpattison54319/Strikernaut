@@ -93,18 +93,21 @@ struct SettingsGroupSheet: View {
     @ViewBuilder
     private var developerActions: some View {
         Button("Grant 1,000 Tokens") {
+            store.uiAudio.requestFeedback(.success)
             store.progress.trainingTokens += 1_000
             store.saveProgress()
         }
         .buttonStyle(SecondaryGameButton())
 
         Button("Unlock All Levels") {
+            store.uiAudio.requestFeedback(.success)
             store.progress.highestUnlockedLevel = GameContent.levels.count
             store.saveProgress()
         }
         .buttonStyle(SecondaryGameButton())
 
         Button("Unlock All Characters") {
+            store.uiAudio.requestFeedback(.success)
             store.progress.unlockedCharacters = Set(CharacterID.allCases)
             store.saveProgress()
         }

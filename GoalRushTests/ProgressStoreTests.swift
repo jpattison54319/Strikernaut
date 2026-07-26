@@ -12,6 +12,7 @@ struct ProgressStoreTests {
         progress.trainingTokens = 321
         progress.highestUnlockedLevel = 4
         progress.setRank(2, for: .impact)
+        progress.setPrestigeCount(1, for: .impact)
         try store.save(progress)
         #expect(try store.load() == progress)
     }
@@ -51,6 +52,11 @@ struct ProgressStoreTests {
         #expect(UpgradeRules.cost(forNextRank: 4) == 1_300)
         #expect(UpgradeRules.cost(forNextRank: 5) == 1_300)
         #expect(UpgradeRules.cost(forNextRank: 500) == 1_300)
+        #expect(UpgradePrestigeRules.prestigeCost == 2_600)
+        #expect(
+            UpgradePrestigeRules.purchaseCost(level: 10, prestigeCount: 0)
+                > UpgradeRules.sustainedCost
+        )
     }
 
     @Test func permanentUpgradePurchasesContinueBeyondRankFive() throws {
@@ -70,6 +76,49 @@ struct ProgressStoreTests {
         #expect(try persistence.load().rank(for: .impact) == 10)
     }
 
+    @Test func thresholdPurchasePrestigesBeforeUnlockingTheNextLevel() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let persistence = FileProgressStore(fileURL: directory.appending(path: "save.json"))
+        var progress = PlayerProgress.newPlayer
+        progress.trainingTokens = 5_000
+        progress.setRank(10, for: .impact)
+        let gameStore = GameStore(progress: progress, settings: .init(), persistence: persistence)
+
+        #expect(gameStore.purchase(.impact))
+        #expect(gameStore.progress.rank(for: .impact) == 10)
+        #expect(gameStore.progress.prestigeCount(for: .impact) == 1)
+        #expect(gameStore.progress.trainingTokens == 2_400)
+
+        #expect(gameStore.purchase(.impact))
+        #expect(gameStore.progress.rank(for: .impact) == 11)
+        #expect(gameStore.progress.prestigeCount(for: .impact) == 1)
+        #expect(gameStore.progress.trainingTokens == 1_100)
+        #expect(try persistence.load().prestigeCount(for: .impact) == 1)
+    }
+
+    @Test func prestigeProgressUsesTenCirclesAcrossNonlinearLevelRanges() {
+        #expect(UpgradePrestigeRules.segment(level: 1, prestigeCount: 0).filled == 1)
+        #expect(UpgradePrestigeRules.segment(level: 10, prestigeCount: 0).filled == 10)
+        #expect(UpgradePrestigeRules.segment(level: 10, prestigeCount: 1).filled == 0)
+        #expect(UpgradePrestigeRules.segment(level: 15, prestigeCount: 1).filled == 5)
+        #expect(UpgradePrestigeRules.segment(level: 35, prestigeCount: 2).filled == 5)
+        #expect(UpgradePrestigeRules.segment(level: 75, prestigeCount: 3).filled == 5)
+        #expect(UpgradePrestigeRules.segment(level: 150, prestigeCount: 4).filled == 5)
+        #expect(UpgradePrestigeRules.segment(level: 200, prestigeCount: 5).filled == 10)
+    }
+
+    @Test func existingHighLevelUpgradesReceiveRequiredPrestigeBadges() {
+        var progress = PlayerProgress.newPlayer
+        progress.schemaVersion = 6
+        progress.setRank(21, for: .impact)
+
+        progress.reconcileUnlockedContent()
+
+        #expect(progress.schemaVersion == 7)
+        #expect(progress.prestigeCount(for: .impact) == 2)
+        #expect(progress.rank(for: .impact) == 21)
+    }
+
     @Test func finishRetainsCreditedRunTokensWithoutDoubleCounting() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let persistence = FileProgressStore(fileURL: directory.appending(path: "save.json"))
@@ -80,7 +129,7 @@ struct ProgressStoreTests {
         #expect(try persistence.load().trainingTokens == 12)
     }
 
-    @Test func clearingEarthUnlocksVoltOnlyOnceAndUnlocksMars() throws {
+    @Test func clearingEarthUnlocksVoltOnlyOnceAndUnlocksMoon() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let persistence = FileProgressStore(fileURL: directory.appending(path: "save.json"))
         var progress = PlayerProgress.newPlayer
@@ -104,7 +153,7 @@ struct ProgressStoreTests {
         }
     }
 
-    @Test func existingEarthCompletionRetroactivelyUnlocksMarsAndVolt() {
+    @Test func existingEarthCompletionRetroactivelyUnlocksMoonAndVolt() {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         var progress = PlayerProgress.newPlayer
         progress.highestUnlockedLevel = 10
@@ -118,18 +167,67 @@ struct ProgressStoreTests {
         #expect(gameStore.progress.unlockedCharacters.contains(.volt))
     }
 
-    @Test func worldSelectionAcceptsUnlockedMarsAndRejectsLockedMars() {
+    @Test func completedLegacySecondWorldBecomesCompletedMoonAndUnlocksMars() {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        var progress = PlayerProgress.newPlayer
+        progress.schemaVersion = 4
+        progress.highestUnlockedLevel = 20
+        progress.levelRecords[10] = .init(completed: true, bestTokens: 100, bestStamina: 20)
+        progress.levelRecords[20] = .init(completed: true, bestTokens: 200, bestStamina: 25)
+        progress.unlockedCharacters = [.ace, .volt, .nova, .aegis]
+
+        let gameStore = GameStore(
+            progress: progress,
+            settings: .init(),
+            persistence: FileProgressStore(fileURL: directory.appending(path: "save.json"))
+        )
+
+        #expect(gameStore.progress.schemaVersion == 7)
+        #expect(gameStore.progress.highestUnlockedLevel == 21)
+        #expect(gameStore.progress.unlockedCharacters == [.ace, .volt, .nova])
+        #expect(GameContent.isWorldUnlocked(.mars, progress: gameStore.progress))
+    }
+
+    @Test func worldSelectionFollowsEarthMoonMarsOrder() {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let persistence = FileProgressStore(fileURL: directory.appending(path: "save.json"))
         let lockedStore = GameStore(progress: .newPlayer, settings: .init(), persistence: persistence)
+        #expect(!lockedStore.selectWorld(.moon))
         #expect(!lockedStore.selectWorld(.mars))
         #expect(lockedStore.selectedWorld == .earth)
 
         var unlockedProgress = PlayerProgress.newPlayer
         unlockedProgress.highestUnlockedLevel = 11
         let unlockedStore = GameStore(progress: unlockedProgress, settings: .init(), persistence: persistence)
-        #expect(unlockedStore.selectWorld(.mars))
-        #expect(unlockedStore.selectedWorld == .mars)
+        #expect(unlockedStore.selectWorld(.moon))
+        #expect(!unlockedStore.selectWorld(.mars))
+        #expect(unlockedStore.selectedWorld == .moon)
+
+        unlockedProgress.highestUnlockedLevel = 21
+        let marsStore = GameStore(progress: unlockedProgress, settings: .init(), persistence: persistence)
+        #expect(marsStore.selectWorld(.mars))
+        #expect(marsStore.selectedWorld == .mars)
+    }
+
+    @Test func planetJourneyOpensOnTheActivePlanetsPage() {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let persistence = FileProgressStore(fileURL: directory.appending(path: "save.json"))
+
+        for world in WorldID.allCases {
+            var progress = PlayerProgress.newPlayer
+            progress.highestUnlockedLevel = GameContent.world(world).levelRange.lowerBound
+            let store = GameStore(progress: progress, settings: .init(), persistence: persistence)
+            #expect(store.selectWorld(world))
+
+            store.openPlanetJourney()
+
+            let destinationIndex = WorldJourneyCatalog.destinations.firstIndex {
+                $0.world == world
+            }
+            #expect(store.route == .campaign(.planets(
+                page: (destinationIndex ?? 0) / WorldJourneyCatalog.pageSize
+            )))
+        }
     }
 
     @Test func rosterRejectsLockedCharacterAndPersistsUnlockedSelection() throws {
@@ -159,14 +257,14 @@ struct ProgressStoreTests {
     }
 
     @Test func expectedAudioAssetsAreBundled() {
-        let names = ["kick", "impact", "coin", "heal", "confirm", "victory", "defeat", "boss-phase", "music-calm", "music-pressure", "music-boss",
+        let names = ["kick", "kick-2", "kick-3", "impact", "impact-2", "impact-3", "coin", "heal", "confirm", "victory", "defeat", "boss-phase", "music-calm", "music-pressure", "music-boss",
                      "ui-tap", "ui-whoosh", "ui-purchase", "ui-claim", "ui-fanfare", "ui-draft", "ui-locked", "ui-combo"]
         for name in names {
             #expect(Bundle.main.url(forResource: name, withExtension: "wav") != nil)
         }
     }
 
-    @Test func versionTwoSaveMigratesToFourWithCharacterDefaults() throws {
+    @Test func versionTwoSaveMigratesToSixWithCurrentDefaults() throws {
         let json = """
         {
           "schemaVersion": 2,
@@ -182,7 +280,7 @@ struct ProgressStoreTests {
         """
         var progress = try JSONDecoder().decode(PlayerProgress.self, from: Data(json.utf8))
         progress.reconcileUnlockedContent()
-        #expect(progress.schemaVersion == 4)
+        #expect(progress.schemaVersion == 7)
         #expect(progress.trainingTokens == 321)
         #expect(progress.lifetimeStats == LifetimeStats())
         #expect(progress.dailyReward == DailyRewardState())
@@ -192,6 +290,7 @@ struct ProgressStoreTests {
         #expect(progress.unlockedCharacters == [.ace])
         #expect(progress.selectedCharacter == .ace)
         #expect(!progress.hasSeenOnboarding)
+        #expect(progress.seenCampaignBriefingLevels == [1, 2, 3, 4])
         #expect(progress.rank(for: .impact) == 2)
     }
 }

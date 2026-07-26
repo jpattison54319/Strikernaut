@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CampaignBriefingView: View {
+    @Environment(GameStore.self) private var store
     let level: LevelDefinition
     let discoveries: [CampaignDiscovery]
     let session: GameSessionModel
@@ -48,6 +49,7 @@ struct CampaignBriefingView: View {
                 .scrollIndicators(.hidden)
 
                 Button("Kick Off", systemImage: "play.fill") {
+                    store.uiAudio.requestFeedback(.impact)
                     session.startCampaignLevel()
                 }
                 .buttonStyle(PrimaryGameButton())

@@ -4,14 +4,26 @@ struct UpgradeCardView: View {
     @Environment(GameStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var successFeedback = 0
     @State private var justPurchased = false
     @State private var flashTask: Task<Void, Never>?
+    @State private var badgeTask: Task<Void, Never>?
+    @State private var badgeSlamTier: UpgradePrestigeTier?
+    @State private var badgeSlamSettled = false
     let track: UpgradeTrack
 
     var body: some View {
         let rank = store.progress.rank(for: track)
-        let cost = UpgradeRules.cost(forNextRank: rank)
+        let prestigeCount = store.progress.prestigeCount(for: track)
+        let isPrestigePurchase = UpgradePrestigeRules.requiresPrestige(
+            level: rank,
+            prestigeCount: prestigeCount
+        )
+        let progressSegment = UpgradePrestigeRules.segment(level: rank, prestigeCount: prestigeCount)
+        let earnedTiers = Array(UpgradePrestigeRules.earnedTiers(prestigeCount: prestigeCount))
+        let cost = UpgradePrestigeRules.purchaseCost(
+            level: rank,
+            prestigeCount: prestigeCount
+        )
         let affordable = store.progress.trainingTokens >= cost
         let accent = UpgradePresentation.accent(for: track)
         let effect = UpgradePresentation.effect(for: track, rank: rank)
@@ -59,36 +71,88 @@ struct UpgradeCardView: View {
             Divider().overlay(.white.opacity(0.12))
 
             controlLayout {
-                VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.compactSpacing) {
-                    Text("RANK \(rank) • UNLIMITED")
-                        .font(GoalRushTheme.Typography.metric(size: 12, relativeTo: .caption))
-                        .foregroundStyle(.white.opacity(0.72))
-                    UpgradeRankSockets(rank: rank, accent: accent)
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(spacing: 8) {
+                        Text("LEVEL \(rank)")
+                            .font(GoalRushTheme.Typography.metric(size: 25, relativeTo: .title3))
+                            .foregroundStyle(accent)
+                            .monospacedDigit()
+                            .accessibilityLabel("Current level \(rank)")
+                            .accessibilityIdentifier("upgrade-rank-\(track.rawValue)")
+
+                        if let nextTier = UpgradePrestigeRules.nextTier(prestigeCount: prestigeCount) {
+                            Text(isPrestigePurchase ? "\(nextTier.title.uppercased()) READY" : "TO \(nextTier.title.uppercased())")
+                                .font(GoalRushTheme.Typography.metric(size: 10, relativeTo: .caption2))
+                                .foregroundStyle(isPrestigePurchase ? nextTier.badgeColor : .white.opacity(0.55))
+                        } else {
+                            Text("MAX PRESTIGE")
+                                .font(GoalRushTheme.Typography.metric(size: 10, relativeTo: .caption2))
+                                .foregroundStyle(UpgradePrestigeTier.diamond.badgeColor)
+                        }
+                    }
+
+                    UpgradeLevelPips(
+                        filledCount: progressSegment.filled,
+                        accent: accent,
+                        rangeStart: progressSegment.start,
+                        rangeEnd: progressSegment.end
+                    )
+
+                    if let highestTier = earnedTiers.last {
+                        HStack(spacing: 6) {
+                            ForEach(earnedTiers) { tier in
+                                UpgradePrestigeBadge(tier: tier, compact: true)
+                            }
+                            Text(highestTier.title.uppercased())
+                                .font(GoalRushTheme.Typography.metric(size: 10, relativeTo: .caption2))
+                                .foregroundStyle(highestTier.badgeColor)
+                                .accessibilityIdentifier("upgrade-prestige-\(highestTier.title.lowercased())")
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 Button(action: purchase) {
                     Label {
-                        Text(affordable ? cost.formatted() : "Need \(cost.formatted())")
+                        Text(buttonTitle(
+                            affordable: affordable,
+                            cost: cost,
+                            isPrestige: isPrestigePurchase
+                        ))
                             .monospacedDigit()
                     } icon: {
-                        Image(systemName: affordable ? "hexagon.fill" : "lock.fill")
+                        if !affordable {
+                            Image(systemName: "lock.fill")
+                        } else if isPrestigePurchase {
+                            Image(systemName: "medal.fill")
+                        } else {
+                            TrainingTokenIcon(size: 20)
+                        }
                     }
                 }
                 .buttonStyle(UpgradePurchaseButtonStyle(accent: accent))
                 .disabled(!affordable)
-                .accessibilityLabel("Upgrade \(UpgradeRules.title(for: track)) for \(cost) Training Tokens")
+                .accessibilityLabel(
+                    "\(isPrestigePurchase ? "Prestige" : "Upgrade") \(UpgradeRules.title(for: track)) for \(cost) Training Tokens"
+                )
                 .accessibilityValue(affordable ? "Available" : "Not enough Training Tokens")
                 .accessibilityIdentifier("upgrade-purchase-\(track.rawValue)")
             }
 
             effectLayout {
-                Image(systemName: "arrow.up.right.circle.fill")
+                Image(systemName: isPrestigePurchase ? "medal.fill" : "arrow.up.right.circle.fill")
                     .foregroundStyle(accent)
                     .accessibilityHidden(true)
-                Text("\(effect.current) → \(effect.next)")
-                Text(effect.improvement)
-                    .foregroundStyle(accent)
+                if isPrestigePurchase,
+                   let nextTier = UpgradePrestigeRules.nextTier(prestigeCount: prestigeCount) {
+                    Text("Prestige now to add the \(nextTier.title) badge")
+                    Text("Unlocks Level \(rank + 1)")
+                        .foregroundStyle(nextTier.badgeColor)
+                } else {
+                    Text("\(effect.current) → \(effect.next)")
+                    Text(effect.improvement)
+                        .foregroundStyle(accent)
+                }
             }
             .font(GoalRushTheme.Typography.metric(size: 12, relativeTo: .caption))
             .foregroundStyle(.white.opacity(0.74))
@@ -105,21 +169,48 @@ struct UpgradeCardView: View {
                 .stroke(GoalRushTheme.gold, lineWidth: 2)
                 .opacity(justPurchased ? 1 : 0)
         }
-        .sensoryFeedback(trigger: successFeedback) { _, _ in
-            store.settings.hapticsEnabled ? .success : nil
+        .overlay {
+            if let badgeSlamTier {
+                UpgradePrestigeBadge(tier: badgeSlamTier, compact: false)
+                    .scaleEffect(badgeSlamSettled ? 0.92 : 2)
+                    .rotationEffect(.degrees(badgeSlamSettled ? 0 : -10))
+                    .opacity(badgeSlamSettled ? 1 : 0)
+                    .shadow(color: badgeSlamTier.badgeColor.opacity(0.8), radius: 16)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
         .animation(reduceMotion || store.settings.reducedFlashes ? nil : .snappy, value: rank)
         .animation(reduceMotion || store.settings.reducedFlashes ? nil : .easeOut(duration: 0.35), value: justPurchased)
         .onDisappear {
             flashTask?.cancel()
+            badgeTask?.cancel()
             justPurchased = false
+            badgeSlamTier = nil
         }
     }
 
     private func purchase() {
+        let previousPrestigeCount = store.progress.prestigeCount(for: track)
         if store.purchase(track) {
             store.uiAudio.play(.purchase)
-            successFeedback += 1
+            let newPrestigeCount = store.progress.prestigeCount(for: track)
+            if newPrestigeCount > previousPrestigeCount,
+               let tier = UpgradePrestigeTier(rawValue: newPrestigeCount),
+               !reduceMotion,
+               !store.settings.reducedFlashes {
+                badgeTask?.cancel()
+                badgeSlamTier = tier
+                badgeSlamSettled = false
+                badgeTask = Task { @MainActor in
+                    await Task.yield()
+                    withAnimation(.spring(duration: 0.42, bounce: 0.48)) {
+                        badgeSlamSettled = true
+                    }
+                    try? await Task.sleep(for: .milliseconds(900))
+                    badgeSlamTier = nil
+                }
+            }
             guard !reduceMotion, !store.settings.reducedFlashes else { return }
             flashTask?.cancel()
             justPurchased = true
@@ -130,6 +221,93 @@ struct UpgradeCardView: View {
             }
         } else {
             store.uiAudio.play(.locked, volume: 0.5)
+        }
+    }
+
+    private func buttonTitle(affordable: Bool, cost: Int, isPrestige: Bool) -> String {
+        guard affordable else { return "Need \(cost.formatted())" }
+        return isPrestige ? "Prestige \(cost.formatted())" : cost.formatted()
+    }
+}
+
+private struct UpgradeLevelPips: View {
+    let filledCount: Int
+    let accent: Color
+    let rangeStart: Int
+    let rangeEnd: Int?
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<10, id: \.self) { index in
+                Circle()
+                    .fill(index < filledCount ? accent : .white.opacity(0.10))
+                    .frame(width: 11, height: 11)
+                    .overlay {
+                        Circle().stroke(
+                            index < filledCount ? .white.opacity(0.52) : .white.opacity(0.22),
+                            lineWidth: 1
+                        )
+                    }
+                    .shadow(color: index < filledCount ? accent.opacity(0.55) : .clear, radius: 3)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            rangeEnd.map {
+                "\(filledCount) of 10 progress circles filled for levels \(rangeStart) through \($0)"
+            } ?? "All prestige progress circles filled"
+        )
+    }
+}
+
+private struct UpgradePrestigeBadge: View {
+    let tier: UpgradePrestigeTier
+    let compact: Bool
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [.white.opacity(0.92), tier.badgeColor, tier.badgeColor.opacity(0.58)],
+                        center: .topLeading,
+                        startRadius: 1,
+                        endRadius: compact ? 18 : 40
+                    )
+                )
+            Circle()
+                .stroke(GoalRushTheme.ink, lineWidth: compact ? 1.5 : 4)
+            Image(systemName: "star.fill")
+                .font(.system(size: compact ? 9 : 24, weight: .black))
+                .foregroundStyle(GoalRushTheme.navy)
+        }
+        .frame(width: compact ? 24 : 78, height: compact ? 24 : 78)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(tier.title) prestige badge")
+        .accessibilityIdentifier("upgrade-prestige-\(tier.title.lowercased())")
+        .overlay(alignment: .bottom) {
+            if !compact {
+                Text(tier.title.uppercased())
+                    .font(GoalRushTheme.Typography.metric(size: 12, relativeTo: .caption))
+                    .foregroundStyle(GoalRushTheme.navy)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(tier.badgeColor, in: Capsule())
+                    .overlay { Capsule().stroke(GoalRushTheme.ink, lineWidth: 2) }
+                    .offset(y: 11)
+            }
+        }
+    }
+}
+
+private extension UpgradePrestigeTier {
+    var badgeColor: Color {
+        switch self {
+        case .bronze: Color(red: 0.72, green: 0.38, blue: 0.16)
+        case .silver: Color(red: 0.78, green: 0.84, blue: 0.90)
+        case .gold: GoalRushTheme.gold
+        case .platinum: Color(red: 0.55, green: 0.88, blue: 0.94)
+        case .diamond: Color(red: 0.50, green: 0.82, blue: 1)
         }
     }
 }
@@ -189,58 +367,6 @@ private struct WorkshopBolt: View {
                     .frame(width: 4, height: 1)
             }
             .accessibilityHidden(true)
-    }
-}
-
-private struct UpgradeRankSockets: View {
-    let rank: Int
-    let accent: Color
-
-    var body: some View {
-        HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
-            ForEach(0..<UpgradeRules.masteryRank, id: \.self) { index in
-                ZStack {
-                    Circle()
-                        .fill(socketFill(index: index))
-                    Circle()
-                        .stroke(socketStroke(index: index), lineWidth: index == rank ? 2 : 1)
-                    Image(systemName: rank > UpgradeRules.masteryRank && index == UpgradeRules.masteryRank - 1
-                        ? "infinity"
-                        : socketIcon(index: index))
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(socketIconColor(index: index))
-                }
-                .frame(width: 26, height: 26)
-                .shadow(color: index < rank ? accent.opacity(0.26) : .clear, radius: 5)
-            }
-        }
-        .frame(minHeight: GoalRushTheme.Metrics.minimumTapTarget, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Purchased upgrades")
-        .accessibilityValue("Rank \(rank), unlimited")
-    }
-
-    private func socketFill(index: Int) -> Color {
-        if index < rank { return accent }
-        if index == rank { return accent.opacity(0.12) }
-        return .black.opacity(0.24)
-    }
-
-    private func socketStroke(index: Int) -> Color {
-        if index <= rank { return accent.opacity(0.84) }
-        return .white.opacity(0.22)
-    }
-
-    private func socketIcon(index: Int) -> String {
-        if index < rank { return "checkmark" }
-        if index == rank { return "plus" }
-        return "circle.fill"
-    }
-
-    private func socketIconColor(index: Int) -> Color {
-        if index < rank { return GoalRushTheme.navy }
-        if index == rank { return accent }
-        return .white.opacity(0.16)
     }
 }
 

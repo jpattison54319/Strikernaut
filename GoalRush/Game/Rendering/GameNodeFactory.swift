@@ -21,22 +21,28 @@ enum GameNodeFactory {
             return (name, texture)
         })
     }()
+    static let renderedEnemyAssetNames: [EnemyKind: String] = [
+        .coneRunner: "EarthScoutRunner",
+        .dummyDefender: "EarthBlockerDefender",
+        .tackleBot: "EarthTackleBot",
+        .keeperDrone: "EarthAegisKeeper",
+        .ballLauncher: "EarthBallLauncher",
+        .titanKeeper: "EarthTitanKeeper",
+        .regolithRunner: "MoonRegolithRunner",
+        .lunarHopper: "MoonLunarHopper",
+        .orbitDrone: "MoonOrbitDrone",
+        .eclipseKeeper: "MoonEclipseKeeper",
+        .gravityStriker: "MoonGravityStriker",
+        .lunarWarden: "MoonLunarWarden",
+        .dustSprite: "MarsDustSprite",
+        .roverRaider: "MarsRoverRaider",
+        .craterCrawler: "MarsCraterCrawler",
+        .saucerKeeper: "MarsSaucerKeeper",
+        .plasmaStriker: "MarsPlasmaStriker",
+        .marsColossus: "MarsColossus"
+    ]
     private static let renderedEnemyTextures: [EnemyKind: SKTexture] = {
-        let assets: [EnemyKind: String] = [
-            .coneRunner: "EarthScoutRunner",
-            .dummyDefender: "EarthBlockerDefender",
-            .tackleBot: "EarthTackleBot",
-            .keeperDrone: "EarthAegisKeeper",
-            .ballLauncher: "EarthBallLauncher",
-            .titanKeeper: "EarthTitanKeeper",
-            .dustSprite: "MarsDustSprite",
-            .roverRaider: "MarsRoverRaider",
-            .craterCrawler: "MarsCraterCrawler",
-            .saucerKeeper: "MarsSaucerKeeper",
-            .plasmaStriker: "MarsPlasmaStriker",
-            .marsColossus: "MarsColossus"
-        ]
-        return assets.mapValues { name in
+        renderedEnemyAssetNames.mapValues { name in
             let texture = SKTexture(imageNamed: name)
             texture.filteringMode = .linear
             return texture
@@ -49,6 +55,11 @@ enum GameNodeFactory {
             .tacticsBoard: "EarthTacticsBoard",
             .coneBarricade: "EarthConeBarricade",
             .equipmentTrunk: "EarthEquipmentTrunk",
+            .roverBattery: "EarthBallCart",
+            .satelliteRelay: "EarthTacticsBoard",
+            .regolithBarricade: "EarthConeBarricade",
+            .gravityCell: "EarthWaterCooler",
+            .lunarVault: "EarthEquipmentTrunk",
             .oxygenPod: "MarsOxygenPod",
             .meteorCrate: "MarsMeteorCrate",
             .holoGate: "MarsHoloGate",
@@ -352,8 +363,13 @@ enum GameNodeFactory {
         case .enemy(let enemy): decorateEnemy(root, enemy: enemy)
         case .fieldObject(let object): decorateObject(root, object: object)
         case .powerUp(let ability): decoratePowerUp(root, ability: ability)
+        case .volatileCore: decorateVolatileCore(root)
         }
         if case .powerUp = kind {
+            root.cacheRenderNodes()
+            return root
+        }
+        if case .volatileCore = kind {
             root.cacheRenderNodes()
             return root
         }
@@ -419,17 +435,17 @@ enum GameNodeFactory {
         }
 
         let movement: (cadence: CGFloat, stride: CGFloat, bob: CGFloat, sway: CGFloat) = switch enemy {
-        case .tackleBot, .craterCrawler:
+        case .tackleBot, .craterCrawler, .lunarHopper:
             (11.2, 0.43, 3.8, 0.045)
-        case .dustSprite:
+        case .dustSprite, .regolithRunner:
             (9.6, 0.36, 3.4, 0.035)
-        case .dummyDefender, .roverRaider:
+        case .dummyDefender, .roverRaider, .eclipseKeeper:
             (6.3, 0.28, 2.5, 0.024)
-        case .keeperDrone:
+        case .keeperDrone, .orbitDrone:
             (4.7, 0.21, 2.0, 0.018)
-        case .ballLauncher, .plasmaStriker:
+        case .ballLauncher, .plasmaStriker, .gravityStriker:
             (5.5, 0.24, 2.2, 0.020)
-        case .titanKeeper, .marsColossus:
+        case .titanKeeper, .lunarWarden, .marsColossus:
             (3.5, 0.15, 2.8, 0.014)
         case .coneRunner, .saucerKeeper:
             (6, 0.2, 2, 0.02)
@@ -507,23 +523,25 @@ enum GameNodeFactory {
         case .ice: ("SoccerBallIce", color(0.04, 0.64, 1), 34)
         case .reverse: ("SoccerBallReverse", color(0.58, 0.12, 1), 34)
         case .split: ("SoccerBallSplit", color(0.02, 0.68, 0.22), 36)
+        case .heatSeeking: ("SoccerBallRapidFire", color(0.10, 0.86, 1), 34)
+        case .orbitShot: ("SoccerBallReverse", color(0.55, 0.48, 1), 36)
+        case .solarPierce: ("SoccerBallFire", color(1, 0.72, 0.08), 36)
         case nil: ("SoccerBall", color(0.05, 0.30, 0.78), 27)
         }
         ball.texture = projectileTextures[presentation.asset]
         ball.size = CGSize(width: presentation.size, height: presentation.size)
         ball.color = .white
         ball.colorBlendFactor = 0
-        halo.strokeColor = critical ? color(1, 0.78, 0.12) : .clear
-        halo.glowWidth = critical ? 7 : 0
+        halo.strokeColor = temporaryAbility == .heatSeeking
+            ? color(0.10, 0.86, 1)
+            : (critical ? color(1, 0.78, 0.12) : .clear)
+        halo.glowWidth = temporaryAbility == .heatSeeking ? 7 : (critical ? 7 : 0)
         trail.fillColor = presentation.accent.withAlphaComponent(0.46)
     }
 
     static func rewardToken() -> SKNode {
-        let token = SKShapeNode(path: hexagon(radius: 13))
-        token.fillColor = color(1, 0.72, 0.10)
-        token.strokeColor = .white
-        token.lineWidth = 2
-        token.glowWidth = 4
+        let token = SKSpriteNode(imageNamed: "TrainingToken")
+        token.size = CGSize(width: 31, height: 31)
         return token
     }
 
@@ -624,6 +642,12 @@ enum GameNodeFactory {
             case .keeperDrone: .init(width: 78, height: 76, centerY: 10)
             case .ballLauncher: .init(width: 80, height: 78, centerY: 7)
             case .titanKeeper: .init(width: 86, height: 90, centerY: 13)
+            case .regolithRunner: .init(width: 60, height: 72, centerY: 4)
+            case .lunarHopper: .init(width: 82, height: 68, centerY: 9)
+            case .orbitDrone: .init(width: 82, height: 80, centerY: 10)
+            case .eclipseKeeper: .init(width: 76, height: 78, centerY: 5)
+            case .gravityStriker: .init(width: 82, height: 88, centerY: 8)
+            case .lunarWarden: .init(width: 100, height: 106, centerY: 13)
             case .dustSprite: .init(width: 60, height: 70, centerY: 4)
             case .roverRaider: .init(width: 76, height: 78, centerY: 5)
             case .craterCrawler: .init(width: 88, height: 62, centerY: 4)
@@ -638,6 +662,11 @@ enum GameNodeFactory {
             case .tacticsBoard: .init(width: 62, height: 84, centerY: 11)
             case .coneBarricade: .init(width: 92, height: 42, centerY: -5)
             case .equipmentTrunk: .init(width: 88, height: 52, centerY: 0)
+            case .roverBattery: .init(width: 74, height: 76, centerY: 8)
+            case .satelliteRelay: .init(width: 70, height: 88, centerY: 11)
+            case .regolithBarricade: .init(width: 94, height: 48, centerY: -4)
+            case .gravityCell: .init(width: 58, height: 86, centerY: 10)
+            case .lunarVault: .init(width: 90, height: 58, centerY: 0)
             case .oxygenPod: .init(width: 62, height: 88, centerY: 12)
             case .meteorCrate: .init(width: 78, height: 92, centerY: 12)
             case .holoGate: .init(width: 98, height: 58, centerY: 0)
@@ -646,6 +675,35 @@ enum GameNodeFactory {
             }
         case .powerUp:
             return .init(width: 58, height: 64, centerY: 2)
+        case .volatileCore:
+            return .init(width: 54, height: 54, centerY: 0)
+        }
+    }
+
+    private static func decorateVolatileCore(_ root: SKNode) {
+        root.addChild(ellipse(size: .init(width: 46, height: 12), color: .black.withAlphaComponent(0.26), y: -27))
+        let outer = circle(radius: 25, color: color(0.42, 0.03, 0.08).withAlphaComponent(0.88))
+        outer.strokeColor = color(1, 0.46, 0.04)
+        outer.lineWidth = 3
+        outer.glowWidth = 10
+        root.addChild(outer)
+        let core = circle(radius: 13, color: color(1, 0.64, 0.06))
+        core.strokeColor = .white
+        core.lineWidth = 2
+        root.addChild(core)
+        for index in 0..<6 {
+            let ray = rect(
+                size: .init(width: 4, height: 12),
+                color: color(1, 0.28, 0.02),
+                radius: 2,
+                y: 33,
+                rotation: CGFloat(index) * .pi / 3
+            )
+            ray.position = CGPoint(
+                x: sin(CGFloat(index) * .pi / 3) * 4,
+                y: cos(CGFloat(index) * .pi / 3) * 4
+            )
+            outer.addChild(ray)
         }
     }
 
@@ -849,6 +907,9 @@ enum GameNodeFactory {
         case .ice: color(0.18, 0.84, 1)
         case .reverse: color(0.72, 0.24, 1)
         case .split: color(0.18, 0.92, 0.44)
+        case .heatSeeking: color(0.12, 0.88, 1)
+        case .orbitShot: color(0.58, 0.48, 1)
+        case .solarPierce: color(1, 0.72, 0.08)
         }
     }
 
@@ -860,6 +921,9 @@ enum GameNodeFactory {
         case .ice: "✦"
         case .reverse: "↶"
         case .split: "•••"
+        case .heatSeeking: "◎"
+        case .orbitShot: "◉"
+        case .solarPierce: "☀"
         }
     }
 
@@ -878,6 +942,18 @@ enum GameNodeFactory {
             renderedEnemySprite(root, enemy: enemy, size: 92)
         case .titanKeeper:
             renderedEnemySprite(root, enemy: enemy, size: 96)
+        case .regolithRunner:
+            renderedEnemySprite(root, enemy: enemy, size: 80)
+        case .lunarHopper:
+            renderedEnemySprite(root, enemy: enemy, size: 90)
+        case .orbitDrone:
+            renderedEnemySprite(root, enemy: enemy, size: 92)
+        case .eclipseKeeper:
+            renderedEnemySprite(root, enemy: enemy, size: 90)
+        case .gravityStriker:
+            renderedEnemySprite(root, enemy: enemy, size: 96)
+        case .lunarWarden:
+            renderedEnemySprite(root, enemy: enemy, size: 110)
         case .dustSprite:
             renderedEnemySprite(root, enemy: enemy, size: 80)
         case .roverRaider:
@@ -917,6 +993,12 @@ enum GameNodeFactory {
         case .keeperDrone: 9
         case .ballLauncher: 6
         case .titanKeeper: 12.5
+        case .regolithRunner: 3
+        case .lunarHopper: 8
+        case .orbitDrone: 9
+        case .eclipseKeeper: 5
+        case .gravityStriker: 8
+        case .lunarWarden: 13
         case .dustSprite: 3
         case .roverRaider: 5
         case .craterCrawler: 5
@@ -934,6 +1016,12 @@ enum GameNodeFactory {
         case .keeperDrone: .init(width: 58, height: 11)
         case .ballLauncher: .init(width: 38, height: 8)
         case .titanKeeper: .init(width: 62, height: 12)
+        case .regolithRunner: .init(width: 38, height: 9)
+        case .lunarHopper: .init(width: 50, height: 10)
+        case .orbitDrone: .init(width: 62, height: 11)
+        case .eclipseKeeper: .init(width: 56, height: 11)
+        case .gravityStriker: .init(width: 54, height: 10)
+        case .lunarWarden: .init(width: 80, height: 15)
         case .dustSprite: .init(width: 38, height: 9)
         case .roverRaider: .init(width: 58, height: 12)
         case .craterCrawler: .init(width: 68, height: 12)
@@ -960,6 +1048,12 @@ enum GameNodeFactory {
             case .keeperDrone: 54
             case .ballLauncher: 50
             case .titanKeeper: 66
+            case .regolithRunner: 44
+            case .lunarHopper: 50
+            case .orbitDrone: 55
+            case .eclipseKeeper: 52
+            case .gravityStriker: 58
+            case .lunarWarden: 72
             case .dustSprite: 44
             case .roverRaider: 50
             case .craterCrawler: 45
@@ -970,14 +1064,16 @@ enum GameNodeFactory {
             }
         case .fieldObject(let object):
             return switch object {
-            case .coneBarricade, .equipmentTrunk, .holoGate: 40
+            case .coneBarricade, .equipmentTrunk, .holoGate, .regolithBarricade, .lunarVault: 40
             case .ballCart: 53
-            case .waterCooler, .tacticsBoard: 61
+            case .waterCooler, .tacticsBoard, .roverBattery, .satelliteRelay, .gravityCell: 61
             case .oxygenPod: 64
             case .meteorCrate, .crystalBarricade, .artifactVault: 68
             }
         case .powerUp:
             return 43
+        case .volatileCore:
+            return 0
         }
     }
 
@@ -1127,6 +1223,10 @@ enum GameNodeFactory {
         sprite.name = "body-sprite"
         sprite.size = CGSize(width: presentation.size, height: presentation.size)
         sprite.position.y = presentation.verticalOffset
+        if object.isLunar {
+            sprite.color = color(0.58, 0.72, 1)
+            sprite.colorBlendFactor = 0.42
+        }
         rig.addChild(sprite)
     }
 
@@ -1141,6 +1241,11 @@ enum GameNodeFactory {
         case .tacticsBoard: (94, 16, .init(width: 54, height: 10), earthShadow)
         case .coneBarricade: (100, -8, .init(width: 78, height: 10), earthShadow)
         case .equipmentTrunk: (96, 0, .init(width: 76, height: 12), earthShadow)
+        case .roverBattery: (90, 13, .init(width: 56, height: 11), earthShadow)
+        case .satelliteRelay: (96, 16, .init(width: 58, height: 10), earthShadow)
+        case .regolithBarricade: (102, -7, .init(width: 80, height: 10), earthShadow)
+        case .gravityCell: (92, 15, .init(width: 44, height: 9), earthShadow)
+        case .lunarVault: (98, 0, .init(width: 78, height: 12), earthShadow)
         case .oxygenPod: (96, 17, .init(width: 54, height: 11), marsShadow)
         case .meteorCrate: (102, 19, .init(width: 68, height: 13), marsShadow)
         case .holoGate: (106, 0, .init(width: 90, height: 13), marsShadow)
@@ -1331,5 +1436,27 @@ enum GameNodeFactory {
 
     private static func color(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat) -> SKColor {
         SKColor(red: red, green: green, blue: blue, alpha: 1)
+    }
+}
+
+private extension EnemyKind {
+    var isLunar: Bool {
+        switch self {
+        case .regolithRunner, .lunarHopper, .orbitDrone, .eclipseKeeper, .gravityStriker, .lunarWarden:
+            true
+        default:
+            false
+        }
+    }
+}
+
+private extension FieldObjectKind {
+    var isLunar: Bool {
+        switch self {
+        case .roverBattery, .satelliteRelay, .regolithBarricade, .gravityCell, .lunarVault:
+            true
+        default:
+            false
+        }
     }
 }

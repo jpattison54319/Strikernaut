@@ -31,9 +31,6 @@ struct EndlessHubView: View {
                 .presentationDetents([.medium])
         }
         .onAppear(perform: ensureSelectedWorldIsUnlocked)
-        .sensoryFeedback(trigger: store.selectedWorld) { _, _ in
-            store.settings.hapticsEnabled ? .selection : nil
-        }
     }
 
     private var destinationBar: some View {

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct HomeAccessibilityAction: View {
     let title: String
-    let subtitle: String
+    let subtitle: String?
     let systemImage: String
     let badge: String?
     let accent: Color
@@ -10,7 +10,7 @@ struct HomeAccessibilityAction: View {
 
     init(
         title: String,
-        subtitle: String,
+        subtitle: String? = nil,
         systemImage: String,
         badge: String? = nil,
         accent: Color,
@@ -36,9 +36,11 @@ struct HomeAccessibilityAction: View {
                 }
                 .font(GoalRushTheme.Typography.headline)
 
-                Text(subtitle)
-                    .font(GoalRushTheme.Typography.subheadline)
-                    .foregroundStyle(.white.opacity(0.72))
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(GoalRushTheme.Typography.subheadline)
+                        .foregroundStyle(.white.opacity(0.72))
+                }
 
                 if let badge {
                     GameStatusBadge(text: badge, tone: .attention)

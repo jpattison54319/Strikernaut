@@ -25,12 +25,61 @@ final class GoalRushUITests: XCTestCase {
         app.buttons["Home"].tap()
 
         app.buttons["play"].tap()
+        XCTAssertTrue(app.buttons["planet-earth"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["planet-moon"].exists)
+        XCTAssertTrue(app.buttons["planet-mars"].exists)
+        app.buttons["planet-earth"].tap()
         XCTAssertTrue(app.buttons["level-1"].waitForExistence(timeout: 2))
-        XCTAssertFalse(app.buttons["level-2"].isEnabled)
-        app.buttons["Home"].tap()
+        XCTAssertTrue(app.buttons["level-2"].label.localizedCaseInsensitiveContains("locked"))
+        app.buttons["level-1"].tap()
+        XCTAssertFalse(app.otherElements["level-preview"].exists)
+        XCTAssertTrue(app.buttons["briefing-start"].waitForExistence(timeout: 2))
+        app.buttons["briefing-start"].tap()
+        XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 2))
+        app.buttons["pause"].tap()
+        XCTAssertTrue(app.buttons["pause-home"].waitForExistence(timeout: 2))
+        app.buttons["pause-home"].tap()
+        XCTAssertTrue(app.buttons["play"].waitForExistence(timeout: 2))
+
+        app.buttons["play"].tap()
+        XCTAssertTrue(app.buttons["planet-earth"].waitForExistence(timeout: 2))
+        app.buttons["planet-earth"].tap()
+        XCTAssertTrue(app.buttons["level-1"].waitForExistence(timeout: 2))
+        app.buttons["level-1"].tap()
+        XCTAssertFalse(app.buttons["briefing-start"].exists)
+        XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 2))
+        app.buttons["pause"].tap()
+        XCTAssertTrue(app.buttons["pause-home"].waitForExistence(timeout: 2))
+        app.buttons["pause-home"].tap()
+        XCTAssertTrue(app.buttons["play"].waitForExistence(timeout: 2))
+
         app.buttons["upgrades"].tap()
         XCTAssertTrue(app.otherElements["upgrade-impact"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.buttons["upgrade-purchase-impact"].waitForExistence(timeout: 2))
+    }
+
+    func testPlanetPaginationRevealsFutureJupiterAndReturns() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-save", "--screen", "planets"]
+        app.launch()
+
+        let earth = app.buttons["planet-earth"]
+        XCTAssertTrue(earth.waitForExistence(timeout: 3))
+        XCTAssertTrue(earth.isHittable)
+        XCTAssertFalse(app.buttons["planet-jupiter"].isHittable)
+
+        let next = app.buttons["planet-page-next"]
+        XCTAssertTrue(next.exists)
+        next.tap()
+        let jupiter = app.buttons["planet-jupiter"]
+        XCTAssertTrue(jupiter.waitForExistence(timeout: 2))
+        XCTAssertTrue(jupiter.isHittable)
+
+        let previous = app.buttons["planet-page-previous"]
+        XCTAssertTrue(previous.isEnabled)
+        previous.tap()
+        XCTAssertTrue(earth.waitForExistence(timeout: 2))
+        XCTAssertTrue(earth.isHittable)
     }
 
     func testUpgradesPurchaseDirectlyFromMainScreen() {
@@ -49,7 +98,7 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(purchase.waitForExistence(timeout: 2))
         XCTAssertEqual(purchase.label, "Upgrade Impact for 100 Training Tokens")
         XCTAssertTrue(app.staticTexts["WORKSHOP RESERVES"].exists)
-        XCTAssertTrue(app.staticTexts["RANK 0 • UNLIMITED"].exists)
+        XCTAssertTrue(app.staticTexts["upgrade-rank-impact"].exists)
 
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Earth Robot Upgrade Bay"
@@ -62,6 +111,41 @@ final class GoalRushUITests: XCTestCase {
         expectation(for: nextCost, evaluatedWith: purchase)
         waitForExpectations(timeout: 2)
         XCTAssertFalse(app.otherElements["upgrade-detail"].exists)
+    }
+
+    func testLevelTenPrestigeAddsBronzeBadge() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--currency", "5000",
+            "--screen", "upgrades", "--upgrade-level", "10"
+        ]
+        app.launch()
+
+        let impactTrack = app.otherElements["upgrade-impact"]
+        let upgradeList = app.scrollViews.firstMatch
+        for _ in 0..<12 where !impactTrack.exists {
+            upgradeList.swipeUp()
+        }
+        XCTAssertTrue(impactTrack.waitForExistence(timeout: 2))
+
+        let prestige = app.buttons["upgrade-purchase-impact"]
+        XCTAssertTrue(prestige.waitForExistence(timeout: 2))
+        XCTAssertEqual(prestige.label, "Prestige Impact for 2,600 Training Tokens")
+        XCTAssertTrue(prestige.isEnabled)
+        prestige.tap()
+
+        let nextLevel = NSPredicate(format: "label == %@", "Upgrade Impact for 1,300 Training Tokens")
+        expectation(for: nextLevel, evaluatedWith: prestige)
+        waitForExpectations(timeout: 2)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["upgrade-prestige-bronze"].waitForExistence(timeout: 2)
+        )
+        Thread.sleep(forTimeInterval: 1)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Bronze Prestige Upgrade Card"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     func testHomeProgressivelyDisclosesMissionDetails() {
@@ -322,6 +406,23 @@ final class GoalRushUITests: XCTestCase {
         }
     }
 
+    func testHeatSeekingPowerReplacesCurveMaster() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save",
+            "--level", "4",
+            "--fixed-seed", "42",
+            "--temporary-ability", "heatSeeking"
+        ]
+        app.launch()
+        app.buttons["Kick Off"].tap()
+
+        let timer = app.otherElements["temporary-ability-timer"]
+        XCTAssertTrue(timer.waitForExistence(timeout: 3))
+        XCTAssertEqual(timer.label, "Heat Seeking")
+        XCTAssertFalse(app.staticTexts["Curve Master"].exists)
+    }
+
     func testPowerUpTargetAppearsAsATrophy() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -371,19 +472,108 @@ final class GoalRushUITests: XCTestCase {
         app.buttons["Kick Off"].tap()
 
         XCTAssertTrue(app.staticTexts["BOSS • WAVE 5 OF 5"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.otherElements["boss-health"].waitForExistence(timeout: 3))
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Earth Mega Boss Wave"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
 
+    func testRoundEightOpeningWaveNeverShowsBossHUD() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save",
+            "--level", "8",
+            "--fixed-seed", "42",
+            "--campaign-wave", "1",
+            "--boss-preview"
+        ]
+        app.launch()
+        let kickOff = app.buttons["Kick Off"]
+        if kickOff.waitForExistence(timeout: 1) {
+            kickOff.tap()
+        }
+
+        XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["WAVE 1 OF 5"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.otherElements["boss-health"].exists)
+        XCTAssertFalse(app.staticTexts["BOSS • WAVE 1 OF 5"].exists)
+    }
+
+    func testComboFloatsBelowHUDAndUsesFightingGameCountStyle() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save",
+            "--level", "8",
+            "--fixed-seed", "42",
+            "--combo-preview", "7"
+        ]
+        app.launch()
+
+        let combo = app.otherElements["combo-meter"]
+        XCTAssertTrue(combo.waitForExistence(timeout: 3))
+        XCTAssertEqual(combo.label, "Combo times 7")
+        XCTAssertFalse(app.staticTexts["COMBO ×7"].exists)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Floating Fighting Game Combo"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testLevelSixFinalWaveBossIsClearlyIdentified() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save",
+            "--level", "6",
+            "--fixed-seed", "42",
+            "--campaign-wave", "4",
+            "--boss-preview"
+        ]
+        app.launch()
+        app.buttons["Kick Off"].tap()
+
+        XCTAssertTrue(app.otherElements["boss-health"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["WAVE BOSS"].exists)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Level Six Wave Boss"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testEarthHasNoWorldModifierHUD() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save",
+            "--level", "1",
+            "--fixed-seed", "42"
+        ]
+        app.launch()
+        app.buttons["Kick Off"].tap()
+
+        XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.otherElements["world-effect"].exists)
+
+        app.terminate()
+        app.launchArguments = [
+            "--reset-save",
+            "--level", "11",
+            "--fixed-seed", "42"
+        ]
+        app.launch()
+        app.buttons["Kick Off"].tap()
+
+        XCTAssertTrue(app.otherElements["world-effect"].waitForExistence(timeout: 3))
+    }
+
     func testEarthEnemyArtPreviewCapturesEveryRole() {
         let previews: [(level: Int, wave: Int, name: String)] = [
-            (1, 1, "Scout Runner"),
-            (2, 2, "Blocker Defender"),
+            (1, 3, "Scout Runner"),
+            (2, 3, "Blocker Defender"),
             (3, 3, "Tackle Bot"),
             (4, 4, "Aegis Keeper"),
-            (6, 3, "Ball Launcher"),
+            (6, 4, "Ball Launcher"),
             (10, 5, "Titan Keeper")
         ]
 
@@ -413,11 +603,11 @@ final class GoalRushUITests: XCTestCase {
 
     func testMarsEnemyArtPreviewCapturesEveryRole() {
         let previews: [(level: Int, wave: Int, name: String)] = [
-            (11, 1, "Dust Sprite"),
-            (12, 2, "Rover Raider"),
+            (11, 3, "Dust Sprite"),
+            (12, 3, "Rover Raider"),
             (13, 3, "Crater Crawler"),
             (14, 4, "Saucer Keeper"),
-            (16, 3, "Plasma Striker"),
+            (16, 4, "Plasma Striker"),
             (20, 5, "Mars Colossus")
         ]
 
@@ -507,7 +697,7 @@ final class GoalRushUITests: XCTestCase {
         app.launchArguments = ["--reset-save", "--screen", "characters"]
         app.launch()
         XCTAssertTrue(app.buttons["character-ace"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["Clear Level 10"].exists)
+        XCTAssertTrue(app.staticTexts["Clear Earth"].exists)
     }
 
     func testProgressProgressivelyDisclosesTrophies() {
@@ -526,17 +716,17 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertGreaterThan(trophies.count, 0)
     }
 
-    func testUnlockedMarsCampaignTabIsSelectable() {
+    func testUnlockedMarsPlanetOpensItsWorldMap() {
         let app = XCUIApplication()
         app.launchArguments = ["--reset-save", "--unlock-worlds", "--screen", "levels"]
         app.launch()
 
-        let mars = app.buttons["world-mars"]
+        let mars = app.buttons["planet-mars"]
         XCTAssertTrue(mars.waitForExistence(timeout: 3))
         XCTAssertTrue(mars.isEnabled)
         mars.tap()
-        XCTAssertTrue(app.staticTexts["Mars Levels"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.buttons["level-11"].exists)
+        XCTAssertTrue(app.staticTexts["Mars"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["level-21"].exists)
     }
 
     func testCampaignLevelShowsPreviewBeforeLaunch() {
@@ -545,10 +735,12 @@ final class GoalRushUITests: XCTestCase {
         app.launch()
 
         XCTAssertFalse(app.otherElements["level-preview"].exists)
+        XCTAssertTrue(app.buttons["planet-earth"].waitForExistence(timeout: 3))
+        app.buttons["planet-earth"].tap()
         let lockedLevel = app.buttons["level-2"]
-        XCTAssertTrue(lockedLevel.exists)
+        XCTAssertTrue(lockedLevel.waitForExistence(timeout: 2))
         XCTAssertTrue(
-            lockedLevel.label.contains("Clear Earth challenge 1 to unlock"),
+            lockedLevel.label.localizedCaseInsensitiveContains("locked"),
             "Unexpected locked level label: \(lockedLevel.label)"
         )
         app.buttons["level-1"].tap()
@@ -659,6 +851,10 @@ final class GoalRushUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.buttons["result-primary"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["result-more-upgrades"].exists)
+        XCTAssertTrue(app.buttons["result-more-map"].exists)
+        XCTAssertTrue(app.buttons["result-more-home"].exists)
+        XCTAssertFalse(app.buttons["result-more-characters"].exists)
         XCTAssertFalse(app.staticTexts["Mission progress"].exists)
         XCTAssertFalse(app.staticTexts["Progress and rewards saved"].exists)
         XCTAssertFalse(
@@ -668,7 +864,18 @@ final class GoalRushUITests: XCTestCase {
         )
     }
 
-    func testResultExposesThreeDirectCircularDestinations() {
+    func testCampaignLossUsesClearGameOverHeadline() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-save", "--screen", "result-loss"]
+        app.launch()
+
+        let title = app.staticTexts["result-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 3))
+        XCTAssertEqual(title.label, "GAME OVER")
+        XCTAssertFalse(app.staticTexts["RUN ENDED"].exists)
+    }
+
+    func testResultExposesOnlyUpgradesMapAndHomeDestinations() {
         let app = XCUIApplication()
         app.launchArguments = ["--reset-save", "--screen", "result-endless"]
         app.launch()
@@ -676,8 +883,9 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(app.buttons["result-primary"].waitForExistence(timeout: 3))
         XCTAssertEqual(app.buttons["result-primary"].label, "Retry")
         XCTAssertTrue(app.buttons["result-more-upgrades"].exists)
-        XCTAssertTrue(app.buttons["result-more-characters"].exists)
         XCTAssertTrue(app.buttons["result-more-map"].exists)
+        XCTAssertTrue(app.buttons["result-more-home"].exists)
+        XCTAssertFalse(app.buttons["result-more-characters"].exists)
         XCTAssertFalse(app.buttons["result-more"].exists)
         XCTAssertFalse(app.otherElements["result-more-actions"].exists)
 
@@ -686,14 +894,14 @@ final class GoalRushUITests: XCTestCase {
 
         app.terminate()
         app.launch()
-        XCTAssertTrue(app.buttons["result-more-characters"].waitForExistence(timeout: 3))
-        app.buttons["result-more-characters"].tap()
-        XCTAssertTrue(app.buttons["character-ace"].waitForExistence(timeout: 2))
-
-        app.terminate()
-        app.launch()
         XCTAssertTrue(app.buttons["result-more-map"].waitForExistence(timeout: 3))
         app.buttons["result-more-map"].tap()
         XCTAssertTrue(app.buttons["endless-world-earth"].waitForExistence(timeout: 2))
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["result-more-home"].waitForExistence(timeout: 3))
+        app.buttons["result-more-home"].tap()
+        XCTAssertTrue(app.otherElements["home-root"].waitForExistence(timeout: 2))
     }
 }

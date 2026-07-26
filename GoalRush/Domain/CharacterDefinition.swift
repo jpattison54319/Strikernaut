@@ -1,5 +1,10 @@
 import Foundation
 
+enum CharacterUnlockRequirement: Equatable, Sendable {
+    case starter
+    case worldClear(WorldID)
+}
+
 struct CharacterDefinition: Identifiable, Equatable, Sendable {
     let id: CharacterID
     let name: String
@@ -7,7 +12,7 @@ struct CharacterDefinition: Identifiable, Equatable, Sendable {
     let ability: CharacterAbility
     let abilityName: String
     let abilityDescription: String
-    let unlockLevel: Int
+    let unlockRequirement: CharacterUnlockRequirement
     let accentHex: UInt
 
     var assetStem: String {
@@ -15,6 +20,11 @@ struct CharacterDefinition: Identifiable, Equatable, Sendable {
     }
 
     var unlockDescription: String {
-        unlockLevel == 1 ? "Available from the start" : "Clear Level \(unlockLevel)"
+        switch unlockRequirement {
+        case .starter:
+            "Available from the start"
+        case .worldClear(let world):
+            "Clear \(GameContent.world(world).name)"
+        }
     }
 }

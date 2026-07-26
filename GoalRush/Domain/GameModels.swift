@@ -7,6 +7,12 @@ enum EnemyKind: String, Codable, CaseIterable, Sendable {
     case keeperDrone
     case ballLauncher
     case titanKeeper
+    case regolithRunner
+    case lunarHopper
+    case orbitDrone
+    case eclipseKeeper
+    case gravityStriker
+    case lunarWarden
     case dustSprite
     case roverRaider
     case craterCrawler
@@ -21,6 +27,11 @@ enum FieldObjectKind: String, Codable, CaseIterable, Sendable {
     case tacticsBoard
     case coneBarricade
     case equipmentTrunk
+    case roverBattery
+    case satelliteRelay
+    case regolithBarricade
+    case gravityCell
+    case lunarVault
     case oxygenPod
     case meteorCrate
     case holoGate
@@ -78,6 +89,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
     var trainingTokens: Int
     var highestUnlockedLevel: Int
     var upgradeRanks: [UpgradeTrack: Int]
+    var upgradePrestiges: [UpgradeTrack: Int]
     var levelRecords: [Int: LevelRecord]
     var hasMovedInTutorial: Bool
     var endlessRecords: [WorldID: EndlessRecord]
@@ -87,14 +99,16 @@ struct PlayerProgress: Codable, Equatable, Sendable {
     var missionsDay: String
     var unlockedAchievements: Set<AchievementID>
     var hasSeenOnboarding: Bool
+    var seenCampaignBriefingLevels: Set<Int>
     var unlockedCharacters: Set<CharacterID>
     var selectedCharacter: CharacterID
 
     static let newPlayer = PlayerProgress(
-        schemaVersion: 4,
+        schemaVersion: 7,
         trainingTokens: 0,
         highestUnlockedLevel: 1,
         upgradeRanks: [:],
+        upgradePrestiges: [:],
         levelRecords: [:],
         hasMovedInTutorial: false,
         endlessRecords: [:],
@@ -104,15 +118,22 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         missionsDay: "",
         unlockedAchievements: [],
         hasSeenOnboarding: false,
+        seenCampaignBriefingLevels: [],
         unlockedCharacters: [.ace],
         selectedCharacter: .ace
     )
 
     func rank(for track: UpgradeTrack) -> Int { upgradeRanks[track, default: 0] }
     mutating func setRank(_ rank: Int, for track: UpgradeTrack) { upgradeRanks[track] = rank }
+    func prestigeCount(for track: UpgradeTrack) -> Int { upgradePrestiges[track, default: 0] }
+    mutating func setPrestigeCount(_ count: Int, for track: UpgradeTrack) {
+        upgradePrestiges[track] = min(max(count, 0), UpgradePrestigeTier.allCases.count)
+    }
     func endlessRecord(for world: WorldID) -> EndlessRecord { endlessRecords[world, default: .empty] }
     mutating func reconcileUnlockedContent() {
-        schemaVersion = 4
+        let isMoonCampaignMigration = schemaVersion < 5
+        let isBriefingSeenMigration = schemaVersion < 6
+        let isUpgradePrestigeMigration = schemaVersion < 7
         highestUnlockedLevel = min(GameContent.levels.count, max(1, highestUnlockedLevel))
         for world in GameContent.worlds where levelRecords[world.finalLevel]?.completed == true {
             highestUnlockedLevel = min(
@@ -120,11 +141,40 @@ struct PlayerProgress: Codable, Equatable, Sendable {
                 max(highestUnlockedLevel, world.finalLevel + 1)
             )
         }
-        unlockedCharacters.formUnion(CharacterCatalog.unlockedCharacters(for: self))
+        if isMoonCampaignMigration {
+            unlockedCharacters = CharacterCatalog.unlockedCharacters(for: self)
+            endlessRecords.removeValue(forKey: .mars)
+        } else {
+            unlockedCharacters.formUnion(CharacterCatalog.unlockedCharacters(for: self))
+        }
         unlockedCharacters.insert(.ace)
         if !unlockedCharacters.contains(selectedCharacter) {
             selectedCharacter = .ace
         }
+        if isBriefingSeenMigration {
+            seenCampaignBriefingLevels.formUnion(
+                GameContent.levels.compactMap { level in
+                    if level.number < highestUnlockedLevel
+                        || levelRecords[level.number]?.completed == true {
+                        level.number
+                    } else {
+                        nil
+                    }
+                }
+            )
+        }
+        if isUpgradePrestigeMigration {
+            for track in UpgradeTrack.allCases {
+                setPrestigeCount(
+                    max(
+                        prestigeCount(for: track),
+                        UpgradePrestigeRules.migratedPrestigeCount(for: rank(for: track))
+                    ),
+                    for: track
+                )
+            }
+        }
+        schemaVersion = 7
     }
 
     enum CodingKeys: String, CodingKey {
@@ -132,6 +182,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         case trainingTokens
         case highestUnlockedLevel
         case upgradeRanks
+        case upgradePrestiges
         case levelRecords
         case hasMovedInTutorial
         case endlessRecords
@@ -141,6 +192,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         case missionsDay
         case unlockedAchievements
         case hasSeenOnboarding
+        case seenCampaignBriefingLevels
         case unlockedCharacters
         case selectedCharacter
     }
@@ -150,6 +202,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         trainingTokens: Int,
         highestUnlockedLevel: Int,
         upgradeRanks: [UpgradeTrack: Int],
+        upgradePrestiges: [UpgradeTrack: Int] = [:],
         levelRecords: [Int: LevelRecord],
         hasMovedInTutorial: Bool,
         endlessRecords: [WorldID: EndlessRecord],
@@ -159,6 +212,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         missionsDay: String = "",
         unlockedAchievements: Set<AchievementID> = [],
         hasSeenOnboarding: Bool = false,
+        seenCampaignBriefingLevels: Set<Int> = [],
         unlockedCharacters: Set<CharacterID> = [.ace],
         selectedCharacter: CharacterID = .ace
     ) {
@@ -166,6 +220,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         self.trainingTokens = trainingTokens
         self.highestUnlockedLevel = highestUnlockedLevel
         self.upgradeRanks = upgradeRanks
+        self.upgradePrestiges = upgradePrestiges
         self.levelRecords = levelRecords
         self.hasMovedInTutorial = hasMovedInTutorial
         self.endlessRecords = endlessRecords
@@ -175,6 +230,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         self.missionsDay = missionsDay
         self.unlockedAchievements = unlockedAchievements
         self.hasSeenOnboarding = hasSeenOnboarding
+        self.seenCampaignBriefingLevels = seenCampaignBriefingLevels
         self.unlockedCharacters = unlockedCharacters
         self.selectedCharacter = selectedCharacter
     }
@@ -187,6 +243,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         trainingTokens = try container.decodeIfPresent(Int.self, forKey: .trainingTokens) ?? 0
         highestUnlockedLevel = try container.decodeIfPresent(Int.self, forKey: .highestUnlockedLevel) ?? 1
         upgradeRanks = container.decodeEnumKeyedMap(forKey: .upgradeRanks)
+        upgradePrestiges = container.decodeEnumKeyedMap(forKey: .upgradePrestiges)
         levelRecords = try container.decodeIfPresent([Int: LevelRecord].self, forKey: .levelRecords) ?? [:]
         hasMovedInTutorial = try container.decodeIfPresent(Bool.self, forKey: .hasMovedInTutorial) ?? false
         endlessRecords = container.decodeEnumKeyedMap(forKey: .endlessRecords)
@@ -196,16 +253,21 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         missionsDay = try container.decodeIfPresent(String.self, forKey: .missionsDay) ?? ""
         unlockedAchievements = try container.decodeIfPresent(Set<AchievementID>.self, forKey: .unlockedAchievements) ?? []
         hasSeenOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasSeenOnboarding) ?? false
+        seenCampaignBriefingLevels = try container.decodeIfPresent(
+            Set<Int>.self,
+            forKey: .seenCampaignBriefingLevels
+        ) ?? []
         unlockedCharacters = try container.decodeIfPresent(Set<CharacterID>.self, forKey: .unlockedCharacters) ?? [.ace]
         selectedCharacter = try container.decodeIfPresent(CharacterID.self, forKey: .selectedCharacter) ?? .ace
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(4, forKey: .schemaVersion)
+        try container.encode(7, forKey: .schemaVersion)
         try container.encode(trainingTokens, forKey: .trainingTokens)
         try container.encode(highestUnlockedLevel, forKey: .highestUnlockedLevel)
         try container.encode(upgradeRanks, forKey: .upgradeRanks)
+        try container.encode(upgradePrestiges, forKey: .upgradePrestiges)
         try container.encode(levelRecords, forKey: .levelRecords)
         try container.encode(hasMovedInTutorial, forKey: .hasMovedInTutorial)
         try container.encode(endlessRecords, forKey: .endlessRecords)
@@ -215,6 +277,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         try container.encode(missionsDay, forKey: .missionsDay)
         try container.encode(unlockedAchievements, forKey: .unlockedAchievements)
         try container.encode(hasSeenOnboarding, forKey: .hasSeenOnboarding)
+        try container.encode(seenCampaignBriefingLevels, forKey: .seenCampaignBriefingLevels)
         try container.encode(unlockedCharacters, forKey: .unlockedCharacters)
         try container.encode(selectedCharacter, forKey: .selectedCharacter)
     }

@@ -28,6 +28,10 @@ final class GameSessionModel {
     private var random: SeededGenerator
     private var lastTime: TimeInterval?
     private var lastHUDPublishTime: TimeInterval = 0
+#if DEBUG
+    private var debugAutoCharacterAbilityTime: TimeInterval?
+    private var debugDidAutoActivateCharacterAbility = false
+#endif
 
     convenience init(levelNumber: Int, progress: PlayerProgress, settings: GameSettings) {
         self.init(mode: .campaign(level: levelNumber), progress: progress, settings: settings)
@@ -61,11 +65,15 @@ final class GameSessionModel {
             snapshot = simulation.snapshot
             hudState = HUDState(snapshot: simulation.snapshot)
         }
+        if let rawDelay = ProcessInfo.processInfo.arguments.value(after: "--auto-character-ability-after"),
+           let delay = TimeInterval(rawDelay) {
+            debugAutoCharacterAbilityTime = max(0, delay)
+        }
 #endif
 
         if mode.isEndless {
             phase = .draft(makeDraft())
-        } else if let level {
+        } else if let level, !progress.seenCampaignBriefingLevels.contains(level.number) {
             let discoveries = CampaignBriefingCatalog.discoveries(for: level)
             if !discoveries.isEmpty {
                 phase = .briefing(discoveries)
@@ -95,7 +103,15 @@ final class GameSessionModel {
         guard phase == .playing else { lastTime = currentTime; return }
         let delta = lastTime.map { currentTime - $0 } ?? 1.0 / 60.0
         lastTime = currentTime
-        let events = simulation.update(delta: delta)
+        var events = simulation.update(delta: delta)
+#if DEBUG
+        if !debugDidAutoActivateCharacterAbility,
+           let activationTime = debugAutoCharacterAbilityTime,
+           simulation.snapshot.elapsed >= activationTime {
+            debugDidAutoActivateCharacterAbility = true
+            events.append(contentsOf: simulation.activateCharacterAbility())
+        }
+#endif
         snapshot = simulation.snapshot
         recentEvents = events
         if !events.isEmpty { eventPulse += 1 }

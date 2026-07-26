@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct GameSheetScaffold<Content: View>: View {
+    @Environment(GameStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
     let title: String
@@ -40,6 +41,7 @@ struct GameSheetScaffold<Content: View>: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
+                        store.uiAudio.requestFeedback(.selection)
                         dismiss()
                     }
                     .fontWeight(.bold)

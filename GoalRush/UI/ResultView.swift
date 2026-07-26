@@ -43,9 +43,9 @@ struct ResultView: View {
         .onAppear {
             appeared = true
             if isNotableRun {
-                store.uiAudio.play(.fanfare)
+                store.uiAudio.play(.fanfare, feedback: nil)
             } else {
-                store.uiAudio.play(.locked, volume: 0.4)
+                store.uiAudio.play(.locked, volume: 0.4, feedback: nil)
             }
         }
         .sensoryFeedback(trigger: appeared) { _, isVisible in
@@ -66,6 +66,7 @@ struct ResultView: View {
                 Text(heroTitle)
                     .font(GoalRushTheme.Typography.display)
                     .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("result-title")
                 Text(heroSubtitle)
                     .font(GoalRushTheme.Typography.headline)
                     .foregroundStyle(.secondary)
@@ -111,7 +112,10 @@ struct ResultView: View {
     private var resultStats: some View {
         VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
             HStack {
-                Label("Training Tokens", systemImage: "hexagon.fill")
+                HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+                    TrainingTokenIcon(size: 23)
+                    Text("Training Tokens")
+                }
                     .foregroundStyle(GoalRushTheme.gold)
                 Spacer()
                 HStack(spacing: 4) {
@@ -182,18 +186,18 @@ struct ResultView: View {
                     action: openUpgrades
                 )
                 resultDestination(
-                    title: "Characters",
-                    systemImage: "person.3.fill",
-                    accent: GoalRushTheme.gold,
-                    identifier: "result-more-characters",
-                    action: openCharacters
-                )
-                resultDestination(
                     title: result.mode.isEndless ? "Arenas" : "Map",
                     systemImage: "map.fill",
                     accent: result.mode.world.accentColor,
                     identifier: "result-more-map",
                     action: openModeSelection
+                )
+                resultDestination(
+                    title: "Home",
+                    systemImage: "house.fill",
+                    accent: GoalRushTheme.cyan,
+                    identifier: "result-more-home",
+                    action: openHome
                 )
             }
             .frame(maxWidth: .infinity)
@@ -254,7 +258,7 @@ struct ResultView: View {
     }
 
     private var backgroundImage: String {
-        result.mode.world == .mars ? "MarsArena" : "GameplayArena"
+        GameContent.world(result.mode.world).heroAsset
     }
 
     private var heroIcon: String {
@@ -271,7 +275,7 @@ struct ResultView: View {
     private var heroTitle: String {
         if result.isFirstClear { return "FIRST CLEAR!" }
         if result.mode.isEndless { return "WAVE \(result.wave)" }
-        return result.didWin ? "LEVEL CLEAR" : "RUN ENDED"
+        return result.didWin ? "LEVEL CLEAR" : "GAME OVER"
     }
 
     private var heroSubtitle: String {
@@ -291,6 +295,7 @@ struct ResultView: View {
     }
 
     private func primaryAction() {
+        store.uiAudio.play(.tap)
         switch result.mode {
         case .endless(let world): store.startEndless(world: world)
         case .campaign(let level):
@@ -303,14 +308,19 @@ struct ResultView: View {
         store.route = .upgrades
     }
 
-    private func openCharacters() {
+    private func openHome() {
         store.uiAudio.play(.tap)
-        store.route = .characters
+        store.route = .home
     }
 
     private func openModeSelection() {
         store.uiAudio.play(.tap)
-        store.route = result.mode.isEndless ? .endless : .levels
+        switch result.mode {
+        case .endless:
+            store.route = .endless
+        case .campaign(let level):
+            store.openWorldMap(result.mode.world, focusLevel: level)
+        }
     }
 }
 

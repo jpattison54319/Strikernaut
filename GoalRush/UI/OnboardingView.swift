@@ -49,7 +49,7 @@ struct OnboardingView: View {
             }
         }
         .onChange(of: page) { _, _ in
-            store.uiAudio.play(.whoosh, volume: 0.5)
+            store.uiAudio.play(.whoosh, volume: 0.5, feedback: nil)
         }
     }
 

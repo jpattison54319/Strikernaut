@@ -1,12 +1,12 @@
 import Foundation
 
 enum AchievementID: String, Codable, CaseIterable, Sendable {
-    case firstClear, earthWorldClear, marsWorldClear
+    case firstClear, earthWorldClear, moonWorldClear, marsWorldClear
     case wave5, wave10, wave20
     case tokens1k, tokens10k
     case combo10, combo25
     case firstUpgrade, maxTrack
-    case firstGear, fullEarthSet, fullMarsSet
+    case firstGear, fullEarthSet, fullMoonSet, fullMarsSet
     case streak3, streak7
 }
 
@@ -15,7 +15,8 @@ enum AchievementCatalog {
     static let ordered: [AchievementID] = [
         .firstClear, .firstUpgrade, .firstGear, .combo10, .streak3,
         .earthWorldClear, .wave5, .tokens1k, .fullEarthSet,
-        .marsWorldClear, .wave10, .combo25, .tokens10k, .fullMarsSet,
+        .moonWorldClear, .wave10, .fullMoonSet,
+        .marsWorldClear, .combo25, .tokens10k, .fullMarsSet,
         .wave20, .maxTrack, .streak7
     ]
 
@@ -24,6 +25,7 @@ enum AchievementCatalog {
         var unlocked: Set<AchievementID> = []
         if progress.levelRecords[1]?.completed == true { unlocked.insert(.firstClear) }
         if progress.levelRecords[GameContent.world(.earth).finalLevel]?.completed == true { unlocked.insert(.earthWorldClear) }
+        if progress.levelRecords[GameContent.world(.moon).finalLevel]?.completed == true { unlocked.insert(.moonWorldClear) }
         if progress.levelRecords[GameContent.world(.mars).finalLevel]?.completed == true { unlocked.insert(.marsWorldClear) }
         let bestWave = progress.endlessRecords.values.map(\.bestWave).max() ?? 0
         if bestWave >= 5 { unlocked.insert(.wave5) }
@@ -37,6 +39,7 @@ enum AchievementCatalog {
         if UpgradeTrack.allCases.contains(where: { progress.rank(for: $0) >= UpgradeRules.masteryRank }) { unlocked.insert(.maxTrack) }
         if progress.unlockedCharacters.count >= 2 { unlocked.insert(.firstGear) }
         if progress.unlockedCharacters.contains(.volt) { unlocked.insert(.fullEarthSet) }
+        if progress.unlockedCharacters.contains(.nova) { unlocked.insert(.fullMoonSet) }
         if progress.unlockedCharacters.contains(.aegis) { unlocked.insert(.fullMarsSet) }
         if progress.dailyReward.streak >= 3 { unlocked.insert(.streak3) }
         if progress.dailyReward.streak >= 7 { unlocked.insert(.streak7) }
@@ -47,6 +50,7 @@ enum AchievementCatalog {
         switch id {
         case .firstClear: "First Whistle"
         case .earthWorldClear: "Earth Champion"
+        case .moonWorldClear: "Lunar Champion"
         case .marsWorldClear: "Mars Conqueror"
         case .wave5: "Warming Up"
         case .wave10: "Double Digits"
@@ -59,6 +63,7 @@ enum AchievementCatalog {
         case .maxTrack: "Peak Performance"
         case .firstGear: "New Teammate"
         case .fullEarthSet: "Volt Unleashed"
+        case .fullMoonSet: "Nova Unleashed"
         case .fullMarsSet: "Full Roster"
         case .streak3: "Regular"
         case .streak7: "Dedicated"
@@ -69,6 +74,7 @@ enum AchievementCatalog {
         switch id {
         case .firstClear: "Clear your first level"
         case .earthWorldClear: "Clear the Earth world"
+        case .moonWorldClear: "Clear the Moon world"
         case .marsWorldClear: "Clear the Mars world"
         case .wave5: "Reach wave 5 in Endless"
         case .wave10: "Reach wave 10 in Endless"
@@ -81,6 +87,7 @@ enum AchievementCatalog {
         case .maxTrack: "Reach mastery rank 5 in any upgrade track"
         case .firstGear: "Unlock your first new character"
         case .fullEarthSet: "Unlock Volt"
+        case .fullMoonSet: "Unlock Nova"
         case .fullMarsSet: "Unlock every character"
         case .streak3: "Claim 3 daily rewards in a row"
         case .streak7: "Claim 7 daily rewards in a row"
@@ -91,6 +98,7 @@ enum AchievementCatalog {
         switch id {
         case .firstClear: "flag.checkered"
         case .earthWorldClear: "globe.americas.fill"
+        case .moonWorldClear: "moon.stars.fill"
         case .marsWorldClear: "circle.grid.cross.fill"
         case .wave5, .wave10, .wave20: "infinity"
         case .tokens1k, .tokens10k: "hexagon.fill"
@@ -98,7 +106,7 @@ enum AchievementCatalog {
         case .firstUpgrade: "arrow.up.circle.fill"
         case .maxTrack: "star.fill"
         case .firstGear: "person.crop.circle.badge.plus"
-        case .fullEarthSet, .fullMarsSet: "crown.fill"
+        case .fullEarthSet, .fullMoonSet, .fullMarsSet: "crown.fill"
         case .streak3, .streak7: "flame.fill"
         }
     }

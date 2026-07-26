@@ -8,6 +8,6 @@ struct CampaignWaveDefinition: Equatable, Sendable {
     let damageMultiplier: Double
     let speedMultiplier: Double
     let spawnInterval: TimeInterval
-    let boss: EnemyKind
-    let bossTier: CampaignBossTier
+    let boss: EnemyKind?
+    let bossTier: CampaignBossTier?
 }

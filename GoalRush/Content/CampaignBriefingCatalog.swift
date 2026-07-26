@@ -29,6 +29,13 @@ enum CampaignBriefingCatalog {
                 detail: "Kicks are automatic. Drag anywhere to change lanes.",
                 systemImage: "hand.draw.fill"
             )
+        case .lunarCycle:
+            .init(
+                subject: .concept(concept),
+                title: "Lunar Cycle",
+                detail: "Gravity shifts every sixteen seconds. In zero-G, threats slow and your balls rebound from the rails.",
+                systemImage: "moon.stars.fill"
+            )
         case .marsArena:
             .init(
                 subject: .concept(concept),
@@ -47,6 +54,12 @@ enum CampaignBriefingCatalog {
         case .keeperDrone: ("Aegis Keeper", "Slow and heavily armored. Focus your kicks.")
         case .ballLauncher: ("Ball Launcher", "Fires back from range. Move when a red ball appears.")
         case .titanKeeper: ("Titan Keeper", "Earth’s boss. It fires, changes phases, and calls reinforcements.")
+        case .regolithRunner: ("Regolith Runner", "A quick lunar scout built for low-gravity lanes.")
+        case .lunarHopper: ("Lunar Hopper", "Bounds sideways through the zero-G cycle.")
+        case .orbitDrone: ("Orbit Drone", "A heavily armored defender that floats between lanes.")
+        case .eclipseKeeper: ("Eclipse Keeper", "A shadow-armored blocker that demands focused fire.")
+        case .gravityStriker: ("Gravity Striker", "Fires from range while the arena’s gravity changes.")
+        case .lunarWarden: ("Lunar Warden", "The Moon’s boss. It commands eclipse phases and lunar reinforcements.")
         case .dustSprite: ("Dust Sprite", "Mars’s quickest grunt. Fragile, but dangerous in groups.")
         case .roverRaider: ("Rover Raider", "A durable alien that absorbs several hits.")
         case .craterCrawler: ("Crater Crawler", "Fast and unpredictable. It sweeps across lanes.")
@@ -64,6 +77,11 @@ enum CampaignBriefingCatalog {
         case .tacticsBoard: ("Tactics Board", "A tough obstacle worth 8 Training Tokens.")
         case .coneBarricade: ("Cone Barricade", "A lane obstacle worth 8 Training Tokens.")
         case .equipmentTrunk: ("Equipment Trunk", "Very durable. Break it for 35 Training Tokens.")
+        case .roverBattery: ("Rover Battery", "Break it for 18 Training Tokens.")
+        case .satelliteRelay: ("Satellite Relay", "A tough lunar obstacle worth 8 Training Tokens.")
+        case .regolithBarricade: ("Regolith Barricade", "A low-gravity lane obstacle worth 8 Training Tokens.")
+        case .gravityCell: ("Gravity Cell", "Break it to restore up to 24 stamina.")
+        case .lunarVault: ("Lunar Vault", "Very durable. Break it for 35 Training Tokens.")
         case .oxygenPod: ("Oxygen Pod", "Break it to restore up to 24 stamina.")
         case .meteorCrate: ("Meteor Crate", "Break it for 18 Training Tokens.")
         case .holoGate: ("Holo Gate", "A tough obstacle worth 8 Training Tokens.")

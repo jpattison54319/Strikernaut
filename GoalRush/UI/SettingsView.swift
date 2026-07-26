@@ -51,12 +51,24 @@ struct SettingsView: View {
                 .presentationDetents([.medium, .large])
         }
         .confirmationDialog("Reset all progress?", isPresented: $store.pendingResetConfirmation, titleVisibility: .visible) {
-            Button("Reset Progress", role: .destructive) { store.resetProgress() }
-            Button("Cancel", role: .cancel) {}
+            Button("Reset Progress", role: .destructive) {
+                store.uiAudio.requestFeedback(.warning)
+                store.resetProgress()
+            }
+            Button("Cancel", role: .cancel) {
+                store.uiAudio.requestFeedback(.selection)
+            }
         } message: {
             Text("Campaign progress, Endless records, characters, upgrades, and Training Tokens cannot be recovered.")
         }
-        .onChange(of: store.settings) { _, newValue in
+        .onChange(of: store.settings) { oldValue, newValue in
+            if oldValue.hapticsEnabled {
+                store.uiAudio.requestFeedback(.selection)
+            }
+            store.uiAudio.isHapticsEnabled = newValue.hapticsEnabled
+            if !oldValue.hapticsEnabled, newValue.hapticsEnabled {
+                store.uiAudio.requestFeedback(.selection)
+            }
             newValue.save()
             store.uiAudio.isEnabled = newValue.soundEnabled
         }

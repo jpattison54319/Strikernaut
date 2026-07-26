@@ -38,14 +38,15 @@ struct HomeStage: View {
     private func performPrimaryAction() {
         store.uiAudio.play(.tap)
         switch HomePresentation.primaryAction(progress: store.progress) {
-        case .campaign(let level): store.start(level: level)
+        case .campaign(let level):
+            store.openWorldMap(GameContent.level(level).world, focusLevel: level)
         case .endless: store.route = .endless
         }
     }
 
     private func openCampaign() {
         store.uiAudio.play(.tap)
-        store.route = .levels
+        store.openPlanetJourney()
     }
 
     private func openEndless() {

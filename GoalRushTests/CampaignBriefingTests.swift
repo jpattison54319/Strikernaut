@@ -26,19 +26,38 @@ struct CampaignBriefingTests {
         #expect(Set(conceptIDs) == Set(CampaignConcept.allCases.map(\.rawValue)))
     }
 
+    @Test func everyDiscoveryIsFirstIntroducedOnItsLevel() {
+        for level in GameContent.levels {
+            let earlierLevels = GameContent.levels.filter { $0.number < level.number }
+
+            for discovery in CampaignBriefingCatalog.discoveries(for: level) {
+                switch discovery.subject {
+                case .concept(let concept):
+                    #expect(!earlierLevels.flatMap(\.concepts).contains(concept))
+                case .enemy(let enemy):
+                    #expect(!earlierLevels.flatMap(authoredEnemies(in:)).contains(enemy))
+                case .fieldObject(let object):
+                    #expect(!earlierLevels.flatMap(\.objects).contains(object))
+                }
+            }
+        }
+    }
+
     @Test func remixLevelsStartWithoutAnEmptyBriefing() {
         let levelsWithoutDiscoveries = GameContent.levels
             .filter { CampaignBriefingCatalog.discoveries(for: $0).isEmpty }
             .map(\.number)
 
-        #expect(levelsWithoutDiscoveries == [7, 8, 9, 17, 18, 19])
+        #expect(levelsWithoutDiscoveries == [7, 8, 9, 17, 18, 19, 27, 28, 29])
     }
 
     @Test func bossesAreIntroducedOnTheirCampaignLevels() {
         let earthBoss = CampaignBriefingCatalog.discoveries(for: GameContent.level(10))
-        let marsBoss = CampaignBriefingCatalog.discoveries(for: GameContent.level(20))
+        let moonBoss = CampaignBriefingCatalog.discoveries(for: GameContent.level(20))
+        let marsBoss = CampaignBriefingCatalog.discoveries(for: GameContent.level(30))
 
         #expect(earthBoss.contains { $0.subject == .enemy(.titanKeeper) })
+        #expect(moonBoss.contains { $0.subject == .enemy(.lunarWarden) })
         #expect(marsBoss.contains { $0.subject == .enemy(.marsColossus) })
     }
 
@@ -77,5 +96,24 @@ struct CampaignBriefingTests {
             Issue.record("Endless should still begin with its ability draft")
             return
         }
+    }
+
+    @Test func previouslySeenLevelStartsWithoutRepeatingItsBriefing() {
+        var progress = PlayerProgress.newPlayer
+        progress.seenCampaignBriefingLevels.insert(6)
+
+        let session = GameSessionModel(
+            mode: .campaign(level: 6),
+            progress: progress,
+            settings: GameSettings()
+        )
+
+        #expect(session.phase == .playing)
+    }
+
+    private func authoredEnemies(in level: LevelDefinition) -> [EnemyKind] {
+        level.hasBoss
+            ? level.enemies + [GameContent.world(level.world).boss]
+            : level.enemies
     }
 }

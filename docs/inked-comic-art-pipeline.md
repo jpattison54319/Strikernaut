@@ -44,6 +44,11 @@ sprites, projectiles, and the app icon.
 Always begin from a clean Git checkpoint. The command is intentionally
 deterministic, so a source image produces the same result on every run.
 
+For a new isolated green-screen source, process the individual file with
+`--chroma-key --preset icon`. Chroma removal flood-fills only the background
+connected to the canvas corners, preserving legitimate greens inside the
+subject.
+
 ## Typography
 
 - Display: Barlow Condensed Black Italic.

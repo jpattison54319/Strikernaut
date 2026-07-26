@@ -16,6 +16,7 @@ final class GameSimulation {
     private var abilities: [AbilityKind: Int] = [:]
     private var finished = false
     private var bossSpawned = false
+    private var campaignBossDefeated = false
     private var bossPhase = 1
     private var powerUpSpawned = false
     private var nextPowerUpTime = 0.0
@@ -32,6 +33,9 @@ final class GameSimulation {
     private var fieldObjectPreviewSpawned = false
     private var shockwaveBurstsRemaining = 0
     private var shockwaveBurstClock = 0.0
+    private var lastWorldEffectActive = false
+    private var marsDefeatCount = 0
+    private var pendingVolatileCorePositions: [Vector2] = []
 
     convenience init(level: LevelDefinition, progress: PlayerProgress, assistMode: Bool, seed: UInt64) {
         self.init(mode: .campaign(level: level.number), progress: progress, assistMode: assistMode, seed: seed)
@@ -74,7 +78,9 @@ final class GameSimulation {
             temporaryAbilityRemaining: 0,
             temporaryAbilityDuration: 0,
             characterAbilityCharge: 0,
-            characterAbilityReady: false
+            characterAbilityReady: false,
+            worldEffectActive: false,
+            worldEffectProgress: 0
         )
         schedulePowerUp()
 #if DEBUG
@@ -94,6 +100,14 @@ final class GameSimulation {
            let requestedWave = Int(arguments[waveArgumentIndex + 1]) {
             snapshot.wave = min(max(requestedWave, 1), level.waveCount)
         }
+        if let comboArgumentIndex = arguments.firstIndex(of: "--combo-preview"),
+           arguments.indices.contains(comboArgumentIndex + 1),
+           let requestedCombo = Int(arguments[comboArgumentIndex + 1]) {
+            comboCount = max(0, requestedCombo)
+            comboTimer = 30
+            snapshot.combo = comboCount
+            snapshot.comboFraction = comboCount > 0 ? 1 : 0
+        }
         if level != nil, arguments.contains("--boss-preview") {
             snapshot.waveElapsed = snapshot.waveDuration * 0.69
             powerUpSpawned = true
@@ -103,6 +117,25 @@ final class GameSimulation {
             powerUpSpawned = true
         } else if arguments.contains("--power-up-preview") {
             nextPowerUpTime = 0
+        }
+        if arguments.contains("--enemy-swarm-preview") {
+            let enemyPool = level?.enemies ?? [.coneRunner]
+            let positions: [Vector2] = [
+                .init(x: -0.66, y: 0.80),
+                .init(x: -0.24, y: 0.76),
+                .init(x: 0.24, y: 0.76),
+                .init(x: 0.66, y: 0.80),
+                .init(x: -0.46, y: 0.58),
+                .init(x: 0, y: 0.54),
+                .init(x: 0.46, y: 0.58),
+            ]
+            for (index, position) in positions.enumerated() {
+                spawnEnemy(
+                    enemyPool[index % max(1, enemyPool.count)],
+                    x: position.x,
+                    y: position.y
+                )
+            }
         }
 #endif
     }
@@ -133,6 +166,40 @@ final class GameSimulation {
 
     func replaceTargetsForTesting(_ targets: [TargetState]) {
         snapshot.targets = targets
+    }
+
+    func setCampaignWaveForTesting(_ wave: Int, elapsed: Double = 0) {
+        guard let level else { return }
+        snapshot.wave = min(max(wave, 1), level.waveCount)
+        snapshot.waveElapsed = max(0, elapsed)
+        bossSpawned = false
+    }
+
+    func spawnFriendlyProjectileForTesting(
+        pierce: Int,
+        temporaryAbility: TemporaryBallAbility? = nil
+    ) {
+        spawnProjectile(
+            x: snapshot.playerX,
+            velocityX: 0,
+            damage: stats.ballDamage,
+            pierce: pierce,
+            hostile: false,
+            critical: false,
+            temporaryAbility: temporaryAbility
+        )
+    }
+
+    func spawnHostileProjectileForTesting(x: Double, y: Double) {
+        spawnProjectile(
+            x: x,
+            y: y,
+            velocityX: 0,
+            damage: 10,
+            pierce: 0,
+            hostile: true,
+            critical: false
+        )
     }
 #endif
 
@@ -287,6 +354,7 @@ final class GameSimulation {
         snapshot.elapsed += delta
         snapshot.waveElapsed += delta
         updateTemporaryAbility(delta: delta)
+        updateWorldEffect(events: &events)
         updatePlayer(delta: delta)
         updateCharacterAttackSchedule(delta: delta, events: &events)
         updateCombo(delta: delta, events: &events)
@@ -294,8 +362,12 @@ final class GameSimulation {
         updatePowerUpSpawning()
         updateKicking(delta: delta, events: &events)
         updateTargets(delta: delta, events: &events)
+        if finishCampaignAfterBossDefeat(events: &events) { return events }
         updateCharacterAttacks(delta: delta, events: &events)
+        if finishCampaignAfterBossDefeat(events: &events) { return events }
         updateProjectiles(delta: delta, events: &events)
+        if finishCampaignAfterBossDefeat(events: &events) { return events }
+        spawnPendingVolatileCores()
         evaluateWave(events: &events)
         evaluateFinish(events: &events)
         return events
@@ -312,6 +384,25 @@ final class GameSimulation {
         if snapshot.temporaryAbilityRemaining == 0 {
             snapshot.activeTemporaryAbility = nil
             snapshot.temporaryAbilityDuration = 0
+        }
+    }
+
+    private func updateWorldEffect(events: inout [SimulationEvent]) {
+        switch world {
+        case .earth:
+            snapshot.worldEffectActive = false
+            snapshot.worldEffectProgress = 0
+        case .moon:
+            let cycle = snapshot.elapsed.truncatingRemainder(dividingBy: 16)
+            snapshot.worldEffectActive = cycle >= 10
+            snapshot.worldEffectProgress = cycle < 10 ? cycle / 10 : (cycle - 10) / 6
+            if snapshot.worldEffectActive && !lastWorldEffectActive {
+                events.append(.worldEffectActivated(.lunarCycle, .init(x: snapshot.playerX, y: 0.34)))
+            }
+            lastWorldEffectActive = snapshot.worldEffectActive
+        case .mars:
+            snapshot.worldEffectActive = false
+            snapshot.worldEffectProgress = Double(marsDefeatCount % 6) / 6
         }
     }
 
@@ -334,9 +425,12 @@ final class GameSimulation {
         guard let level else { return }
         let wave = CampaignBalance.wave(snapshot.wave, for: level)
         let bossStart = wave.duration * 0.68
-        if snapshot.waveElapsed >= bossStart, !bossSpawned {
+        if snapshot.waveElapsed >= bossStart,
+           !bossSpawned,
+           let boss = wave.boss,
+           let bossTier = wave.bossTier {
             bossSpawned = true
-            spawnEnemy(wave.boss, x: 0, y: 0.82, tier: wave.bossTier)
+            spawnEnemy(boss, x: 0, y: 0.82, tier: bossTier)
         }
         guard snapshot.waveElapsed < wave.duration else { return }
         spawnClock += delta
@@ -344,9 +438,9 @@ final class GameSimulation {
         guard spawnClock >= wave.spawnInterval * supportPressure else { return }
         spawnClock = 0
         let enemy = level.enemies[Int(random.next() % UInt64(level.enemies.count))]
-        spawnEnemy(enemy, x: randomLaneX(), y: 1.04)
+        spawnEnemy(enemy, x: randomSpawnX(near: 1.04), y: 1.04)
         if random.unit() < 0.12, let object = level.objects.randomElement(using: &random) {
-            spawnObject(object, x: randomLaneX(), y: 1.10)
+            spawnObject(object, x: randomSpawnX(near: 1.10), y: 1.10)
         }
     }
 
@@ -363,19 +457,20 @@ final class GameSimulation {
         let pool = endlessEnemyPool
         for _ in 0..<EndlessRules.packSize(wave: snapshot.wave) {
             let enemy = pool[Int(random.next() % UInt64(pool.count))]
-            spawnEnemy(enemy, x: randomLaneX(), y: 1.04 + random.unit() * 0.10)
+            let y = 1.04 + random.unit() * 0.10
+            spawnEnemy(enemy, x: randomSpawnX(near: y), y: y)
         }
         if random.unit() < 0.10, let object = endlessObjectPool.randomElement(using: &random) {
-            spawnObject(object, x: randomLaneX(), y: 1.12)
+            spawnObject(object, x: randomSpawnX(near: 1.12), y: 1.12)
         }
     }
 
     private func updatePowerUpSpawning() {
         guard !powerUpSpawned, snapshot.waveElapsed >= nextPowerUpTime else { return }
         powerUpSpawned = true
-        let powers = TemporaryBallAbility.allCases
+        let powers = GameContent.world(world).temporaryPowers
         let power = powers[Int(random.next() % UInt64(powers.count))]
-        spawnPowerUp(power, x: randomLaneX(), y: 1.08)
+        spawnPowerUp(power, x: randomSpawnX(near: 1.08), y: 1.08)
     }
 
     private func updateKicking(delta: Double, events: inout [SimulationEvent]) {
@@ -405,8 +500,10 @@ final class GameSimulation {
         let criticalTiers = max(isMeteor ? 1 : 0, guaranteedCriticalTiers + fractionalCriticalTier)
         let critical = criticalTiers > 0
         let damage = baseDamage * Double(1 + criticalTiers)
-        let pierce = abilities[.throughBall, default: 0] + stats.extraPierce
         let temporaryAbility = snapshot.activeTemporaryAbility
+        let pierce = temporaryAbility == .solarPierce
+            ? Int.max
+            : abilities[.throughBall, default: 0] + stats.extraPierce
         spawnProjectile(
             x: snapshot.playerX,
             velocityX: 0,
@@ -462,6 +559,7 @@ final class GameSimulation {
         removedTargetIDs.removeAll(keepingCapacity: true)
         var bossReinforcements: [EnemyKind] = []
         let slowFactor = 0.35 + 0.65 * pow(0.90, Double(abilities[.gravityBoots, default: 0]))
+        let lunarSpeedFactor = snapshot.worldEffectActive ? 0.65 : 1
         for index in snapshot.targets.indices {
             var target = snapshot.targets[index]
             target.phase += delta
@@ -501,6 +599,9 @@ final class GameSimulation {
                         bossPhase = newPhase
                         events.append(.bossPhase(newPhase))
                         bossReinforcements = reinforcements(for: newPhase)
+                        if world == .mars {
+                            pendingVolatileCorePositions.append(target.position)
+                        }
                     }
                     let attackInterval = max(0.90, 2.3 - Double(bossPhase) * 0.3)
                     if freezeFactor > 0,
@@ -516,8 +617,8 @@ final class GameSimulation {
                         )
                     }
                 } else {
-                    target.position.y -= enemySpeed(kind) * activeSpeedMultiplier * slowFactor * freezeFactor * direction * delta
-                    if kind == .tackleBot || kind == .craterCrawler {
+                    target.position.y -= enemySpeed(kind) * activeSpeedMultiplier * slowFactor * lunarSpeedFactor * freezeFactor * direction * delta
+                    if kind == .tackleBot || kind == .craterCrawler || kind == .lunarHopper {
                         target.position.x += sin(target.phase * 5.2) * delta * 0.23 * direction * freezeFactor
                     }
                     if freezeFactor > 0,
@@ -542,13 +643,19 @@ final class GameSimulation {
                     target.position.y = 1.18
                 }
             case .fieldObject:
-                target.position.y -= 0.11 * activeSpeedMultiplier * slowFactor * delta
+                target.position.y -= 0.11 * activeSpeedMultiplier * slowFactor * lunarSpeedFactor * delta
                 if target.position.y <= 0.12 { removedTargetIDs.insert(target.id) }
             case .powerUp:
-                target.position.y -= 0.26 * delta
+                target.position.y -= 0.26 * lunarSpeedFactor * delta
                 target.position.x += sin(target.phase * 9.5) * 2.2 * delta
                 target.position.x = min(0.82, max(-0.82, target.position.x))
                 if target.position.y <= 0.12 { removedTargetIDs.insert(target.id) }
+            case .volatileCore:
+                target.position.y -= 0.10 * delta
+                target.position.x += sin(target.phase * 6.5) * 0.08 * delta
+                if target.phase >= 3 || target.position.y <= 0.12 {
+                    removedTargetIDs.insert(target.id)
+                }
             }
             snapshot.targets[index] = target
         }
@@ -664,14 +771,36 @@ final class GameSimulation {
         var splitProjectiles: [ProjectileState] = []
         for projectileIndex in snapshot.projectiles.indices {
             var projectile = snapshot.projectiles[projectileIndex]
-            let tracking = stats.homingStrength + Double(abilities[.curler, default: 0]) * 0.55
-            if !projectile.hostile, projectile.characterProjectile == nil, tracking > 0,
-               let nearest = snapshot.targets.min(by: { abs($0.position.y - projectile.position.y) < abs($1.position.y - projectile.position.y) }) {
-                projectile.velocity.x += (nearest.position.x - projectile.position.x) * delta * tracking
-                projectile.velocity.x = min(1.4, max(-1.4, projectile.velocity.x))
+            if projectile.temporaryAbility == .heatSeeking,
+               let nearest = nearestHeatSeekingTarget(for: projectile) {
+                steerHeatSeekingProjectile(&projectile, toward: nearest.position, delta: delta)
+            } else {
+                let curlerRank = abilities[.curler, default: 0]
+                if !projectile.hostile,
+                   projectile.characterProjectile == nil,
+                   curlerRank > 0,
+                   let nearest = nearestSteeringTarget(for: projectile) {
+                    steerProjectile(
+                        &projectile,
+                        toward: nearest.position,
+                        turnRate: curlerTurnRate(rank: curlerRank),
+                        delta: delta
+                    )
+                }
             }
             projectile.position.x += projectile.velocity.x * delta
-            projectile.position.y += projectile.velocity.y * delta
+            let lunarProjectileFactor = projectile.hostile && snapshot.worldEffectActive ? 0.65 : 1
+            projectile.position.y += projectile.velocity.y * delta * lunarProjectileFactor
+            if !projectile.hostile,
+               projectile.characterProjectile == nil,
+               snapshot.worldEffectActive,
+               projectile.lunarRailBouncesRemaining > 0,
+               abs(projectile.position.x) >= 0.90 {
+                projectile.position.x = min(0.90, max(-0.90, projectile.position.x))
+                projectile.velocity.x = abs(projectile.velocity.x) * (projectile.position.x < 0 ? 1 : -1)
+                projectile.lunarRailBouncesRemaining -= 1
+                events.append(.characterProjectileRicochet(projectile.position))
+            }
             if projectile.characterProjectile == .pinballBlitz {
                 projectile.remainingLifetime -= delta
                 let lateralLimit = 0.88
@@ -683,21 +812,22 @@ final class GameSimulation {
             }
             if projectile.hostile {
                 let width = assistMode ? 0.08 : 0.11
-                if projectile.position.y <= 0.14 && abs(projectile.position.x - snapshot.playerX) < width {
+                let isInUpperBodyBand = projectile.position.y >= 0.095 && projectile.position.y <= 0.17
+                if isInUpperBodyBand && abs(projectile.position.x - snapshot.playerX) < width {
                     removedProjectileIDs.insert(projectile.id)
                     applyDamage(projectile.damage, events: &events)
-                } else if projectile.position.y < -0.05 {
+                } else if projectile.position.y < 0.095 {
                     removedProjectileIDs.insert(projectile.id)
                 }
             } else {
                 let isPinball = projectile.characterProjectile == .pinballBlitz
-                let hitWidth = isPinball ? 0.15 : (assistMode ? 0.17 : 0.115)
-                let hitHeight = isPinball ? 0.082 : 0.055
                 if let targetIndex = snapshot.targets.firstIndex(where: {
-                    !hitTargetIDs.contains($0.id)
+                    let hitbox = targetHitbox(for: $0)
+                    return !hitTargetIDs.contains($0.id)
                         && !projectile.contactedTargetIDs.contains($0.id)
-                        && abs($0.position.x - projectile.position.x) < hitWidth
-                        && abs($0.position.y - projectile.position.y) < hitHeight
+                        && abs($0.position.x - projectile.position.x)
+                            < hitbox.halfWidth + (isPinball ? 0.035 : assistMode ? 0.055 : 0)
+                        && abs($0.position.y - projectile.position.y) < hitbox.halfHeight
                 }) {
                     let position = snapshot.targets[targetIndex].position
                     let targetID = snapshot.targets[targetIndex].id
@@ -723,7 +853,24 @@ final class GameSimulation {
                         projectile.contactedTargetIDs.insert(targetID)
                         projectile.velocity.x *= -1
                         events.append(.characterProjectileRicochet(position))
+                    } else if projectile.temporaryAbility == .orbitShot,
+                              projectile.orbitChainsRemaining > 0 {
+                        projectile.contactedTargetIDs.insert(targetID)
+                        projectile.orbitChainsRemaining -= 1
+                        if let next = nearestOrbitTarget(
+                            from: projectile.position,
+                            excluding: projectile.contactedTargetIDs
+                        ) {
+                            let dx = next.position.x - projectile.position.x
+                            let dy = next.position.y - projectile.position.y
+                            let length = max(0.001, hypot(dx, dy))
+                            projectile.velocity = .init(
+                                x: dx / length * stats.ballSpeed,
+                                y: dy / length * stats.ballSpeed
+                            )
+                        }
                     } else if projectile.remainingPierces > 0 {
+                        projectile.contactedTargetIDs.insert(targetID)
                         projectile.remainingPierces -= 1
                     } else {
                         removedProjectileIDs.insert(projectile.id)
@@ -754,6 +901,19 @@ final class GameSimulation {
         if case .powerUp = snapshot.targets[targetIndex].kind {
             snapshot.targets[targetIndex].hitPoints = 0
             registerDefeatIfNeeded(at: targetIndex, events: &events)
+            return
+        }
+        if case .volatileCore = snapshot.targets[targetIndex].kind {
+            let position = snapshot.targets[targetIndex].position
+            hitTargetIDs.insert(snapshot.targets[targetIndex].id)
+            applyExplosion(
+                centeredAt: position,
+                excluding: snapshot.targets[targetIndex].id,
+                damage: stats.ballDamage * 2.4,
+                awardsAbilityCharge: projectile.characterProjectile == nil,
+                events: &events
+            )
+            events.append(.volatileCoreBurst(position))
             return
         }
 
@@ -796,6 +956,7 @@ final class GameSimulation {
         centeredAt center: Vector2,
         excluding excludedID: Int,
         damage: Double,
+        awardsAbilityCharge: Bool = true,
         events: inout [SimulationEvent]
     ) {
         for index in snapshot.targets.indices {
@@ -804,9 +965,14 @@ final class GameSimulation {
                   !hitTargetIDs.contains(target.id),
                   hypot(target.position.x - center.x, target.position.y - center.y) <= 0.28 else { continue }
             if case .powerUp = target.kind { continue }
+            if case .volatileCore = target.kind { continue }
             snapshot.targets[index].hitPoints -= damage
             events.append(.impact(target.position, damage, .explosive, false))
-            registerDefeatIfNeeded(at: index, events: &events)
+            registerDefeatIfNeeded(
+                at: index,
+                awardsAbilityCharge: awardsAbilityCharge,
+                events: &events
+            )
         }
     }
 
@@ -820,6 +986,7 @@ final class GameSimulation {
         hitTargetIDs.insert(target.id)
         awardReward(for: target, events: &events)
         if case .powerUp = target.kind { return }
+        if case .volatileCore = target.kind { return }
         registerDefeat(target, awardsAbilityCharge: awardsAbilityCharge, events: &events)
     }
 
@@ -892,6 +1059,18 @@ final class GameSimulation {
         guard level != nil else { return }
     }
 
+    private func finishCampaignAfterBossDefeat(events: inout [SimulationEvent]) -> Bool {
+        guard campaignBossDefeated, level != nil else { return false }
+        finished = true
+        snapshot.targets.removeAll()
+        snapshot.projectiles.removeAll()
+        snapshot.characterAttacks.removeAll()
+        pendingVolatileCorePositions.removeAll(keepingCapacity: true)
+        events.append(.waveCompleted(snapshot.wave))
+        events.append(.finished(true))
+        return true
+    }
+
     private func applyDamage(_ amount: Double, events: inout [SimulationEvent]) {
         if snapshot.shieldCharges > 0 {
             snapshot.shieldCharges -= 1
@@ -935,8 +1114,19 @@ final class GameSimulation {
             snapshot.characterAbilityCharge = min(100, snapshot.characterAbilityCharge + 20)
             snapshot.characterAbilityReady = snapshot.characterAbilityCharge >= 100
         }
+        if world == .mars,
+           case .enemy = target.kind,
+           target.bossTier == .standard {
+            marsDefeatCount += 1
+            if marsDefeatCount.isMultiple(of: 6) {
+                pendingVolatileCorePositions.append(target.position)
+            }
+        }
         if case .enemy = target.kind, target.bossTier != .standard {
             snapshot.bossesDefeated += 1
+            if let level, snapshot.wave == level.waveCount {
+                campaignBossDefeated = true
+            }
         }
         events.append(.comboChanged(comboCount))
         if Self.comboMilestones.contains(comboCount) { events.append(.comboMilestone(comboCount)) }
@@ -974,11 +1164,11 @@ final class GameSimulation {
 
     private func spawnObject(_ kind: FieldObjectKind, x: Double, y: Double) {
         let base: Double = switch kind {
-        case .ballCart, .meteorCrate: 18
-        case .waterCooler, .oxygenPod: 14
-        case .tacticsBoard, .holoGate: 35
-        case .coneBarricade, .crystalBarricade: 20
-        case .equipmentTrunk, .artifactVault: 55
+        case .ballCart, .meteorCrate, .roverBattery: 18
+        case .waterCooler, .oxygenPod, .gravityCell: 14
+        case .tacticsBoard, .holoGate, .satelliteRelay: 35
+        case .coneBarricade, .crystalBarricade, .regolithBarricade: 20
+        case .equipmentTrunk, .artifactVault, .lunarVault: 55
         }
         let multiplier = mode.isEndless ? sqrt(EndlessRules.healthMultiplier(wave: snapshot.wave)) : 1
         let hitPoints = base * multiplier
@@ -1019,6 +1209,136 @@ final class GameSimulation {
         ))
     }
 
+    private func spawnPendingVolatileCores() {
+        guard !pendingVolatileCorePositions.isEmpty else { return }
+        for position in pendingVolatileCorePositions {
+            snapshot.targets.append(TargetState(
+                id: identifier(),
+                kind: .volatileCore,
+                position: position,
+                hitPoints: 1,
+                maximumHitPoints: 1,
+                phase: 0
+            ))
+        }
+        pendingVolatileCorePositions.removeAll(keepingCapacity: true)
+    }
+
+    private func nearestOrbitTarget(
+        from position: Vector2,
+        excluding excluded: Set<Int>
+    ) -> TargetState? {
+        snapshot.targets
+            .filter { !excluded.contains($0.id) && !isPowerUp($0) }
+            .min {
+                hypot($0.position.x - position.x, $0.position.y - position.y)
+                    < hypot($1.position.x - position.x, $1.position.y - position.y)
+            }
+    }
+
+    private func nearestHeatSeekingTarget(for projectile: ProjectileState) -> TargetState? {
+        var nearest: TargetState?
+        var nearestDistance = Double.greatestFiniteMagnitude
+        for target in snapshot.targets {
+            guard !isPowerUp(target),
+                  !hitTargetIDs.contains(target.id),
+                  !projectile.contactedTargetIDs.contains(target.id),
+                  target.position.y >= projectile.position.y - 0.03 else { continue }
+            let dx = target.position.x - projectile.position.x
+            let dy = target.position.y - projectile.position.y
+            let distance = dx * dx + dy * dy
+            if distance < nearestDistance {
+                nearest = target
+                nearestDistance = distance
+            }
+        }
+        return nearest
+    }
+
+    private func steerHeatSeekingProjectile(
+        _ projectile: inout ProjectileState,
+        toward target: Vector2,
+        delta: Double
+    ) {
+        steerProjectile(&projectile, toward: target, turnRate: 10, delta: delta)
+    }
+
+    private func steerProjectile(
+        _ projectile: inout ProjectileState,
+        toward target: Vector2,
+        turnRate: Double,
+        delta: Double
+    ) {
+        let dx = target.x - projectile.position.x
+        let dy = target.y - projectile.position.y
+        let distance = max(0.001, hypot(dx, dy))
+        let speed = max(stats.ballSpeed, hypot(projectile.velocity.x, projectile.velocity.y))
+        let desired = Vector2(x: dx / distance * speed, y: dy / distance * speed)
+        let turn = min(1, delta * turnRate)
+        let blended = Vector2(
+            x: projectile.velocity.x + (desired.x - projectile.velocity.x) * turn,
+            y: projectile.velocity.y + (desired.y - projectile.velocity.y) * turn
+        )
+        let blendedSpeed = max(0.001, hypot(blended.x, blended.y))
+        projectile.velocity = .init(
+            x: blended.x / blendedSpeed * speed,
+            y: blended.y / blendedSpeed * speed
+        )
+    }
+
+    private func nearestSteeringTarget(for projectile: ProjectileState) -> TargetState? {
+        snapshot.targets
+            .filter {
+                !isPowerUp($0)
+                    && !projectile.contactedTargetIDs.contains($0.id)
+                    && $0.position.y >= projectile.position.y - 0.02
+            }
+            .min {
+                hypot($0.position.x - projectile.position.x, $0.position.y - projectile.position.y)
+                    < hypot($1.position.x - projectile.position.x, $1.position.y - projectile.position.y)
+            }
+    }
+
+    private func curlerTurnRate(rank: Int) -> Double {
+        if mode.isEndless {
+            return min(9, 1.8 + Double(rank) * 1.7)
+        }
+        return [0, 3.5, 6.5, 9][min(max(rank, 0), 3)]
+    }
+
+    private func targetHitbox(for target: TargetState) -> (halfWidth: Double, halfHeight: Double) {
+        let dimensions: (width: Double, height: Double) = switch target.kind {
+        case .enemy(let enemy):
+            switch enemy {
+            case .coneRunner: (0.14, 0.055)
+            case .dummyDefender, .regolithRunner, .dustSprite: (0.17, 0.058)
+            case .tackleBot, .roverRaider: (0.19, 0.060)
+            case .keeperDrone, .ballLauncher, .lunarHopper, .orbitDrone,
+                 .eclipseKeeper, .gravityStriker, .saucerKeeper, .plasmaStriker: (0.21, 0.066)
+            case .craterCrawler: (0.23, 0.058)
+            case .titanKeeper, .lunarWarden, .marsColossus: (0.25, 0.078)
+            }
+        case .fieldObject(let object):
+            switch object {
+            case .waterCooler, .gravityCell: (0.15, 0.066)
+            case .ballCart, .roverBattery, .tacticsBoard, .satelliteRelay: (0.19, 0.068)
+            case .coneBarricade, .regolithBarricade, .holoGate: (0.25, 0.060)
+            case .equipmentTrunk, .lunarVault, .meteorCrate,
+                 .crystalBarricade, .artifactVault: (0.24, 0.075)
+            case .oxygenPod: (0.17, 0.072)
+            }
+        case .powerUp:
+            (0.16, 0.060)
+        case .volatileCore:
+            (0.15, 0.055)
+        }
+        let bossScale = CampaignBalance.bossScale(tier: target.bossTier)
+        return (
+            min(0.40, dimensions.width * bossScale),
+            min(0.14, dimensions.height * bossScale)
+        )
+    }
+
     private func spawnProjectile(
         x: Double,
         y: Double = 0.17,
@@ -1040,7 +1360,9 @@ final class GameSimulation {
             hostile: hostile,
             isCritical: critical,
             temporaryAbility: temporaryAbility,
-            canSplit: canSplit
+            canSplit: canSplit,
+            lunarRailBouncesRemaining: world == .moon ? 1 : 0,
+            orbitChainsRemaining: temporaryAbility == .orbitShot ? 3 : 0
         ))
     }
 
@@ -1098,13 +1420,13 @@ final class GameSimulation {
                     ? tokenValue(enemy) * 5
                     : tokenValue(enemy)
             awardTokens(baseValue, at: target.position, events: &events)
-        case .fieldObject(.waterCooler), .fieldObject(.oxygenPod):
+        case .fieldObject(.waterCooler), .fieldObject(.oxygenPod), .fieldObject(.gravityCell):
             let amount = min(24, snapshot.maxStamina - snapshot.stamina)
             snapshot.stamina += amount
             events.append(.heal(amount, target.position))
-        case .fieldObject(.equipmentTrunk), .fieldObject(.artifactVault):
+        case .fieldObject(.equipmentTrunk), .fieldObject(.artifactVault), .fieldObject(.lunarVault):
             awardTokens(35, at: target.position, events: &events)
-        case .fieldObject(.ballCart), .fieldObject(.meteorCrate):
+        case .fieldObject(.ballCart), .fieldObject(.meteorCrate), .fieldObject(.roverBattery):
             awardTokens(18, at: target.position, events: &events)
         case .fieldObject:
             awardTokens(8, at: target.position, events: &events)
@@ -1115,6 +1437,8 @@ final class GameSimulation {
                 snapshot.temporaryAbilityDuration,
                 target.position
             ))
+        case .volatileCore:
+            break
         }
     }
 
@@ -1149,6 +1473,7 @@ final class GameSimulation {
     private var endlessEnemyPool: [EnemyKind] {
         let ordered: [EnemyKind] = switch world {
         case .earth: [.coneRunner, .dummyDefender, .tackleBot, .keeperDrone, .ballLauncher]
+        case .moon: [.regolithRunner, .lunarHopper, .orbitDrone, .eclipseKeeper, .gravityStriker]
         case .mars: [.dustSprite, .roverRaider, .craterCrawler, .saucerKeeper, .plasmaStriker]
         }
         let count = min(ordered.count, 1 + max(0, snapshot.wave - 1) / 2)
@@ -1158,6 +1483,7 @@ final class GameSimulation {
     private var endlessObjectPool: [FieldObjectKind] {
         return switch world {
         case .earth: [.ballCart, .waterCooler, .tacticsBoard, .coneBarricade, .equipmentTrunk]
+        case .moon: [.roverBattery, .satelliteRelay, .regolithBarricade, .gravityCell, .lunarVault]
         case .mars: [.meteorCrate, .oxygenPod, .holoGate, .crystalBarricade, .artifactVault]
         }
     }
@@ -1171,6 +1497,7 @@ final class GameSimulation {
         }
         return switch world {
         case .earth: phase == 2 ? [.coneRunner, .coneRunner] : [.tackleBot, .keeperDrone]
+        case .moon: phase == 2 ? [.regolithRunner, .regolithRunner] : [.lunarHopper, .eclipseKeeper]
         case .mars: phase == 2 ? [.dustSprite, .dustSprite] : [.craterCrawler, .saucerKeeper]
         }
     }
@@ -1193,57 +1520,78 @@ final class GameSimulation {
         case .ice: .ice
         case .reverse: .reverse
         case .split: .split
-        case .rapidFire, nil: .standard
+        case .rapidFire, .heatSeeking, .orbitShot, .solarPierce, nil: .standard
         }
     }
 
-    private func randomLaneX() -> Double { laneX(Int(random.next() % 3)) }
+    private func randomSpawnX(near y: Double) -> Double {
+        let lowerBound = -0.76
+        let upperBound = 0.76
+        let nearby = snapshot.targets.filter { abs($0.position.y - y) < 0.16 }
+        var bestCandidate = lowerBound + random.unit() * (upperBound - lowerBound)
+        var bestClearance = nearby.map { abs($0.position.x - bestCandidate) }.min() ?? .greatestFiniteMagnitude
+
+        for _ in 0..<7 {
+            let candidate = lowerBound + random.unit() * (upperBound - lowerBound)
+            let clearance = nearby.map { abs($0.position.x - candidate) }.min() ?? .greatestFiniteMagnitude
+            if clearance >= 0.24 {
+                return candidate
+            }
+            if clearance > bestClearance {
+                bestCandidate = candidate
+                bestClearance = clearance
+            }
+        }
+        return bestCandidate
+    }
+
     private func identifier() -> Int { defer { nextIdentifier += 1 }; return nextIdentifier }
-    private func laneX(_ lane: Int) -> Double { [-0.62, 0, 0.62][min(max(lane, 0), 2)] }
 
     private func isRanged(_ kind: EnemyKind) -> Bool {
-        kind == .ballLauncher || kind == .plasmaStriker
+        kind == .ballLauncher || kind == .gravityStriker || kind == .plasmaStriker
     }
 
     private func enemyHealth(_ kind: EnemyKind) -> Double {
         switch kind {
-        case .coneRunner, .dustSprite: 10
-        case .dummyDefender, .roverRaider: 24
-        case .tackleBot, .craterCrawler: 18
-        case .keeperDrone, .saucerKeeper: 42
-        case .ballLauncher, .plasmaStriker: 28
+        case .coneRunner, .regolithRunner, .dustSprite: 10
+        case .dummyDefender, .eclipseKeeper, .roverRaider: 24
+        case .tackleBot, .lunarHopper, .craterCrawler: 18
+        case .keeperDrone, .orbitDrone, .saucerKeeper: 42
+        case .ballLauncher, .gravityStriker, .plasmaStriker: 28
         case .titanKeeper: 720
+        case .lunarWarden: 820
         case .marsColossus: 900
         }
     }
 
     private func enemySpeed(_ kind: EnemyKind) -> Double {
         switch kind {
-        case .coneRunner, .dustSprite: 0.105
-        case .dummyDefender, .roverRaider: 0.075
-        case .tackleBot, .craterCrawler: 0.13
-        case .keeperDrone, .saucerKeeper: 0.06
-        case .ballLauncher, .plasmaStriker: 0.05
-        case .titanKeeper, .marsColossus: 0
+        case .coneRunner, .regolithRunner, .dustSprite: 0.105
+        case .dummyDefender, .eclipseKeeper, .roverRaider: 0.075
+        case .tackleBot, .lunarHopper, .craterCrawler: 0.13
+        case .keeperDrone, .orbitDrone, .saucerKeeper: 0.06
+        case .ballLauncher, .gravityStriker, .plasmaStriker: 0.05
+        case .titanKeeper, .lunarWarden, .marsColossus: 0
         }
     }
 
     private func contactDamage(_ kind: EnemyKind) -> Double {
         switch kind {
-        case .coneRunner, .dustSprite: 9
-        case .titanKeeper, .marsColossus: 22
+        case .coneRunner, .regolithRunner, .dustSprite: 9
+        case .titanKeeper, .lunarWarden, .marsColossus: 22
         default: 14
         }
     }
 
     private func tokenValue(_ kind: EnemyKind) -> Int {
         switch kind {
-        case .coneRunner, .dustSprite: 2
-        case .dummyDefender, .roverRaider: 4
-        case .tackleBot, .craterCrawler: 5
-        case .keeperDrone, .saucerKeeper: 7
-        case .ballLauncher, .plasmaStriker: 8
+        case .coneRunner, .regolithRunner, .dustSprite: 2
+        case .dummyDefender, .eclipseKeeper, .roverRaider: 4
+        case .tackleBot, .lunarHopper, .craterCrawler: 5
+        case .keeperDrone, .orbitDrone, .saucerKeeper: 7
+        case .ballLauncher, .gravityStriker, .plasmaStriker: 8
         case .titanKeeper: 150
+        case .lunarWarden: 165
         case .marsColossus: 180
         }
     }

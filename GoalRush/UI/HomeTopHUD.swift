@@ -10,7 +10,11 @@ struct HomeTopHUD: View {
             : AnyLayout(HStackLayout(spacing: GoalRushTheme.Metrics.standardSpacing))
 
         layout {
-            Label("\(store.progress.trainingTokens)", systemImage: "hexagon.fill")
+            HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+                TrainingTokenIcon(size: 22)
+                Text(store.progress.trainingTokens.formatted())
+                    .monospacedDigit()
+            }
                 .font(GoalRushTheme.Typography.metric(size: 18))
                 .foregroundStyle(GoalRushTheme.gold)
                 .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)

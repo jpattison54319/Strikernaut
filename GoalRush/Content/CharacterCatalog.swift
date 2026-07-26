@@ -9,7 +9,7 @@ enum CharacterCatalog {
             ability: .pinballBlitz,
             abilityName: "Pinball Blitz",
             abilityDescription: "Launch three blazing balls that ricochet across the entire field.",
-            unlockLevel: 1,
+            unlockRequirement: .starter,
             accentHex: 0x18D7E8
         ),
         CharacterDefinition(
@@ -18,8 +18,8 @@ enum CharacterCatalog {
             role: "Speed Specialist",
             ability: .timeBreak,
             abilityName: "Time Break",
-            abilityDescription: "Freeze every enemy in place while your regular shots keep flying.",
-            unlockLevel: 10,
+            abilityDescription: "Bend lunar gravity and freeze every threat while your regular shots keep flying.",
+            unlockRequirement: .worldClear(.earth),
             accentHex: 0x4BE6FF
         ),
         CharacterDefinition(
@@ -29,7 +29,7 @@ enum CharacterCatalog {
             ability: .meteorVolley,
             abilityName: "Meteor Volley",
             abilityDescription: "Call down tracked meteors that explode on impact across the field.",
-            unlockLevel: 15,
+            unlockRequirement: .worldClear(.moon),
             accentHex: 0xFF6A32
         ),
         CharacterDefinition(
@@ -39,7 +39,7 @@ enum CharacterCatalog {
             ability: .lastStand,
             abilityName: "Last Stand",
             abilityDescription: "Restore stamina, gain two shields, and unleash four stunning shockwave bursts.",
-            unlockLevel: 20,
+            unlockRequirement: .worldClear(.mars),
             accentHex: 0xFFC247
         )
     ]
@@ -50,9 +50,18 @@ enum CharacterCatalog {
 
     static func unlockedCharacters(for progress: PlayerProgress) -> Set<CharacterID> {
         Set(characters.compactMap { character in
-            character.unlockLevel == 1 || progress.levelRecords[character.unlockLevel]?.completed == true
-                ? character.id
-                : nil
+            switch character.unlockRequirement {
+            case .starter:
+                character.id
+            case .worldClear(let world):
+                progress.levelRecords[GameContent.world(world).finalLevel]?.completed == true
+                    ? character.id
+                    : nil
+            }
         })
+    }
+
+    static func reward(for world: WorldID) -> CharacterDefinition? {
+        characters.first { $0.unlockRequirement == .worldClear(world) }
     }
 }

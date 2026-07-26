@@ -9,6 +9,9 @@ enum TemporaryAbilityRules {
         case .ice: 8
         case .reverse: 8
         case .split: 9
+        case .heatSeeking: 9
+        case .orbitShot: 9
+        case .solarPierce: 8
         }
     }
 
@@ -20,6 +23,9 @@ enum TemporaryAbilityRules {
         case .ice: "Ice Balls"
         case .reverse: "Reverse Balls"
         case .split: "Split Shot"
+        case .heatSeeking: "Heat Seeking"
+        case .orbitShot: "Orbit Shot"
+        case .solarPierce: "Solar Pierce"
         }
     }
 
@@ -31,6 +37,9 @@ enum TemporaryAbilityRules {
         case .ice: "snowflake"
         case .reverse: "arrow.uturn.backward.circle.fill"
         case .split: "circle.hexagongrid.fill"
+        case .heatSeeking: "scope"
+        case .orbitShot: "circle.dotted.circle.fill"
+        case .solarPierce: "sun.max.trianglebadge.exclamationmark.fill"
         }
     }
 }

@@ -1,0 +1,445 @@
+{
+  "title": "Strikernaut - Soccer Just Left Earth",
+  "style_prompt": "Vertical 9:16 premium mobile game advertisement transition art. Hand-inked comic sports science fiction, cobalt blue, electric cyan and hot orange, crisp high-contrast outlines, energetic speed lines, polished studio lighting, centered composition, fast readable motion.",
+  "continuity_prompt": "Keep one classic black-and-white soccer ball centered and fully recognizable. Preserve bottom-to-top forward movement. No words, letters, logos, UI, watermarks, people, hands, extra balls, or unreadable symbols.",
+  "defaults": {
+    "model": "google/veo-3.1",
+    "duration": 4,
+    "resolution": "1080p",
+    "aspect_ratio": "9:16",
+    "generate_audio": false
+  },
+  "shots": [
+    {
+      "id": "mars-hook",
+      "source": {
+        "type": "local_video",
+        "path": "/Users/jamespattison/Developer/IosSoccer/tmp/strikernaut-tiktok-ad/captures/mars-boss.mov"
+      },
+      "edit": {
+        "duration": 0.9,
+        "trim_start": 14.0,
+        "speed": 1.04,
+        "focal_x": 0.5,
+        "focal_y": 0.45
+      }
+    },
+    {
+      "id": "orbital-breakout",
+      "prompt": "The soccer ball rockets out through Earth's blue atmosphere into deep space. The camera chases directly behind and then whips past the ball. Cyan and orange energy trail, expanding shock ring, stars stretch into speed lines. Finish with the ball centered against deep indigo space, moving upward.",
+      "seed": 1842,
+      "handoff_from_previous": false,
+      "edit": {
+        "duration": 0.65,
+        "trim_start": 1.0,
+        "speed": 1.0
+      }
+    },
+    {
+      "id": "planet-journey",
+      "source": {
+        "type": "local_image",
+        "path": "/Users/jamespattison/Developer/IosSoccer/tmp/strikernaut-tiktok-ad/captures/planet-journey.png"
+      },
+      "edit": {
+        "duration": 0.9,
+        "focal_x": 0.5,
+        "focal_y": 0.5,
+        "zoom_from": 1.0,
+        "zoom_to": 1.07
+      }
+    },
+    {
+      "id": "earth-dodge-kick",
+      "source": {
+        "type": "local_video",
+        "path": "/Users/jamespattison/Developer/IosSoccer/tmp/strikernaut-tiktok-ad/captures/earth-action.mov"
+      },
+      "edit": {
+        "duration": 1.9,
+        "trim_start": 14.0,
+        "speed": 1.08,
+        "focal_x": 0.5,
+        "focal_y": 0.46
+      }
+    },
+    {
+      "id": "ability-draft",
+      "source": {
+        "type": "local_image",
+        "path": "/Users/jamespattison/Developer/IosSoccer/tmp/strikernaut-tiktok-ad/captures/ability-draft.png"
+      },
+      "edit": {
+        "duration": 0.85,
+        "focal_x": 0.5,
+        "focal_y": 0.44,
+        "zoom_from": 1.0,
+        "zoom_to": 1.055
+      }
+    },
+    {
+      "id": "powered-earth-kick",
+      "source": {
+        "type": "local_video",
+        "path": "/Users/jamespattison/Developer/IosSoccer/tmp/strikernaut-tiktok-ad/captures/earth-action.mov"
+      },
+      "edit": {
+        "duration": 0.9,
+        "trim_start": 18.5,
+        "speed": 1.12,
+        "focal_x": 0.5,
+        "focal_y": 0.46
+      }
+    },
+    {
+      "id": "moon-gravity",
+      "source": {
+        "type": "local_video",
+        "path": "/Users/jamespattison/Developer/IosSoccer/tmp/strikernaut-tiktok-ad/captures/moon-boss.mov"
+      },
+      "edit": {
+        "duration": 1.8,
+        "trim_start": 15.0,
+        "speed": 1.06,
+        "focal_x": 0.5,
+        "focal_y": 0.45
+      }
+    },
+    {
+      "id": "lunar-to-volatile",
+      "prompt": "A silver-blue lunar shockwave erupts around the centered soccer ball, gravity bends the starfield into a circular lens, then the cold energy ignites into a blazing red-orange Martian volatile core. Camera punches forward through the ring. Finish on a centered glowing orange core silhouette against red dust, ready for a hard match cut.",
+      "seed": 3097,
+      "handoff_from_previous": false,
+      "edit": {
+        "duration": 0.55,
+        "trim_start": 1.2,
+        "speed": 1.0
+      }
+    },
+    {
+      "id": "mars-escalation",
+      "source": {
+        "type": "local_video",
+        "path": "/Users/jamespattison/Developer/IosSoccer/tmp/strikernaut-tiktok-ad/captures/mars-boss.mov"
+      },
+      "edit": {
+        "duration": 1.95,
+        "trim_start": 18.0,
+        "speed": 1.08,
+        "focal_x": 0.5,
+        "focal_y": 0.45
+      }
+    },
+    {
+      "id": "character-unlock",
+      "source": {
+        "type": "local_image",
+        "path": "/Users/jamespattison/Developer/IosSoccer/tmp/strikernaut-tiktok-ad/captures/result-unlock.png"
+      },
+      "edit": {
+        "duration": 1.1,
+        "focal_x": 0.5,
+        "focal_y": 0.46,
+        "zoom_from": 1.0,
+        "zoom_to": 1.045
+      }
+    },
+    {
+      "id": "hero-roster",
+      "source": {
+        "type": "local_image",
+        "path": "/Users/jamespattison/Developer/IosSoccer/tmp/strikernaut-tiktok-ad/captures/character-roster.png"
+      },
+      "edit": {
+        "duration": 0.8,
+        "focal_x": 0.5,
+        "focal_y": 0.38,
+        "zoom_from": 1.04,
+        "zoom_to": 1.1
+      }
+    },
+    {
+      "id": "coming-soon",
+      "source": {
+        "type": "local_image",
+        "path": "/Users/jamespattison/Developer/IosSoccer/tmp/strikernaut-tiktok-ad/captures/end-card-base.png"
+      },
+      "edit": {
+        "duration": 2.9,
+        "focal_x": 0.5,
+        "focal_y": 0.5,
+        "zoom_from": 1.0,
+        "zoom_to": 1.025
+      },
+      "transition": {
+        "type": "fadeblack",
+        "duration": 0.2
+      }
+    }
+  ],
+  "output": {
+    "filename": "strikernaut-coming-soon-15s.mp4",
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "audio_mode": "mute",
+    "crf": 16,
+    "preset": "medium",
+    "captions": [
+      {
+        "text": "STRIKERNAUT",
+        "start": 0.0,
+        "end": 0.9,
+        "x": 0.5,
+        "y": 0.58,
+        "max_width": 0.82,
+        "font": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Fonts/BarlowCondensed-BlackItalic.otf",
+        "font_size": 58,
+        "fill": "#FF9700",
+        "stroke": "#07111F",
+        "stroke_width": 5
+      },
+      {
+        "text": "SOCCER JUST\\nLEFT EARTH.",
+        "start": 0.0,
+        "end": 0.9,
+        "x": 0.5,
+        "y": 0.68,
+        "max_width": 0.84,
+        "font": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Fonts/BarlowCondensed-BlackItalic.otf",
+        "font_size": 94,
+        "fill": "#FFFFFF",
+        "stroke": "#07111F",
+        "stroke_width": 6
+      },
+      {
+        "text": "KICK THROUGH WORLDS.",
+        "start": 1.55,
+        "end": 2.45,
+        "x": 0.5,
+        "y": 0.22,
+        "max_width": 0.86,
+        "font": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Fonts/BarlowCondensed-BlackItalic.otf",
+        "font_size": 86,
+        "fill": "#FFFFFF",
+        "stroke": "#07111F",
+        "stroke_width": 6
+      },
+      {
+        "text": "DODGE. KICK.\\nDOMINATE.",
+        "start": 2.45,
+        "end": 4.35,
+        "x": 0.5,
+        "y": 0.68,
+        "max_width": 0.82,
+        "font": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Fonts/BarlowCondensed-BlackItalic.otf",
+        "font_size": 88,
+        "fill": "#FFFFFF",
+        "stroke": "#07111F",
+        "stroke_width": 6
+      },
+      {
+        "text": "STACK WILD POWERS.",
+        "start": 4.35,
+        "end": 6.1,
+        "x": 0.5,
+        "y": 0.78,
+        "max_width": 0.84,
+        "font": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Fonts/BarlowCondensed-BlackItalic.otf",
+        "font_size": 78,
+        "fill": "#FF9700",
+        "stroke": "#07111F",
+        "stroke_width": 6
+      },
+      {
+        "text": "BEND GRAVITY.",
+        "start": 6.1,
+        "end": 7.9,
+        "x": 0.5,
+        "y": 0.72,
+        "max_width": 0.8,
+        "font": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Fonts/BarlowCondensed-BlackItalic.otf",
+        "font_size": 88,
+        "fill": "#FFFFFF",
+        "stroke": "#07111F",
+        "stroke_width": 6
+      },
+      {
+        "text": "CRUSH WORLD BOSSES.",
+        "start": 8.45,
+        "end": 10.4,
+        "x": 0.5,
+        "y": 0.72,
+        "max_width": 0.86,
+        "font": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Fonts/BarlowCondensed-BlackItalic.otf",
+        "font_size": 80,
+        "fill": "#FFFFFF",
+        "stroke": "#07111F",
+        "stroke_width": 6
+      },
+      {
+        "text": "UNLOCK YOUR SQUAD.",
+        "start": 10.4,
+        "end": 12.3,
+        "x": 0.5,
+        "y": 0.76,
+        "max_width": 0.84,
+        "font": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Fonts/BarlowCondensed-BlackItalic.otf",
+        "font_size": 78,
+        "fill": "#FF9700",
+        "stroke": "#07111F",
+        "stroke_width": 6
+      },
+      {
+        "text": "STRIKERNAUT",
+        "start": 12.3,
+        "end": 15.0,
+        "x": 0.5,
+        "y": 0.22,
+        "max_width": 0.88,
+        "font": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Fonts/BarlowCondensed-BlackItalic.otf",
+        "font_size": 122,
+        "fill": "#FFFFFF",
+        "stroke": "#0B3653",
+        "stroke_width": 7
+      },
+      {
+        "text": "KICK THROUGH WORLDS",
+        "start": 12.3,
+        "end": 15.0,
+        "x": 0.5,
+        "y": 0.33,
+        "max_width": 0.82,
+        "font": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Fonts/BarlowCondensed-Bold.otf",
+        "font_size": 58,
+        "fill": "#20BCE8",
+        "stroke": "#07111F",
+        "stroke_width": 4
+      },
+      {
+        "text": "COMING SOON • iPHONE",
+        "start": 12.3,
+        "end": 15.0,
+        "x": 0.5,
+        "y": 0.74,
+        "max_width": 0.84,
+        "font": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Fonts/BarlowCondensed-BlackItalic.otf",
+        "font_size": 72,
+        "fill": "#FF9700",
+        "stroke": "#07111F",
+        "stroke_width": 6
+      }
+    ],
+    "audio_tracks": [
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/music-pressure.wav",
+        "start": 0.0,
+        "duration": 8.2,
+        "loop": true,
+        "volume": 0.34,
+        "fade_out": 0.6
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/music-boss.wav",
+        "start": 7.7,
+        "duration": 7.3,
+        "loop": true,
+        "volume": 0.38,
+        "fade_in": 0.5,
+        "fade_out": 0.8
+      }
+    ],
+    "audio_cues": [
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/kick-3.wav",
+        "start": 0.0,
+        "volume": 1.0
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/impact-3.wav",
+        "start": 0.08,
+        "volume": 0.95
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/ui-whoosh.wav",
+        "start": 0.9,
+        "volume": 0.9
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/ui-whoosh.wav",
+        "start": 1.55,
+        "volume": 0.75
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/kick-2.wav",
+        "start": 2.45,
+        "volume": 0.95
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/impact.wav",
+        "start": 2.73,
+        "volume": 0.82
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/ui-draft.wav",
+        "start": 4.35,
+        "volume": 0.9
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/kick.wav",
+        "start": 5.2,
+        "volume": 0.92
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/impact-2.wav",
+        "start": 5.52,
+        "volume": 0.86
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/kick-2.wav",
+        "start": 6.1,
+        "volume": 0.9
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/impact-3.wav",
+        "start": 6.52,
+        "volume": 0.86
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/ui-whoosh.wav",
+        "start": 7.9,
+        "volume": 0.9
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/boss-phase.wav",
+        "start": 8.45,
+        "volume": 0.45
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/impact-2.wav",
+        "start": 8.72,
+        "volume": 0.95
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/impact-3.wav",
+        "start": 9.42,
+        "volume": 0.88
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/ui-fanfare.wav",
+        "start": 10.4,
+        "volume": 0.9
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/confirm.wav",
+        "start": 11.5,
+        "volume": 0.85
+      },
+      {
+        "path": "/Users/jamespattison/Developer/IosSoccer/GoalRush/Resources/Audio/victory.wav",
+        "start": 12.3,
+        "volume": 0.78
+      }
+    ]
+  }
+}

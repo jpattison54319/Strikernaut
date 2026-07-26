@@ -18,7 +18,10 @@ struct UpgradeIntroCard: View {
                     }
                 }
                 Divider().overlay(.white.opacity(0.12))
-                Label("\(tokens) Training Tokens available", systemImage: "hexagon.fill")
+                HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+                    TrainingTokenIcon(size: 22)
+                    Text("\(tokens) Training Tokens available")
+                }
                     .font(GoalRushTheme.Typography.headline)
                     .foregroundStyle(GoalRushTheme.gold)
             }

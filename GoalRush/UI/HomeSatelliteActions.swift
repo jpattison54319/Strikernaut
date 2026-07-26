@@ -12,23 +12,23 @@ struct HomeSatelliteActions: View {
             VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
                 FloatingGameActionButton(
                     title: "Daily",
-                    subtitle: content.dailySubtitle,
                     systemImage: "gift.fill",
                     badge: content.dailyBadge,
                     accent: GoalRushTheme.gold,
                     action: onDaily
                 )
                 .accessibilityIdentifier("daily-chest")
+                .accessibilityValue(content.dailySubtitle)
 
                 FloatingGameActionButton(
                     title: "Missions",
-                    subtitle: content.missionsSubtitle,
                     systemImage: "target",
                     badge: content.missionBadge,
                     accent: GoalRushTheme.cyan,
                     action: onMissions
                 )
                 .accessibilityIdentifier("missions")
+                .accessibilityValue(content.missionsSubtitle)
             }
 
             Spacer(minLength: 72)
@@ -44,12 +44,12 @@ struct HomeSatelliteActions: View {
 
                 FloatingGameActionButton(
                     title: "Endless",
-                    subtitle: content.endlessStatus,
                     systemImage: "infinity",
                     accent: GoalRushTheme.orange,
                     action: onEndless
                 )
                 .accessibilityIdentifier("endless")
+                .accessibilityValue(content.endlessStatus)
             }
         }
     }

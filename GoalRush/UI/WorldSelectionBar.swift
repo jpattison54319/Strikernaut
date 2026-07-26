@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// Compact arena picker retained for Endless mode. Campaign navigation uses
+/// the full-screen planet journey instead.
 struct WorldSelectionBar: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -44,50 +46,42 @@ private struct WorldSelectionButton: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .font(GoalRushTheme.Typography.subheadlineEmphasized)
-            .foregroundStyle(foregroundColor)
+            .foregroundStyle(selected ? GoalRushTheme.navy : .white.opacity(unlocked ? 1 : 0.58))
             .frame(maxWidth: .infinity, minHeight: GoalRushTheme.Metrics.minimumTapTarget)
             .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)
-            .background(backgroundStyle, in: ComicPanelShape(cut: GoalRushTheme.Metrics.smallRadius))
+            .background(
+                selected ? AnyShapeStyle(world.id.accentColor) : AnyShapeStyle(GoalRushTheme.navy.opacity(0.76)),
+                in: ComicPanelShape(cut: GoalRushTheme.Metrics.smallRadius)
+            )
             .overlay {
                 ComicPanelShape(cut: GoalRushTheme.Metrics.smallRadius)
-                    .stroke(borderColor, lineWidth: selected ? 2 : GoalRushTheme.Metrics.strokeWidth)
+                    .stroke(
+                        selected ? .white.opacity(0.34) : GoalRushTheme.surfaceStroke,
+                        lineWidth: selected ? 2 : GoalRushTheme.Metrics.strokeWidth
+                    )
             }
         }
         .buttonStyle(.plain)
         .disabled(!unlocked)
         .accessibilityIdentifier(identifier)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint(unlocked ? "Selects the \(world.name) world" : unlockCondition)
-    }
-
-    private var foregroundColor: Color {
-        if selected { return GoalRushTheme.navy }
-        return unlocked ? .white : .white.opacity(0.58)
-    }
-
-    private var backgroundStyle: AnyShapeStyle {
-        selected
-            ? AnyShapeStyle(world.id.accentColor)
-            : AnyShapeStyle(GoalRushTheme.navy.opacity(0.76))
-    }
-
-    private var borderColor: Color {
-        selected ? .white.opacity(0.34) : GoalRushTheme.surfaceStroke
+        .accessibilityHint(unlocked ? "Selects the \(world.name) arena" : unlockCondition)
     }
 
     private var accessibilityLabel: String {
-        if !unlocked {
-            return "\(world.name) world, locked, \(unlockCondition)"
-        }
-        return "\(world.name) world, \(selected ? "selected" : "unlocked")"
+        unlocked
+            ? "\(world.name) arena, \(selected ? "selected" : "unlocked")"
+            : "\(world.name) arena, locked, \(unlockCondition)"
     }
 
     private var unlockCondition: String {
         switch world.id {
         case .earth:
             "Available now"
-        case .mars:
+        case .moon:
             "Clear Earth challenge 10 to unlock"
+        case .mars:
+            "Clear Moon challenge 10 to unlock"
         }
     }
 }

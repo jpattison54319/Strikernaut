@@ -21,6 +21,14 @@ final class GoalRushScene: SKScene {
     private var normalImpactPool: [SKShapeNode] = []
     private var criticalImpactPool: [SKShapeNode] = []
     private var damageNumberPool: [SKNode] = []
+    private var meteorAttackPool: [SKSpriteNode] = []
+    private var shockwaveAttackPool: [SKSpriteNode] = []
+    private var ricochetFlashPool: [SKShapeNode] = []
+    private var freezeCrystalPool: [SKShapeNode] = []
+    private var meteorImpactPool: [SKSpriteNode] = []
+    private var shockwaveLaunchPool: [SKShapeNode] = []
+    private var shockwaveContactPool: [SKShapeNode] = []
+    private var criticalLabelPool: [SKLabelNode] = []
     private var liveTargetIDs = Set<Int>()
     private var liveProjectileIDs = Set<Int>()
     private var liveCharacterAttackIDs = Set<Int>()
@@ -31,6 +39,9 @@ final class GoalRushScene: SKScene {
     private var targetPrewarmIndex = 0
     private var impactPrewarmIndex = 0
     private let reducedEffects: Bool
+    private lazy var meteorTexture = SKTexture(imageNamed: "AbilityMeteor")
+    private lazy var shockwaveTexture = SKTexture(imageNamed: "AbilityShockwave")
+    private lazy var meteorImpactTexture = SKTexture(imageNamed: "AbilityMeteorImpact")
     var eventHandler: (([SimulationEvent], SimulationSnapshot) -> Void)?
 
     init(session: GameSessionModel, reducedEffects: Bool) {
@@ -69,6 +80,11 @@ final class GoalRushScene: SKScene {
         GameNodeFactory.prewarmKickActions()
         GameNodeFactory.prewarmProjectileTextures()
         kickWavePool = (0..<2).map { _ in makeKickWave() }
+        friendlyProjectilePool = (0..<3).map { _ in
+            let node = GameNodeFactory.projectile(hostile: false)
+            node.name = "friendly-projectile"
+            return node
+        }
         addChild(touchGuide)
         rebuildField()
     }
@@ -240,15 +256,14 @@ final class GoalRushScene: SKScene {
         liveCharacterAttackIDs.removeAll(keepingCapacity: true)
         for attack in attacks { liveCharacterAttackIDs.insert(attack.id) }
         for id in characterAttackNodes.keys where !liveCharacterAttackIDs.contains(id) {
-            characterAttackNodes.removeValue(forKey: id)?.removeFromParent()
+            if let node = characterAttackNodes.removeValue(forKey: id) {
+                recycleCharacterAttack(node)
+            }
         }
 
         for attack in attacks {
             let node = characterAttackNodes[attack.id] ?? {
-                let textureName = attack.kind == .meteor ? "AbilityMeteor" : "AbilityShockwave"
-                let newNode = SKSpriteNode(texture: SKTexture(imageNamed: textureName))
-                newNode.name = attack.kind == .meteor ? "ability-meteor" : "ability-shockwave"
-                newNode.alpha = 0
+                let newNode = dequeueCharacterAttack(kind: attack.kind)
                 characterAttackLayer.addChild(newNode)
                 characterAttackNodes[attack.id] = newNode
                 return newNode
@@ -275,6 +290,34 @@ final class GoalRushScene: SKScene {
                 node.setScale(1)
                 node.zPosition = 3_080
             }
+        }
+    }
+
+    private func dequeueCharacterAttack(kind: CharacterAttackKind) -> SKSpriteNode {
+        let node: SKSpriteNode
+        switch kind {
+        case .meteor:
+            node = meteorAttackPool.popLast() ?? SKSpriteNode(texture: meteorTexture)
+            node.texture = meteorTexture
+            node.name = "ability-meteor"
+        case .shockwave:
+            node = shockwaveAttackPool.popLast() ?? SKSpriteNode(texture: shockwaveTexture)
+            node.texture = shockwaveTexture
+            node.name = "ability-shockwave"
+        }
+        node.removeAllActions()
+        node.alpha = 0
+        node.setScale(1)
+        return node
+    }
+
+    private func recycleCharacterAttack(_ node: SKSpriteNode) {
+        node.removeFromParent()
+        node.removeAllActions()
+        if node.name == "ability-meteor" {
+            if meteorAttackPool.count < 5 { meteorAttackPool.append(node) }
+        } else if shockwaveAttackPool.count < 4 {
+            shockwaveAttackPool.append(node)
         }
     }
 
@@ -370,6 +413,13 @@ final class GoalRushScene: SKScene {
                 spawnMeteorAura()
             case .comboMilestone(let count):
                 showComboPopup(count: count)
+            case .worldEffectActivated(let rule, let position):
+                showWorldEffect(rule, at: point(x: position.x, y: position.y))
+            case .volatileCoreBurst(let position):
+                let location = point(x: position.x, y: position.y)
+                showComicCallout("CORE BREAK!", at: location, color: SKColor(red: 1, green: 0.48, blue: 0.05, alpha: 1))
+                spawnImpact(at: location, flavor: .explosive, critical: true)
+                shake(intensity: 8)
             case .comboChanged:
                 break
             case .temporaryAbilityActivated(let ability, _, let position):
@@ -474,15 +524,27 @@ final class GoalRushScene: SKScene {
             }
         }
         if critical {
-            let label = SKLabelNode(text: "CRITICAL")
-            label.fontName = "AvenirNext-Heavy"
-            label.fontSize = 13
-            label.fontColor = SKColor(red: 1, green: 0.78, blue: 0.12, alpha: 1)
+            let label = criticalLabelPool.popLast() ?? makeCriticalLabel()
+            label.removeAllActions()
+            label.alpha = 1
             label.position = position + CGPoint(x: 0, y: 22)
             label.zPosition = 2_050
             effectsLayer.addChild(label)
-            label.run(.sequence([.group([.moveBy(x: 0, y: 24, duration: 0.35), .fadeOut(withDuration: 0.35)]), .removeFromParent()]))
+            label.run(.group([.moveBy(x: 0, y: 24, duration: 0.35), .fadeOut(withDuration: 0.35)])) {
+                [weak self, weak label] in
+                guard let self, let label else { return }
+                label.removeFromParent()
+                if self.criticalLabelPool.count < 8 { self.criticalLabelPool.append(label) }
+            }
         }
+    }
+
+    private func makeCriticalLabel() -> SKLabelNode {
+        let label = SKLabelNode(text: "CRITICAL")
+        label.fontName = "AvenirNext-Heavy"
+        label.fontSize = 13
+        label.fontColor = SKColor(red: 1, green: 0.78, blue: 0.12, alpha: 1)
+        return label
     }
 
     private struct ImpactStyle {
@@ -712,6 +774,34 @@ final class GoalRushScene: SKScene {
         spawnAbilityAura()
     }
 
+    private func showWorldEffect(_ rule: WorldRule, at position: CGPoint) {
+        switch rule {
+        case .lunarCycle:
+            showComicCallout("ZERO-G!", at: position, color: SKColor(red: 0.66, green: 0.72, blue: 1, alpha: 1))
+            showScreenPulse(color: SKColor(red: 0.42, green: 0.34, blue: 0.92, alpha: 1), strength: 0.22)
+        case .volatileCores:
+            break
+        }
+    }
+
+    private func showComicCallout(_ text: String, at position: CGPoint, color: SKColor) {
+        let label = SKLabelNode(fontNamed: "AvenirNext-Heavy")
+        label.text = text
+        label.fontSize = 22
+        label.fontColor = color
+        label.position = position
+        label.zPosition = 3_500
+        effectsLayer.addChild(label)
+        label.run(.sequence([
+            .group([
+                .moveBy(x: 0, y: reducesMotion ? 22 : 58, duration: reducesMotion ? 0.22 : 0.62),
+                .scale(to: reducesMotion ? 1 : 1.18, duration: 0.18)
+            ]),
+            .fadeOut(withDuration: 0.18),
+            .removeFromParent()
+        ]))
+    }
+
     private func spawnReward(value: Int, from position: CGPoint) {
         let container = SKNode()
         container.position = position
@@ -828,21 +918,30 @@ final class GoalRushScene: SKScene {
     }
 
     private func spawnPinballRicochet(at position: CGPoint) {
-        let flash = SKShapeNode(circleOfRadius: 8)
+        let flash = ricochetFlashPool.popLast() ?? makeRicochetFlash()
+        flash.removeAllActions()
         flash.position = position
         flash.zPosition = 3_250
+        flash.alpha = 1
+        flash.setScale(1)
+        effectsLayer.addChild(flash)
+        flash.run(.group([
+            .scale(to: reducesMotion ? 1.5 : 2.7, duration: 0.15),
+            .fadeOut(withDuration: 0.15)
+        ])) { [weak self, weak flash] in
+            guard let self, let flash else { return }
+            flash.removeFromParent()
+            if self.ricochetFlashPool.count < 12 { self.ricochetFlashPool.append(flash) }
+        }
+    }
+
+    private func makeRicochetFlash() -> SKShapeNode {
+        let flash = SKShapeNode(circleOfRadius: 8)
         flash.fillColor = SKColor(red: 0.12, green: 0.92, blue: 1, alpha: 0.78)
         flash.strokeColor = .white
         flash.lineWidth = 2
         flash.glowWidth = 9
-        effectsLayer.addChild(flash)
-        flash.run(.sequence([
-            .group([
-                .scale(to: reducesMotion ? 1.5 : 2.7, duration: 0.15),
-                .fadeOut(withDuration: 0.15)
-            ]),
-            .removeFromParent()
-        ]))
+        return flash
     }
 
     private func showCharacterAbilityTargets(_ ability: CharacterAbility, positions: [Vector2]) {
@@ -852,37 +951,51 @@ final class GoalRushScene: SKScene {
         case .timeBreak:
             for position in positions {
                 let location = point(x: position.x, y: position.y)
-                let crystal = SKShapeNode(path: CGPath(
-                    roundedRect: CGRect(x: -6, y: -22, width: 12, height: 44),
-                    cornerWidth: 5,
-                    cornerHeight: 5,
-                    transform: nil
-                ))
+                let crystal = freezeCrystalPool.popLast() ?? makeFreezeCrystal()
+                crystal.removeAllActions()
                 crystal.position = location
                 crystal.zPosition = 3_100
-                crystal.fillColor = SKColor(red: 0.40, green: 0.92, blue: 1, alpha: 0.28)
-                crystal.strokeColor = SKColor(red: 0.78, green: 0.98, blue: 1, alpha: 0.92)
-                crystal.lineWidth = 2
-                crystal.glowWidth = 7
+                crystal.alpha = 1
+                crystal.setScale(1)
                 effectsLayer.addChild(crystal)
                 crystal.run(.sequence([
                     .group([.scale(to: 1.35, duration: 0.24), .fadeAlpha(to: 0.72, duration: 0.24)]),
                     .wait(forDuration: 0.28),
-                    .fadeOut(withDuration: 0.36),
-                    .removeFromParent()
-                ]))
+                    .fadeOut(withDuration: 0.36)
+                ])) { [weak self, weak crystal] in
+                    guard let self, let crystal else { return }
+                    crystal.removeFromParent()
+                    if self.freezeCrystalPool.count < 12 { self.freezeCrystalPool.append(crystal) }
+                }
             }
         case .meteorVolley, .lastStand:
             break
         }
     }
 
+    private func makeFreezeCrystal() -> SKShapeNode {
+        let crystal = SKShapeNode(path: CGPath(
+            roundedRect: CGRect(x: -6, y: -22, width: 12, height: 44),
+            cornerWidth: 5,
+            cornerHeight: 5,
+            transform: nil
+        ))
+        crystal.fillColor = SKColor(red: 0.40, green: 0.92, blue: 1, alpha: 0.28)
+        crystal.strokeColor = SKColor(red: 0.78, green: 0.98, blue: 1, alpha: 0.92)
+        crystal.lineWidth = 2
+        crystal.glowWidth = 7
+        return crystal
+    }
+
     private func spawnGeneratedMeteorImpact(at position: CGPoint, y: Double) {
-        let blast = SKSpriteNode(texture: SKTexture(imageNamed: "AbilityMeteorImpact"))
+        let blast = meteorImpactPool.popLast() ?? SKSpriteNode(texture: meteorImpactTexture)
+        blast.removeAllActions()
+        blast.texture = meteorImpactTexture
         let scale = perspectiveScale(y)
         blast.position = position
         blast.size = CGSize(width: size.width * 0.52 * scale, height: size.width * 0.35 * scale)
         blast.zPosition = 3_360
+        blast.alpha = 1
         blast.setScale(0.28)
         effectsLayer.addChild(blast)
         blast.run(.sequence([
@@ -893,46 +1006,67 @@ final class GoalRushScene: SKScene {
             .group([
                 .scale(to: reducesMotion ? 1.16 : 1.42, duration: reducesMotion ? 0.20 : 0.55),
                 .fadeOut(withDuration: reducesMotion ? 0.20 : 0.55)
-            ]),
-            .removeFromParent()
-        ]))
+            ])
+        ])) { [weak self, weak blast] in
+            guard let self, let blast else { return }
+            blast.removeFromParent()
+            if self.meteorImpactPool.count < 7 { self.meteorImpactPool.append(blast) }
+        }
         showScreenPulse(color: SKColor(red: 1, green: 0.28, blue: 0.03, alpha: 1), strength: 0.22)
         shake(intensity: 8)
     }
 
     private func spawnShockwaveLaunch(at position: CGPoint) {
-        let launch = SKShapeNode(ellipseOf: CGSize(width: 70, height: 22))
+        let launch = shockwaveLaunchPool.popLast() ?? makeShockwaveLaunch()
+        launch.removeAllActions()
         launch.position = position + CGPoint(x: 0, y: 22)
         launch.zPosition = 3_170
-        launch.strokeColor = SKColor(red: 1, green: 0.82, blue: 0.18, alpha: 0.95)
-        launch.lineWidth = 4
-        launch.glowWidth = 10
+        launch.alpha = 1
+        launch.setScale(1)
         effectsLayer.addChild(launch)
-        launch.run(.sequence([
-            .group([
-                .scale(to: reducesMotion ? 1.25 : 1.75, duration: 0.16),
-                .fadeOut(withDuration: 0.16)
-            ]),
-            .removeFromParent()
-        ]))
+        launch.run(.group([
+            .scale(to: reducesMotion ? 1.25 : 1.75, duration: 0.16),
+            .fadeOut(withDuration: 0.16)
+        ])) { [weak self, weak launch] in
+            guard let self, let launch else { return }
+            launch.removeFromParent()
+            if self.shockwaveLaunchPool.count < 5 { self.shockwaveLaunchPool.append(launch) }
+        }
     }
 
     private func spawnShockwaveContact(at position: CGPoint) {
-        let contact = SKShapeNode(circleOfRadius: 7)
+        let contact = shockwaveContactPool.popLast() ?? makeShockwaveContact()
+        contact.removeAllActions()
         contact.position = position
         contact.zPosition = 3_290
+        contact.alpha = 1
+        contact.setScale(1)
+        effectsLayer.addChild(contact)
+        contact.run(.group([
+            .scale(to: reducesMotion ? 1.5 : 2.4, duration: 0.14),
+            .fadeOut(withDuration: 0.14)
+        ])) { [weak self, weak contact] in
+            guard let self, let contact else { return }
+            contact.removeFromParent()
+            if self.shockwaveContactPool.count < 16 { self.shockwaveContactPool.append(contact) }
+        }
+    }
+
+    private func makeShockwaveLaunch() -> SKShapeNode {
+        let launch = SKShapeNode(ellipseOf: CGSize(width: 70, height: 22))
+        launch.strokeColor = SKColor(red: 1, green: 0.82, blue: 0.18, alpha: 0.95)
+        launch.lineWidth = 4
+        launch.glowWidth = 10
+        return launch
+    }
+
+    private func makeShockwaveContact() -> SKShapeNode {
+        let contact = SKShapeNode(circleOfRadius: 7)
         contact.fillColor = .white.withAlphaComponent(0.88)
         contact.strokeColor = SKColor(red: 0.20, green: 0.92, blue: 1, alpha: 1)
         contact.lineWidth = 3
         contact.glowWidth = 9
-        effectsLayer.addChild(contact)
-        contact.run(.sequence([
-            .group([
-                .scale(to: reducesMotion ? 1.5 : 2.4, duration: 0.14),
-                .fadeOut(withDuration: 0.14)
-            ]),
-            .removeFromParent()
-        ]))
+        return contact
     }
 
     private func showWaveBanner(wave: Int) {

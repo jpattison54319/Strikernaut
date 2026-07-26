@@ -126,6 +126,7 @@ extension WorldID {
     var accentColor: Color {
         switch self {
         case .earth: GoalRushTheme.cyan
+        case .moon: Color(red: 0.70, green: 0.78, blue: 1)
         case .mars: GoalRushTheme.marsRust
         }
     }
@@ -133,6 +134,7 @@ extension WorldID {
     var secondaryColor: Color {
         switch self {
         case .earth: GoalRushTheme.grass
+        case .moon: Color(red: 0.34, green: 0.24, blue: 0.62)
         case .mars: GoalRushTheme.marsViolet
         }
     }
@@ -140,6 +142,7 @@ extension WorldID {
     var icon: String {
         switch self {
         case .earth: "globe.americas.fill"
+        case .moon: "moon.stars.fill"
         case .mars: "circle.grid.cross.fill"
         }
     }

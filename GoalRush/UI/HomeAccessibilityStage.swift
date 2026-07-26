@@ -32,23 +32,23 @@ struct HomeAccessibilityStage: View {
                 VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
                     HomeAccessibilityAction(
                         title: "Daily",
-                        subtitle: content.dailySubtitle,
                         systemImage: "gift.fill",
                         badge: content.dailyBadge,
                         accent: GoalRushTheme.gold,
                         action: onDaily
                     )
                     .accessibilityIdentifier("daily-chest")
+                    .accessibilityValue(content.dailySubtitle)
 
                     HomeAccessibilityAction(
                         title: "Missions",
-                        subtitle: content.missionsSubtitle,
                         systemImage: "target",
                         badge: content.missionBadge,
                         accent: GoalRushTheme.cyan,
                         action: onMissions
                     )
                     .accessibilityIdentifier("missions")
+                    .accessibilityValue(content.missionsSubtitle)
                 }
 
                 VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
@@ -63,12 +63,12 @@ struct HomeAccessibilityStage: View {
 
                     HomeAccessibilityAction(
                         title: "Endless",
-                        subtitle: content.endlessStatus,
                         systemImage: "infinity",
                         accent: GoalRushTheme.orange,
                         action: onEndless
                     )
                     .accessibilityIdentifier("endless")
+                    .accessibilityValue(content.endlessStatus)
                 }
 
                 HomeClubhouseDock()

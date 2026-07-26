@@ -6,7 +6,7 @@ import Observation
 final class GameStore {
     enum Route: Equatable {
         case home
-        case levels
+        case campaign(CampaignRoute)
         case endless
         case characters
         case upgrades
@@ -35,7 +35,10 @@ final class GameStore {
         self.progress = reconciledProgress
         self.settings = settings
         self.persistence = persistence
-        self.uiAudio = UIAudio(soundEnabled: settings.soundEnabled)
+        self.uiAudio = UIAudio(
+            soundEnabled: settings.soundEnabled,
+            hapticsEnabled: settings.hapticsEnabled
+        )
     }
 
     static func bootstrap() -> GameStore {
@@ -73,7 +76,10 @@ final class GameStore {
         if let screenIndex = arguments.firstIndex(of: "--screen"),
            arguments.indices.contains(screenIndex + 1) {
             switch arguments[screenIndex + 1] {
-            case "levels": store.route = .levels
+            case "levels", "planets": store.route = .campaign(.planets(page: 0))
+            case "earth-map": store.route = .campaign(.worldMap(world: .earth, focusLevel: 1))
+            case "moon-map": store.route = .campaign(.worldMap(world: .moon, focusLevel: 11))
+            case "mars-map": store.route = .campaign(.worldMap(world: .mars, focusLevel: 21))
             case "endless": store.route = .endless
             case "gear", "characters": store.route = .characters
             case "upgrades": store.route = .upgrades
@@ -101,6 +107,13 @@ final class GameStore {
                     remainingStamina: 38,
                     characterEarned: .volt
                 ))
+            case "result-loss":
+                store.route = .result(.init(
+                    mode: .campaign(level: 6),
+                    didWin: false,
+                    tokensEarned: 180,
+                    remainingStamina: 0
+                ))
             default: break
             }
         }
@@ -109,6 +122,11 @@ final class GameStore {
         }
         if arguments.contains("--unlock-gear") || arguments.contains("--unlock-characters") {
             store.progress.unlockedCharacters = Set(CharacterID.allCases)
+        }
+        if let upgradeLevelIndex = arguments.firstIndex(of: "--upgrade-level"),
+           arguments.indices.contains(upgradeLevelIndex + 1),
+           let level = Int(arguments[upgradeLevelIndex + 1]) {
+            store.progress.setRank(max(0, level), for: .impact)
         }
         if let characterIndex = arguments.firstIndex(of: "--character"),
            arguments.indices.contains(characterIndex + 1),
@@ -146,6 +164,24 @@ final class GameStore {
         route = .playing(.campaign(level: level))
     }
 
+    func openPlanetJourney(focusing world: WorldID? = nil) {
+        let focusedDestinationIndex = world.flatMap { focusedWorld in
+            WorldJourneyCatalog.destinations.firstIndex {
+                $0.world == focusedWorld
+            }
+        }
+        let destinationIndex = focusedDestinationIndex ?? WorldJourneyCatalog.destinations.firstIndex {
+            $0.world == selectedWorld
+        } ?? 0
+        route = .campaign(.planets(page: destinationIndex / WorldJourneyCatalog.pageSize))
+    }
+
+    func openWorldMap(_ world: WorldID, focusLevel: Int? = nil) {
+        guard GameContent.isWorldUnlocked(world, progress: progress) else { return }
+        selectedWorld = world
+        route = .campaign(.worldMap(world: world, focusLevel: focusLevel))
+    }
+
     @discardableResult
     func selectWorld(_ world: WorldID) -> Bool {
         guard GameContent.isWorldUnlocked(world, progress: progress) else { return false }
@@ -175,7 +211,9 @@ final class GameStore {
             )
             if result.didWin {
                 progress.highestUnlockedLevel = min(GameContent.levels.count, max(progress.highestUnlockedLevel, levelNumber + 1))
-                if let character = CharacterCatalog.characters.first(where: { $0.unlockLevel == levelNumber }),
+                let world = GameContent.level(levelNumber).world
+                if levelNumber == GameContent.world(world).finalLevel,
+                   let character = CharacterCatalog.reward(for: world),
                    !progress.unlockedCharacters.contains(character.id) {
                     progress.unlockedCharacters.insert(character.id)
                     finalResult.characterEarned = character.id
@@ -204,10 +242,18 @@ final class GameStore {
 
     func purchase(_ track: UpgradeTrack) -> Bool {
         let rank = progress.rank(for: track)
-        let cost = UpgradeRules.cost(forNextRank: rank)
+        let prestigeCount = progress.prestigeCount(for: track)
+        let cost = UpgradePrestigeRules.purchaseCost(
+            level: rank,
+            prestigeCount: prestigeCount
+        )
         guard progress.trainingTokens >= cost else { return false }
         progress.trainingTokens -= cost
-        progress.setRank(rank + 1, for: track)
+        if UpgradePrestigeRules.requiresPrestige(level: rank, prestigeCount: prestigeCount) {
+            progress.setPrestigeCount(prestigeCount + 1, for: track)
+        } else {
+            progress.setRank(rank + 1, for: track)
+        }
         progress.lifetimeStats.upgradesPurchased += 1
         saveProgress()
         evaluateAchievements()
@@ -226,6 +272,7 @@ final class GameStore {
         update(&settings)
         settings.save()
         uiAudio.isEnabled = settings.soundEnabled
+        uiAudio.isHapticsEnabled = settings.hapticsEnabled
     }
 
     func resetProgress() {
@@ -239,6 +286,15 @@ final class GameStore {
         pendingSaveTask?.cancel()
         pendingSaveTask = nil
         try? persistence.save(progress)
+    }
+
+    func markCampaignBriefingSeen(level: Int) {
+        guard GameContent.levels.indices.contains(level - 1),
+              !CampaignBriefingCatalog.discoveries(for: GameContent.level(level)).isEmpty,
+              progress.seenCampaignBriefingLevels.insert(level).inserted else {
+            return
+        }
+        saveProgress()
     }
 
     // MARK: - Engagement

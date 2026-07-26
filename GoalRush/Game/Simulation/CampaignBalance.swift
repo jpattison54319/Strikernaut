@@ -13,7 +13,8 @@ enum CampaignBalance {
         let safeWave = min(max(number, 1), level.waveCount)
         let waveIndex = Double(safeWave - 1)
         let levelIndex = Double(level.number - 1)
-        let isMegaBoss = level.hasBoss && safeWave == level.waveCount
+        let isBossWave = safeWave == level.waveCount
+        let isMegaBoss = level.hasBoss && isBossWave
         return CampaignWaveDefinition(
             number: safeWave,
             totalWaves: level.waveCount,
@@ -22,8 +23,12 @@ enum CampaignBalance {
             damageMultiplier: (1 + levelIndex * 0.028) * pow(1.075, waveIndex),
             speedMultiplier: baseSpeedMultiplier(level: level) * (1 + waveIndex * 0.045),
             spawnInterval: max(0.52, level.spawnInterval * pow(0.91, waveIndex)),
-            boss: isMegaBoss ? GameContent.world(level.world).boss : miniBoss(for: level, wave: safeWave),
-            bossTier: isMegaBoss ? .megaBoss : .miniBoss
+            boss: isBossWave
+                ? (isMegaBoss
+                    ? GameContent.world(level.world).boss
+                    : miniBoss(for: level, wave: safeWave))
+                : nil,
+            bossTier: isBossWave ? (isMegaBoss ? .megaBoss : .miniBoss) : nil
         )
     }
 
@@ -38,8 +43,8 @@ enum CampaignBalance {
     static func bossScale(tier: CampaignBossTier) -> Double {
         switch tier {
         case .standard: 1
-        case .miniBoss: 1.28
-        case .megaBoss: 1.58
+        case .miniBoss: 1.52
+        case .megaBoss: 1.90
         }
     }
 

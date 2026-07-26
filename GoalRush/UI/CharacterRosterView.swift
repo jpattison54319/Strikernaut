@@ -46,7 +46,6 @@ struct CharacterRosterView: View {
             }
         }
         .sheet(isPresented: $showingInfo) { CharacterInfoView() }
-        .sensoryFeedback(.selection, trigger: store.progress.selectedCharacter)
     }
 
     private func select(_ id: CharacterID) {

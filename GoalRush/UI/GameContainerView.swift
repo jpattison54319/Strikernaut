@@ -24,6 +24,29 @@ struct GameContainerView: View {
                 .accessibilityLabel("Active soccer training run")
             VStack(spacing: 10) {
                 hud
+                if session.hudState.combo > 0 {
+                    HStack {
+                        Spacer()
+                        FloatingComboView(combo: session.hudState.combo)
+                    }
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .scale(scale: 0.82, anchor: .topTrailing)
+                                .combined(with: .opacity)
+                    )
+                }
+                if let worldRule = session.world.rule {
+                    HStack {
+                        WorldEffectBadge(
+                            rule: worldRule,
+                            accentColor: session.world.id.accentColor,
+                            isActive: session.hudState.worldEffectActive,
+                            progress: session.hudState.worldEffectProgress
+                        )
+                        Spacer()
+                    }
+                }
                 if let ability = session.hudState.activeTemporaryAbility {
                     HStack {
                         Spacer()
@@ -51,6 +74,10 @@ struct GameContainerView: View {
             }
             .padding(.horizontal, 14)
             .padding(.top, 8)
+            .animation(
+                reduceMotion ? .easeOut(duration: 0.16) : .snappy(duration: 0.20),
+                value: session.hudState.combo > 0
+            )
 
             VStack {
                 Spacer()
@@ -88,6 +115,9 @@ struct GameContainerView: View {
         }
         .task {
             scene.eventHandler = handleSimulationEvents
+            if case .briefing = session.phase, let levelNumber = session.levelNumber {
+                store.markCampaignBriefingSeen(level: levelNumber)
+            }
             await Task.yield()
             await audio.prepare()
         }
@@ -136,11 +166,14 @@ struct GameContainerView: View {
                     Text("TOKENS")
                         .font(GoalRushTheme.Typography.caption2)
                         .foregroundStyle(.secondary)
-                    Label("\(session.hudState.tokens)", systemImage: "hexagon.fill")
-                        .font(GoalRushTheme.Typography.headline)
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                        .animation(.snappy, value: session.hudState.tokens)
+                    HStack(spacing: 4) {
+                        TrainingTokenIcon(size: 21)
+                        Text(session.hudState.tokens.formatted())
+                            .font(GoalRushTheme.Typography.headline)
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+                    }
+                    .animation(.snappy, value: session.hudState.tokens)
                 }
                     .foregroundStyle(GoalRushTheme.gold)
 
@@ -172,29 +205,13 @@ struct GameContainerView: View {
                     .accessibilityIdentifier("pause")
             }
 
-            if session.hudState.combo > 0 {
-                HStack(spacing: 8) {
-                    Image(systemName: "bolt.fill")
-                        .font(GoalRushTheme.Typography.captionEmphasized)
-                        .foregroundStyle(comboColor)
-                    Text("COMBO ×\(session.hudState.combo)")
-                        .font(GoalRushTheme.Typography.captionEmphasized)
-                        .foregroundStyle(comboColor)
-                        .contentTransition(.numericText())
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(.white.opacity(0.12))
-                            Capsule()
-                                .fill(comboColor)
-                                .frame(width: geometry.size.width * session.hudState.comboFraction)
-                        }
-                    }
-                    .frame(height: 5)
-                }
+            if session.hudState.bossActive {
+                BossHealthView(
+                    name: session.hudState.bossName ?? "Boss",
+                    healthFraction: session.hudState.bossHealthFraction,
+                    tier: session.hudState.bossTier ?? .miniBoss
+                )
                 .transition(.opacity.combined(with: .move(edge: .top)))
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Combo times \(session.hudState.combo)")
-                .accessibilityIdentifier("combo-meter")
             }
 
             HStack(spacing: 9) {
@@ -233,7 +250,7 @@ struct GameContainerView: View {
             ComicPanelShape(cut: 10)
                 .stroke(hudBorderColor, lineWidth: session.world.id == .mars ? 2.5 : 2)
         }
-        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: session.hudState.combo > 0)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: session.hudState.bossActive)
     }
 
     private var hudBackground: AnyShapeStyle {
@@ -293,7 +310,7 @@ struct GameContainerView: View {
 
     private func activateCharacterAbility() {
         guard session.hudState.characterAbilityReady else { return }
-        store.uiAudio.play(.fanfare, volume: 0.75)
+        store.uiAudio.play(.fanfare, volume: 0.75, feedback: nil)
         session.activateCharacterAbility()
     }
 
@@ -328,14 +345,6 @@ struct GameContainerView: View {
         if ratio > 0.55 { return GoalRushTheme.positive }
         if ratio > 0.28 { return GoalRushTheme.gold }
         return GoalRushTheme.orange
-    }
-
-    private var comboColor: Color {
-        switch session.hudState.combo {
-        case 25...: return GoalRushTheme.orange
-        case 10...: return GoalRushTheme.gold
-        default: return GoalRushTheme.cyan
-        }
     }
 
     private var levelProgress: Double {
@@ -382,7 +391,7 @@ struct GameContainerView: View {
     }
 
     private func handleSimulationEvents(_ events: [SimulationEvent], snapshot: SimulationSnapshot) {
-        for event in events { audio.handle(event) }
+        audio.handle(events)
         audio.updateIntensity(
             progress: snapshot.waveElapsed / max(1, snapshot.waveDuration),
             bossActive: snapshot.targets.contains { target in
@@ -405,6 +414,42 @@ struct GameContainerView: View {
         return "WAVE \(session.hudState.wave) OF \(session.hudState.waveCount)"
     }
 
+}
+
+private struct BossHealthView: View {
+    let name: String
+    let healthFraction: Double
+    let tier: CampaignBossTier
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Label(tier == .megaBoss ? "WORLD BOSS" : "WAVE BOSS", systemImage: "exclamationmark.triangle.fill")
+                    .font(GoalRushTheme.Typography.captionEmphasized)
+                    .foregroundStyle(GoalRushTheme.orange)
+                Spacer()
+                Text(name.uppercased())
+                    .font(GoalRushTheme.Typography.captionEmphasized)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+            }
+
+            ProgressView(value: healthFraction)
+                .tint(GoalRushTheme.orange)
+                .scaleEffect(y: 2)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(GoalRushTheme.orange.opacity(0.14), in: ComicPanelShape(cut: 6))
+        .overlay {
+            ComicPanelShape(cut: 6)
+                .stroke(GoalRushTheme.orange, lineWidth: 2)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(tier == .megaBoss ? "World boss" : "Wave boss"), \(name), \(Int((healthFraction * 100).rounded())) percent health")
+        .accessibilityIdentifier("boss-health")
+    }
 }
 
 private extension GameSessionModel.Phase {

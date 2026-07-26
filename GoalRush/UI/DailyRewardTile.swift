@@ -67,7 +67,11 @@ struct DailyRewardTile: View {
                 Spacer(minLength: 2)
                 statusIcon
             }
-            Label(reward.formatted(), systemImage: "hexagon.fill")
+            HStack(spacing: 4) {
+                TrainingTokenIcon(size: 20)
+                Text(reward.formatted())
+                    .monospacedDigit()
+            }
                 .font(GoalRushTheme.Typography.metric(size: 18))
                 .foregroundStyle(GoalRushTheme.gold)
         }
@@ -79,7 +83,11 @@ struct DailyRewardTile: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("DAY 7")
                 .font(GoalRushTheme.Typography.headline)
-            Label(reward.formatted(), systemImage: "hexagon.fill")
+            HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+                TrainingTokenIcon(size: 27)
+                Text(reward.formatted())
+                    .monospacedDigit()
+            }
                 .font(GoalRushTheme.Typography.metric(size: 24, relativeTo: .title2))
                 .foregroundStyle(GoalRushTheme.gold)
         }

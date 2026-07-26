@@ -42,12 +42,15 @@ def classify(path: Path) -> str:
     name = path.stem
     if "AppIcon" in name:
         return "icon"
+    if name.startswith("Planet"):
+        return "icon"
     if name.startswith("SoccerBall"):
         return "projectile"
-    if name in {
+    if name.endswith("WorldMap") or name in {
         "MenuHero",
         "OnboardingHero",
         "GameplayArena",
+        "MoonArena",
         "MarsArena",
         "UpgradeBay",
         "AbilityMeteor",
@@ -56,6 +59,21 @@ def classify(path: Path) -> str:
     }:
         return "environment"
     return "sprite"
+
+
+def remove_chroma_background(original: Image.Image, threshold: int = 72) -> Image.Image:
+    """Flood contiguous green-screen pixels from every corner to transparent.
+
+    Flooding, rather than globally keying green hues, preserves legitimate
+    greens inside Earth artwork and uniforms. The source contract requires a
+    flat chroma background and a closed ink silhouette.
+    """
+    keyed = original.convert("RGBA")
+    transparent = (0, 0, 0, 0)
+    width, height = keyed.size
+    for point in ((0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)):
+        ImageDraw.floodfill(keyed, point, transparent, thresh=threshold)
+    return keyed
 
 
 def diagonal_pattern(size: tuple[int, int], spacing: int, opposite: bool) -> Image.Image:
@@ -123,8 +141,15 @@ def alpha_inner_edge(alpha: Image.Image, radius: int) -> Image.Image:
     return ImageChops.subtract(alpha, eroded)
 
 
-def ink_image(source: Path, destination: Path, preset_name: str | None = None) -> None:
+def ink_image(
+    source: Path,
+    destination: Path,
+    preset_name: str | None = None,
+    chroma_key: bool = False,
+) -> None:
     original = Image.open(source).convert("RGBA")
+    if chroma_key:
+        original = remove_chroma_background(original)
     rgb = original.convert("RGB")
     alpha = original.getchannel("A")
     preset = PRESETS[preset_name or classify(source)]
@@ -185,6 +210,11 @@ def main() -> None:
     parser.add_argument("source", type=Path)
     parser.add_argument("--out", type=Path)
     parser.add_argument("--preset", choices=sorted(PRESETS))
+    parser.add_argument(
+        "--chroma-key",
+        action="store_true",
+        help="Flood a flat green-screen background to transparent before inking.",
+    )
     parser.add_argument("--in-place", action="store_true")
     args = parser.parse_args()
 
@@ -193,14 +223,14 @@ def main() -> None:
             parser.error("directory conversion requires --in-place or --out")
         for source in iter_assets(args.source):
             destination = source if args.in_place else args.out / source.relative_to(args.source)
-            ink_image(source, destination, args.preset)
+            ink_image(source, destination, args.preset, args.chroma_key)
             print(destination)
         return
 
     destination = args.source if args.in_place else args.out
     if destination is None:
         parser.error("file conversion requires --in-place or --out")
-    ink_image(args.source, destination, args.preset)
+    ink_image(args.source, destination, args.preset, args.chroma_key)
     print(destination)
 
 

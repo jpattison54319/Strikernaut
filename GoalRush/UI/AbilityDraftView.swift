@@ -38,7 +38,7 @@ struct AbilityDraftView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
-        .onAppear { appeared = true; store.uiAudio.play(.draft, volume: 0.6) }
+        .onAppear { appeared = true; store.uiAudio.play(.draft, volume: 0.6, feedback: nil) }
     }
 
     private var header: some View {
@@ -73,6 +73,7 @@ struct AbilityDraftView: View {
         )
 
         return Button {
+            store.uiAudio.requestFeedback(.impact)
             session.choose(ability)
         } label: {
             VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing) {

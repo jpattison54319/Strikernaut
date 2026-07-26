@@ -4,8 +4,7 @@ import Foundation
 
 @MainActor
 final class GameAudio {
-    private var effectPools: [String: [AVAudioPlayer]] = [:]
-    private var effectPoolIndices: [String: Int] = [:]
+    private let effects = BufferedEffectPlayer()
     private var musicPlayers: [AVAudioPlayer] = []
     private var hapticEngine: CHHapticEngine?
     private var hapticPlayerPools: [HapticFeedback: [any CHHapticPatternPlayer]] = [:]
@@ -35,37 +34,58 @@ final class GameAudio {
         isPreparing = false
     }
 
-    func handle(_ event: SimulationEvent) {
+    func handle(_ events: [SimulationEvent]) {
+        var strongestFeedback: HapticFeedback?
+        for event in events {
+            let feedback = handleAudio(for: event)
+            if let feedback, feedback.priority > (strongestFeedback?.priority ?? Int.min) {
+                strongestFeedback = feedback
+            }
+        }
+        if settings.hapticsEnabled, let strongestFeedback {
+            playHaptic(strongestFeedback)
+        }
+    }
+
+    private func handleAudio(for event: SimulationEvent) -> HapticFeedback? {
         switch event {
-        // Auto-kicks happen continuously. Audio and animation provide immediate
-        // feedback without waking Core Haptics on every gameplay cadence.
-        case .kick: play("kick", volume: 0.34, feedback: nil)
+        case .kick: play("kick", volume: 0.34); return .kick
         case .impact(_, _, _, let critical):
-            play("impact", volume: critical ? 0.58 : 0.28, feedback: critical ? .critical : .impact)
+            play("impact", volume: critical ? 0.58 : 0.28)
+            return critical ? .critical : .impact
         case .elementalReaction:
-            break
-        case .reward: play("coin", volume: 0.52, feedback: .reward)
-        case .heal: play("heal", volume: 0.52, feedback: .reward)
-        case .damage: play("impact", volume: 0.78, feedback: .damage)
-        case .checkpoint: play("confirm", volume: 0.50, feedback: .success)
-        case .abilityChosen: play("confirm", volume: 0.58, feedback: .success)
-        case .bossPhase: play("boss-phase", volume: 0.84, feedback: .boss)
-        case .waveCompleted: play("confirm", volume: 0.68, feedback: .success)
-        case .meteorKick: play("boss-phase", volume: 0.38, feedback: .critical)
-        case .comboMilestone: play("ui-combo", volume: 0.45, feedback: .reward)
-        case .comboChanged: break
-        case .temporaryAbilityActivated: play("confirm", volume: 0.72, feedback: .success)
-        case .characterAbilityActivated: play("boss-phase", volume: 0.78, feedback: .critical)
-        case .characterAbilityTargets: break
-        case .characterProjectileRicochet: play("impact", volume: 0.44, feedback: .impact)
+            return nil
+        case .reward: play("coin", volume: 0.52); return .reward
+        case .heal: play("heal", volume: 0.52); return .reward
+        case .damage: play("impact", volume: 0.78); return .damage
+        case .checkpoint: play("confirm", volume: 0.50); return .success
+        case .abilityChosen: play("confirm", volume: 0.58); return .success
+        case .bossPhase: play("boss-phase", volume: 0.84); return .boss
+        case .waveCompleted: play("confirm", volume: 0.68); return .success
+        case .meteorKick: play("boss-phase", volume: 0.38); return .critical
+        case .comboMilestone: play("ui-combo", volume: 0.45); return .reward
+        case .comboChanged: return nil
+        case .worldEffectActivated: play("ui-whoosh", volume: 0.62); return .success
+        case .volatileCoreBurst:
+            play("impact", volume: 0.88)
+            return .meteor
+        case .temporaryAbilityActivated: play("confirm", volume: 0.72); return .success
+        case .characterAbilityActivated: play("boss-phase", volume: 0.78); return .critical
+        case .characterAbilityTargets: return nil
+        case .characterProjectileRicochet: play("impact", volume: 0.44); return .impact
         case .characterMeteorImpact:
-            play("impact", volume: 0.92, feedback: .meteor)
-            play("boss-phase", volume: 0.24, feedback: nil)
+            play("impact", volume: 0.92)
+            play("boss-phase", volume: 0.24)
+            return .meteor
         case .characterShockwaveBurst:
-            play("ui-whoosh", volume: 0.76, feedback: .shockwave)
+            play("ui-whoosh", volume: 0.76)
+            return .shockwave
         case .characterShockwaveHit:
-            play("impact", volume: 0.22, feedback: nil)
-        case .finished(let won): play(won ? "victory" : "defeat", volume: won ? 0.72 : 0.58, feedback: won ? .success : .damage)
+            play("impact", volume: 0.22)
+            return nil
+        case .finished(let won):
+            play(won ? "victory" : "defeat", volume: won ? 0.72 : 0.58)
+            return won ? .success : .damage
         }
     }
 
@@ -78,43 +98,29 @@ final class GameAudio {
 
     func stop() {
         musicPlayers.forEach { $0.stop() }
-        effectPools.values.flatMap { $0 }.forEach { $0.stop() }
+        effects.stop()
     }
 
-    private func play(_ name: String, volume: Float, feedback: HapticFeedback?) {
-        if settings.soundEnabled, let players = effectPools[name], !players.isEmpty {
-            let index = effectPoolIndices[name, default: 0] % players.count
-            let player = players[index]
-            player.currentTime = 0
-            player.volume = volume
-            player.play()
-            effectPoolIndices[name] = index + 1
+    private func play(_ name: String, volume: Float) {
+        if settings.soundEnabled {
+            effects.play(name, volume: volume)
         }
-        if settings.hapticsEnabled, let feedback { playHaptic(feedback) }
     }
 
     private func preloadEffects() async {
-        let poolSizes: [(name: String, count: Int)] = [
-            ("kick", 4),
-            ("impact", 6),
-            ("coin", 4),
-            ("heal", 2),
-            ("confirm", 2),
-            ("victory", 1),
-            ("defeat", 1),
-            ("boss-phase", 2),
-            ("ui-combo", 3),
-            ("ui-whoosh", 4)
+        let poolSpecs: [BufferedEffectPlayer.PoolSpec] = [
+            .init(name: "kick", resources: ["kick", "kick-2", "kick-3"], voiceCount: 6),
+            .init(name: "impact", resources: ["impact", "impact-2", "impact-3"], voiceCount: 6),
+            .init(name: "coin", resources: ["coin"], voiceCount: 4),
+            .init(name: "heal", resources: ["heal"], voiceCount: 2),
+            .init(name: "confirm", resources: ["confirm"], voiceCount: 2),
+            .init(name: "victory", resources: ["victory"], voiceCount: 1),
+            .init(name: "defeat", resources: ["defeat"], voiceCount: 1),
+            .init(name: "boss-phase", resources: ["boss-phase"], voiceCount: 2),
+            .init(name: "ui-combo", resources: ["ui-combo"], voiceCount: 3),
+            .init(name: "ui-whoosh", resources: ["ui-whoosh"], voiceCount: 4)
         ]
-        for (name, count) in poolSizes where !Task.isCancelled {
-            guard let url = Bundle.main.url(forResource: name, withExtension: "wav") else { continue }
-            effectPools[name] = (0..<count).compactMap { _ in
-                guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
-                player.prepareToPlay()
-                return player
-            }
-            await Task.yield()
-        }
+        await effects.prepare(specs: poolSpecs)
     }
 
     private func startMusic() async {
@@ -143,7 +149,10 @@ final class GameAudio {
         guard let hapticEngine else { return }
         for feedback in HapticFeedback.allCases {
             guard let pattern = try? CHHapticPattern(events: feedback.events, parameters: []) else { continue }
-            let count = feedback == .impact ? 5 : 3
+            let count = switch feedback {
+            case .kick, .impact: 5
+            default: 3
+            }
             hapticPlayerPools[feedback] = (0..<count).compactMap { _ in
                 try? hapticEngine.makePlayer(with: pattern)
             }
@@ -160,6 +169,7 @@ final class GameAudio {
 }
 
 private enum HapticFeedback: CaseIterable {
+    case kick
     case impact
     case critical
     case reward
@@ -169,8 +179,24 @@ private enum HapticFeedback: CaseIterable {
     case meteor
     case shockwave
 
+    var priority: Int {
+        switch self {
+        case .kick: -1
+        case .impact: 0
+        case .reward: 1
+        case .success: 2
+        case .critical: 3
+        case .shockwave: 4
+        case .damage: 5
+        case .meteor: 6
+        case .boss: 7
+        }
+    }
+
     var events: [CHHapticEvent] {
         switch self {
+        case .kick:
+            [transient(0.16, 0.82, at: 0)]
         case .impact:
             [transient(0.22, 0.72, at: 0)]
         case .critical:

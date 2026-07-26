@@ -36,6 +36,7 @@ struct TargetState: Identifiable, Equatable, Sendable {
         case enemy(EnemyKind)
         case fieldObject(FieldObjectKind)
         case powerUp(TemporaryBallAbility)
+        case volatileCore
     }
 
     let id: Int
@@ -94,6 +95,8 @@ struct ProjectileState: Identifiable, Equatable, Sendable {
     var characterProjectile: CharacterProjectileKind? = nil
     var remainingLifetime: Double = .infinity
     var contactedTargetIDs: Set<Int> = []
+    var lunarRailBouncesRemaining: Int = 0
+    var orbitChainsRemaining: Int = 0
 }
 
 struct SimulationSnapshot: Equatable, Sendable {
@@ -123,6 +126,8 @@ struct SimulationSnapshot: Equatable, Sendable {
     var temporaryAbilityDuration: Double
     var characterAbilityCharge: Double
     var characterAbilityReady: Bool
+    var worldEffectActive: Bool
+    var worldEffectProgress: Double
 }
 
 struct HUDState: Equatable, Sendable {
@@ -133,6 +138,9 @@ struct HUDState: Equatable, Sendable {
     var tokens: Int
     var shieldCharges: Int
     var bossActive: Bool
+    var bossName: String?
+    var bossHealthFraction: Double
+    var bossTier: CampaignBossTier?
     var wave: Int
     var waveElapsed: Double
     var waveDuration: Double
@@ -146,6 +154,8 @@ struct HUDState: Equatable, Sendable {
     var temporaryAbilityDuration: Double
     var characterAbilityCharge: Double
     var characterAbilityReady: Bool
+    var worldEffectActive: Bool
+    var worldEffectProgress: Double
 
     init(snapshot: SimulationSnapshot) {
         stamina = snapshot.stamina
@@ -167,9 +177,18 @@ struct HUDState: Equatable, Sendable {
         temporaryAbilityDuration = snapshot.temporaryAbilityDuration
         characterAbilityCharge = snapshot.characterAbilityCharge
         characterAbilityReady = snapshot.characterAbilityReady
-        bossActive = snapshot.targets.contains { target in
-            target.bossTier != .standard
+        worldEffectActive = snapshot.worldEffectActive
+        worldEffectProgress = snapshot.worldEffectProgress
+        let boss = snapshot.targets.first { $0.bossTier != .standard }
+        bossActive = boss != nil
+        bossName = boss.flatMap { target in
+            guard case .enemy(let enemy) = target.kind else { return nil }
+            return CampaignBriefingCatalog.discovery(for: enemy).title
         }
+        bossHealthFraction = boss.map {
+            min(1, max(0, $0.hitPoints / max(1, $0.maximumHitPoints)))
+        } ?? 0
+        bossTier = boss?.bossTier
     }
 }
 
@@ -187,6 +206,8 @@ enum SimulationEvent: Equatable, Sendable {
     case meteorKick
     case comboChanged(Int)
     case comboMilestone(Int)
+    case worldEffectActivated(WorldRule, Vector2)
+    case volatileCoreBurst(Vector2)
     case temporaryAbilityActivated(TemporaryBallAbility, TimeInterval, Vector2)
     case characterAbilityActivated(CharacterAbility)
     case characterAbilityTargets(CharacterAbility, [Vector2])

@@ -30,7 +30,7 @@ struct UpgradesView: View {
             UpgradeInfoView()
                 .presentationDetents([.medium])
         }
-        .onAppear { store.uiAudio.play(.whoosh, volume: 0.35) }
+        .onAppear { store.uiAudio.play(.whoosh, volume: 0.35, feedback: nil) }
     }
 
     private var tokenSummary: some View {
@@ -64,12 +64,10 @@ struct UpgradesView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Label {
+            HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+                TrainingTokenIcon(size: 28)
                 Text(store.progress.trainingTokens.formatted())
                     .font(GoalRushTheme.Typography.metric(size: 24, relativeTo: .title2))
-            } icon: {
-                Image(systemName: "hexagon.fill")
-                    .foregroundStyle(GoalRushTheme.gold)
             }
             .foregroundStyle(.white)
         }
@@ -115,9 +113,10 @@ private struct UpgradeInfoView: View {
             VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing) {
                 Label("Upgrades are permanent", systemImage: "checkmark.shield.fill")
                 Label("Active in Campaign and Endless", systemImage: "gamecontroller.fill")
-                Label("Ranks are unlimited", systemImage: "infinity")
-                Label("Five lit sockets mark track mastery", systemImage: "circle.grid.2x2.fill")
-                Label("Rank 6+ costs \(UpgradeRules.sustainedCost.formatted()) tokens", systemImage: "hexagon.fill")
+                Label("Levels are permanent and continue after Diamond", systemImage: "infinity")
+                Label("Prestige at Levels 10, 20, 50, 100, and 200", systemImage: "medal.fill")
+                Label("Levels cost up to \(UpgradeRules.sustainedCost.formatted()) tokens", systemImage: "hexagon.fill")
+                Label("Prestige costs \(UpgradePrestigeRules.prestigeCost.formatted()) tokens", systemImage: "medal.fill")
             }
             .font(GoalRushTheme.Typography.headline)
             .foregroundStyle(.white)
