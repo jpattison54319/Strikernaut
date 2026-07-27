@@ -31,4 +31,10 @@ enum WorldJourneyCatalog {
             Array(destinations[start..<min(start + pageSize, destinations.count)])
         }
     }
+
+    /// Keeps logical progression starting at page zero while placing later
+    /// destinations physically above earlier ones in the vertical journey.
+    static var pageIndicesTopToBottom: [Int] {
+        Array(pages.indices.reversed())
+    }
 }

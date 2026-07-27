@@ -86,7 +86,7 @@ struct CampaignBriefingTests {
             settings: GameSettings()
         )
         let endless = GameSessionModel(
-            mode: .endless(world: .mars),
+            mode: .endless,
             progress: .newPlayer,
             settings: GameSettings()
         )
@@ -96,6 +96,36 @@ struct CampaignBriefingTests {
             Issue.record("Endless should still begin with its ability draft")
             return
         }
+    }
+
+    @Test func nextWaveHUDPublishesWhenTheDraftDismisses() {
+        let session = GameSessionModel(
+            mode: .endless,
+            progress: .newPlayer,
+            settings: GameSettings()
+        )
+        guard case .draft(let starterChoices) = session.phase,
+              let starterChoice = starterChoices.first else {
+            Issue.record("Endless should begin with an ability draft")
+            return
+        }
+        session.choose(starterChoice)
+
+        session.simulation.setWaveDefeatsForTesting(session.simulation.snapshot.waveEnemyQuota)
+        session.update(currentTime: 1)
+
+        #expect(session.snapshot.wave == 2)
+        #expect(session.hudState.wave == 1)
+        guard case .draft(let nextChoices) = session.phase,
+              let nextChoice = nextChoices.first else {
+            Issue.record("Clearing an Endless wave should open the next draft")
+            return
+        }
+
+        session.choose(nextChoice)
+
+        #expect(session.phase == .playing)
+        #expect(session.hudState.wave == 2)
     }
 
     @Test func previouslySeenLevelStartsWithoutRepeatingItsBriefing() {

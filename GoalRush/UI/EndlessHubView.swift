@@ -5,16 +5,14 @@ struct EndlessHubView: View {
     @State private var showingInfo = false
 
     var body: some View {
-        AtmosphericGameScreen(backgroundImage: selectedWorld.heroAsset) {
+        AtmosphericGameScreen(backgroundImage: openingWorld.heroAsset) {
             VStack(spacing: 0) {
                 destinationBar
 
                 ScrollView {
                     EndlessSelectionStage(
-                        world: selectedWorld,
                         record: record,
-                        progress: store.progress,
-                        onSelectWorld: selectWorld
+                        progress: store.progress
                     )
                     .padding(.horizontal, GoalRushTheme.Metrics.horizontalPadding)
                     .padding(.vertical, GoalRushTheme.Metrics.sectionSpacing)
@@ -30,7 +28,6 @@ struct EndlessHubView: View {
             EndlessRulesSheet()
                 .presentationDetents([.medium])
         }
-        .onAppear(perform: ensureSelectedWorldIsUnlocked)
     }
 
     private var destinationBar: some View {
@@ -50,33 +47,23 @@ struct EndlessHubView: View {
         .accessibilityIdentifier("start-endless")
     }
 
-    private var selectedWorld: WorldDefinition {
-        GameContent.world(store.selectedWorld)
+    private var openingWorld: WorldDefinition {
+        GameContent.world(EndlessRules.world(for: 1))
     }
 
     private var record: EndlessRecord {
-        store.progress.endlessRecord(for: store.selectedWorld)
+        store.progress.endlessRecord
     }
 
     private var startButtonTitle: String {
         record.bestWave > 0
-            ? "Start \(selectedWorld.name) Run • Best W\(record.bestWave)"
-            : "Start \(selectedWorld.name) Run"
-    }
-
-    private func ensureSelectedWorldIsUnlocked() {
-        guard !GameContent.isWorldUnlocked(store.selectedWorld, progress: store.progress) else { return }
-        store.selectedWorld = .earth
-    }
-
-    private func selectWorld(_ world: WorldID) {
-        guard store.selectWorld(world) else { return }
-        store.uiAudio.play(.tap)
+            ? "Start Endless • Best W\(record.bestWave)"
+            : "Start Endless"
     }
 
     private func startEndless() {
         store.uiAudio.play(.tap)
-        store.startEndless(world: store.selectedWorld)
+        store.startEndless()
     }
 
     private func showRules() {

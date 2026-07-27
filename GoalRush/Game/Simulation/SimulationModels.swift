@@ -46,6 +46,7 @@ struct TargetState: Identifiable, Equatable, Sendable {
     var maximumHitPoints: Double
     var phase: Double
     var bossTier: CampaignBossTier = .standard
+    var waveRole: WaveEnemyRole = .quota
     var burnRemaining: Double = 0
     var burnTickClock: Double = 0
     var freezeRemaining: Double = 0
@@ -95,24 +96,26 @@ struct ProjectileState: Identifiable, Equatable, Sendable {
     var characterProjectile: CharacterProjectileKind? = nil
     var remainingLifetime: Double = .infinity
     var contactedTargetIDs: Set<Int> = []
-    var lunarRailBouncesRemaining: Int = 0
     var orbitChainsRemaining: Int = 0
 }
 
 struct SimulationSnapshot: Equatable, Sendable {
+    var world: WorldID
     var playerX: Double
     var stamina: Double
     var maxStamina: Double
     var elapsed: Double
-    var duration: Double
     var tokens: Int
     var targets: [TargetState]
     var projectiles: [ProjectileState]
     var characterAttacks: [CharacterAttackState]
+    var bossHazards: [BossHazardState]
     var shieldCharges: Int
     var wave: Int
     var waveElapsed: Double
-    var waveDuration: Double
+    var waveDefeats: Int
+    var waveEnemyQuota: Int
+    var isBossWave: Bool
     var score: Int
     var isEndless: Bool
     var combo: Int
@@ -126,24 +129,39 @@ struct SimulationSnapshot: Equatable, Sendable {
     var temporaryAbilityDuration: Double
     var characterAbilityCharge: Double
     var characterAbilityReady: Bool
-    var worldEffectActive: Bool
-    var worldEffectProgress: Double
+
+    var remainingEnemies: Int {
+        max(0, waveEnemyQuota - waveDefeats)
+    }
+
+    var waveObjectiveProgress: Double {
+        if isBossWave,
+           let boss = targets.first(where: {
+               $0.waveRole == .boss || $0.bossTier != .standard
+           }) {
+            return min(
+                1,
+                max(0, 1 - boss.hitPoints / max(1, boss.maximumHitPoints))
+            )
+        }
+        guard waveEnemyQuota > 0 else { return 0 }
+        return min(1, max(0, Double(waveDefeats) / Double(waveEnemyQuota)))
+    }
 }
 
 struct HUDState: Equatable, Sendable {
+    var world: WorldID
     var stamina: Double
     var maxStamina: Double
     var elapsed: Double
-    var duration: Double
     var tokens: Int
     var shieldCharges: Int
-    var bossActive: Bool
-    var bossName: String?
-    var bossHealthFraction: Double
-    var bossTier: CampaignBossTier?
     var wave: Int
-    var waveElapsed: Double
-    var waveDuration: Double
+    var waveDefeats: Int
+    var waveEnemyQuota: Int
+    var remainingEnemies: Int
+    var isBossWave: Bool
+    var waveObjectiveProgress: Double
     var score: Int
     var isEndless: Bool
     var combo: Int
@@ -154,19 +172,19 @@ struct HUDState: Equatable, Sendable {
     var temporaryAbilityDuration: Double
     var characterAbilityCharge: Double
     var characterAbilityReady: Bool
-    var worldEffectActive: Bool
-    var worldEffectProgress: Double
 
     init(snapshot: SimulationSnapshot) {
+        world = snapshot.world
         stamina = snapshot.stamina
         maxStamina = snapshot.maxStamina
         elapsed = snapshot.elapsed
-        duration = snapshot.duration
         tokens = snapshot.tokens
         shieldCharges = snapshot.shieldCharges
         wave = snapshot.wave
-        waveElapsed = snapshot.waveElapsed
-        waveDuration = snapshot.waveDuration
+        waveDefeats = snapshot.waveDefeats
+        waveEnemyQuota = snapshot.waveEnemyQuota
+        remainingEnemies = snapshot.remainingEnemies
+        isBossWave = snapshot.isBossWave
         score = snapshot.score
         isEndless = snapshot.isEndless
         combo = snapshot.combo
@@ -177,18 +195,7 @@ struct HUDState: Equatable, Sendable {
         temporaryAbilityDuration = snapshot.temporaryAbilityDuration
         characterAbilityCharge = snapshot.characterAbilityCharge
         characterAbilityReady = snapshot.characterAbilityReady
-        worldEffectActive = snapshot.worldEffectActive
-        worldEffectProgress = snapshot.worldEffectProgress
-        let boss = snapshot.targets.first { $0.bossTier != .standard }
-        bossActive = boss != nil
-        bossName = boss.flatMap { target in
-            guard case .enemy(let enemy) = target.kind else { return nil }
-            return CampaignBriefingCatalog.discovery(for: enemy).title
-        }
-        bossHealthFraction = boss.map {
-            min(1, max(0, $0.hitPoints / max(1, $0.maximumHitPoints)))
-        } ?? 0
-        bossTier = boss?.bossTier
+        waveObjectiveProgress = snapshot.waveObjectiveProgress
     }
 }
 
@@ -202,12 +209,17 @@ enum SimulationEvent: Equatable, Sendable {
     case heal(Double, Vector2)
     case abilityChosen(AbilityKind)
     case bossPhase(Int)
+    case bossAttackTelegraphed(BossAttackKind)
+    case bossAttackActivated(BossAttackKind, Vector2)
     case waveCompleted(Int)
+    case worldTransitioned(from: WorldID, to: WorldID)
     case meteorKick
     case comboChanged(Int)
     case comboMilestone(Int)
     case worldEffectActivated(WorldRule, Vector2)
-    case volatileCoreBurst(Vector2)
+    case worldEffectImpact(WorldRule, Vector2)
+    case volatileCoreNeutralized(Vector2)
+    case volatileCoreDetonated(Vector2)
     case temporaryAbilityActivated(TemporaryBallAbility, TimeInterval, Vector2)
     case characterAbilityActivated(CharacterAbility)
     case characterAbilityTargets(CharacterAbility, [Vector2])

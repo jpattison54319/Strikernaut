@@ -7,8 +7,8 @@ Campaign is a 30-challenge journey:
 | World | Levels | Signature rule | Temporary powers | Hero reward |
 | --- | ---: | --- | --- | --- |
 | Earth | 1–10 | None | Rapid Fire, Split Shot, Heat Seeking | Volt |
-| Moon | 11–20 | A repeating lunar cycle opens six-second zero-G windows | Reverse, Ice, Orbit Shot | Nova |
-| Mars | 21–30 | Defeats and boss phases expose explosive Volatile Cores | Fire, Explosive, Solar Pierce | Aegis |
+| Moon | 11–20 | Orbital debris periodically marks and strikes a player lane | Reverse, Ice, Orbit Shot | Nova |
+| Mars | 21–30 | Defeats and boss phases arm Volatile Cores that damage the player if ignored | Fire, Explosive, Solar Pierce | Aegis |
 
 Ace remains the starter hero. Character abilities remain permanent hero
 identity; world pickups remain temporary run modifiers.
@@ -43,6 +43,10 @@ records. Existing Levels 11–20 naturally become Moon records. Character
 ownership is rebuilt from completed world finales so the unlock chain remains
 deterministic. The old Mars Endless record is cleared because its content and
 unlock boundary moved to Levels 21–30.
+
+World rules are strictly hostile. They fire from simulation cadence without a
+persistent HUD countdown, progress ring, or active-effect timer. The arena still
+telegraphs the lane or core itself long enough for a fair reaction.
 
 ## Art ownership
 

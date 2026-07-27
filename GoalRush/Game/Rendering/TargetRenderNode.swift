@@ -26,6 +26,12 @@ final class TargetRenderNode: SKNode {
 
     private(set) weak var motionRig: SKNode?
     private(set) weak var healthFill: SKNode?
+    private(set) weak var regularHealthBackground: SKNode?
+    private(set) weak var regularHealthFill: SKNode?
+    private(set) weak var bossHealthPlate: SKNode?
+    private(set) weak var bossHealthFill: SKNode?
+    private(set) weak var bossHealthIcon: SKSpriteNode?
+    private(set) var showsBossHealth = false
     private(set) weak var leftLeg: SKNode?
     private(set) weak var rightLeg: SKNode?
     private(set) weak var leftArm: SKNode?
@@ -47,7 +53,12 @@ final class TargetRenderNode: SKNode {
 
     func cacheRenderNodes() {
         motionRig = childNode(withName: "motion-body")
-        healthFill = childNode(withName: "health-background/health-fill")
+        regularHealthBackground = childNode(withName: "health-background")
+        regularHealthFill = regularHealthBackground?.childNode(withName: "health-fill")
+        bossHealthPlate = childNode(withName: "boss-health")
+        bossHealthFill = bossHealthPlate?.childNode(withName: "boss-health-track/boss-health-fill")
+        bossHealthIcon = bossHealthPlate?.childNode(withName: "boss-health-icon") as? SKSpriteNode
+        healthFill = regularHealthFill
         leftLeg = motionRig?.childNode(withName: "left-leg")
         rightLeg = motionRig?.childNode(withName: "right-leg")
         leftArm = motionRig?.childNode(withName: "left-arm")
@@ -63,6 +74,14 @@ final class TargetRenderNode: SKNode {
         motionLights = motionRig?.children.filter { $0.name == "motion-light" } ?? []
         cacheTintableNodes()
         resetStatusEffects()
+    }
+
+    func configureHealthPresentation(isBoss: Bool, bossIconTexture: SKTexture?) {
+        showsBossHealth = isBoss
+        regularHealthBackground?.isHidden = isBoss
+        bossHealthPlate?.isHidden = !isBoss
+        bossHealthIcon?.texture = bossIconTexture
+        healthFill = isBoss ? bossHealthFill : regularHealthFill
     }
 
     func applyStatus(from target: TargetState, reducedMotion: Bool) {

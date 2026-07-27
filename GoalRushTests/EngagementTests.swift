@@ -55,7 +55,7 @@ struct EngagementTests {
     @Test func missionProgressFoldsRunResults() {
         var missions = [MissionState(kind: .defeatTargets, goal: 30, progress: 0, claimed: false, reward: 80),
                         MissionState(kind: .achieveCombo, goal: 10, progress: 0, claimed: false, reward: 90)]
-        let result = RunResult(mode: .endless(world: .earth), didWin: false, tokensEarned: 50,
+        let result = RunResult(mode: .endless, didWin: false, tokensEarned: 50,
                                remainingStamina: 0, wave: 6, score: 5_000,
                                targetsDefeated: 22, bestCombo: 12)
         MissionCatalog.apply(result: result, to: &missions)
@@ -130,12 +130,12 @@ struct EngagementTests {
 
     @Test func endlessFinishFlagsNewBestWave() {
         let store = makeStore()
-        store.finish(RunResult(mode: .endless(world: .earth), didWin: false, tokensEarned: 10,
+        store.finish(RunResult(mode: .endless, didWin: false, tokensEarned: 10,
                                remainingStamina: 0, wave: 6, score: 9_000))
         guard case .result(let first) = store.route else { Issue.record("Expected result"); return }
         #expect(first.newBestWave)
         #expect(first.newBestScore)
-        store.finish(RunResult(mode: .endless(world: .earth), didWin: false, tokensEarned: 10,
+        store.finish(RunResult(mode: .endless, didWin: false, tokensEarned: 10,
                                remainingStamina: 0, wave: 4, score: 3_000))
         guard case .result(let second) = store.route else { Issue.record("Expected result"); return }
         #expect(!second.newBestWave)

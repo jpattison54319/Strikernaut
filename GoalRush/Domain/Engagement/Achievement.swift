@@ -27,7 +27,7 @@ enum AchievementCatalog {
         if progress.levelRecords[GameContent.world(.earth).finalLevel]?.completed == true { unlocked.insert(.earthWorldClear) }
         if progress.levelRecords[GameContent.world(.moon).finalLevel]?.completed == true { unlocked.insert(.moonWorldClear) }
         if progress.levelRecords[GameContent.world(.mars).finalLevel]?.completed == true { unlocked.insert(.marsWorldClear) }
-        let bestWave = progress.endlessRecords.values.map(\.bestWave).max() ?? 0
+        let bestWave = progress.endlessRecord.bestWave
         if bestWave >= 5 { unlocked.insert(.wave5) }
         if bestWave >= 10 { unlocked.insert(.wave10) }
         if bestWave >= 20 { unlocked.insert(.wave20) }

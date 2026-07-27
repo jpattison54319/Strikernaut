@@ -12,9 +12,7 @@ struct HomeStageContent {
         let action = HomePresentation.primaryAction(progress: store.progress)
         let completedMissions = HomePresentation.completedMissionCount(store.progress.missions)
         let completedLevels = store.progress.levelRecords.values.filter(\.completed).count
-        let endlessRecord = store.progress.endlessRecords.values.max {
-            $0.bestWave < $1.bestWave
-        } ?? .empty
+        let endlessRecord = store.progress.endlessRecord
 
         switch action {
         case .campaign(let levelNumber):

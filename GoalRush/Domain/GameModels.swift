@@ -92,7 +92,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
     var upgradePrestiges: [UpgradeTrack: Int]
     var levelRecords: [Int: LevelRecord]
     var hasMovedInTutorial: Bool
-    var endlessRecords: [WorldID: EndlessRecord]
+    var endlessRecord: EndlessRecord
     var lifetimeStats: LifetimeStats
     var dailyReward: DailyRewardState
     var missions: [MissionState]
@@ -104,14 +104,14 @@ struct PlayerProgress: Codable, Equatable, Sendable {
     var selectedCharacter: CharacterID
 
     static let newPlayer = PlayerProgress(
-        schemaVersion: 7,
+        schemaVersion: 8,
         trainingTokens: 0,
         highestUnlockedLevel: 1,
         upgradeRanks: [:],
         upgradePrestiges: [:],
         levelRecords: [:],
         hasMovedInTutorial: false,
-        endlessRecords: [:],
+        endlessRecord: .empty,
         lifetimeStats: LifetimeStats(),
         dailyReward: DailyRewardState(),
         missions: [],
@@ -129,7 +129,6 @@ struct PlayerProgress: Codable, Equatable, Sendable {
     mutating func setPrestigeCount(_ count: Int, for track: UpgradeTrack) {
         upgradePrestiges[track] = min(max(count, 0), UpgradePrestigeTier.allCases.count)
     }
-    func endlessRecord(for world: WorldID) -> EndlessRecord { endlessRecords[world, default: .empty] }
     mutating func reconcileUnlockedContent() {
         let isMoonCampaignMigration = schemaVersion < 5
         let isBriefingSeenMigration = schemaVersion < 6
@@ -143,7 +142,6 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         }
         if isMoonCampaignMigration {
             unlockedCharacters = CharacterCatalog.unlockedCharacters(for: self)
-            endlessRecords.removeValue(forKey: .mars)
         } else {
             unlockedCharacters.formUnion(CharacterCatalog.unlockedCharacters(for: self))
         }
@@ -174,7 +172,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
                 )
             }
         }
-        schemaVersion = 7
+        schemaVersion = 8
     }
 
     enum CodingKeys: String, CodingKey {
@@ -185,6 +183,8 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         case upgradePrestiges
         case levelRecords
         case hasMovedInTutorial
+        case endlessRecord
+        /// Legacy per-world Endless records, merged into `endlessRecord` on decode.
         case endlessRecords
         case lifetimeStats
         case dailyReward
@@ -205,7 +205,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         upgradePrestiges: [UpgradeTrack: Int] = [:],
         levelRecords: [Int: LevelRecord],
         hasMovedInTutorial: Bool,
-        endlessRecords: [WorldID: EndlessRecord],
+        endlessRecord: EndlessRecord = .empty,
         lifetimeStats: LifetimeStats = LifetimeStats(),
         dailyReward: DailyRewardState = DailyRewardState(),
         missions: [MissionState] = [],
@@ -223,7 +223,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         self.upgradePrestiges = upgradePrestiges
         self.levelRecords = levelRecords
         self.hasMovedInTutorial = hasMovedInTutorial
-        self.endlessRecords = endlessRecords
+        self.endlessRecord = endlessRecord
         self.lifetimeStats = lifetimeStats
         self.dailyReward = dailyReward
         self.missions = missions
@@ -246,7 +246,23 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         upgradePrestiges = container.decodeEnumKeyedMap(forKey: .upgradePrestiges)
         levelRecords = try container.decodeIfPresent([Int: LevelRecord].self, forKey: .levelRecords) ?? [:]
         hasMovedInTutorial = try container.decodeIfPresent(Bool.self, forKey: .hasMovedInTutorial) ?? false
-        endlessRecords = container.decodeEnumKeyedMap(forKey: .endlessRecords)
+        if let storedRecord = try container.decodeIfPresent(
+            EndlessRecord.self,
+            forKey: .endlessRecord
+        ) {
+            endlessRecord = storedRecord
+        } else {
+            var legacyRecords: [WorldID: EndlessRecord] = container.decodeEnumKeyedMap(
+                forKey: .endlessRecords
+            )
+            if schemaVersion < 5 {
+                legacyRecords.removeValue(forKey: .mars)
+            }
+            endlessRecord = EndlessRecord(
+                bestWave: legacyRecords.values.map(\.bestWave).max() ?? 0,
+                bestScore: legacyRecords.values.map(\.bestScore).max() ?? 0
+            )
+        }
         lifetimeStats = try container.decodeIfPresent(LifetimeStats.self, forKey: .lifetimeStats) ?? LifetimeStats()
         dailyReward = try container.decodeIfPresent(DailyRewardState.self, forKey: .dailyReward) ?? DailyRewardState()
         missions = try container.decodeIfPresent([MissionState].self, forKey: .missions) ?? []
@@ -263,14 +279,14 @@ struct PlayerProgress: Codable, Equatable, Sendable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(7, forKey: .schemaVersion)
+        try container.encode(8, forKey: .schemaVersion)
         try container.encode(trainingTokens, forKey: .trainingTokens)
         try container.encode(highestUnlockedLevel, forKey: .highestUnlockedLevel)
         try container.encode(upgradeRanks, forKey: .upgradeRanks)
         try container.encode(upgradePrestiges, forKey: .upgradePrestiges)
         try container.encode(levelRecords, forKey: .levelRecords)
         try container.encode(hasMovedInTutorial, forKey: .hasMovedInTutorial)
-        try container.encode(endlessRecords, forKey: .endlessRecords)
+        try container.encode(endlessRecord, forKey: .endlessRecord)
         try container.encode(lifetimeStats, forKey: .lifetimeStats)
         try container.encode(dailyReward, forKey: .dailyReward)
         try container.encode(missions, forKey: .missions)

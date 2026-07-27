@@ -9,12 +9,12 @@ final class GameSessionModel {
         case paused
         case briefing([CampaignDiscovery])
         case draft([AbilityKind])
+        case worldTransition(from: WorldID, to: WorldID, draft: [AbilityKind])
         case finished
     }
 
     let mode: RunMode
     let level: LevelDefinition?
-    let world: WorldDefinition
     let simulation: GameSimulation
     let character: CharacterDefinition
     var phase: Phase = .playing
@@ -40,12 +40,11 @@ final class GameSessionModel {
     init(mode: RunMode, progress: PlayerProgress, settings: GameSettings) {
         self.mode = mode
         self.level = mode.campaignLevel.map(GameContent.level)
-        self.world = GameContent.world(mode.world)
         self.character = CharacterCatalog.character(progress.selectedCharacter)
         let argumentSeed = ProcessInfo.processInfo.arguments.value(after: "--fixed-seed").flatMap(UInt64.init)
         let modeSeed: UInt64 = switch mode {
         case .campaign(let level): UInt64(level * 10_007 + progress.trainingTokens)
-        case .endless(let world): UInt64((WorldID.allCases.firstIndex(of: world) ?? 0) * 90_001 + progress.trainingTokens + 77)
+        case .endless: UInt64(progress.trainingTokens + 77)
         }
         let seed = argumentSeed ?? modeSeed
         self.simulation = GameSimulation(mode: mode, progress: progress, assistMode: settings.assistMode, seed: seed)
@@ -93,11 +92,21 @@ final class GameSessionModel {
                 phase = .playing
             }
         }
+        if mode.isEndless,
+           ProcessInfo.processInfo.arguments.contains("--world-transition-preview") {
+            let fromWave = max(1, snapshot.wave - 1)
+            phase = .worldTransition(
+                from: EndlessRules.world(for: fromWave),
+                to: snapshot.world,
+                draft: makeDraft()
+            )
+        }
 #endif
     }
 
     var levelNumber: Int? { level?.number }
     var isStarterDraft: Bool { mode.isEndless && snapshot.elapsed == 0 }
+    var world: WorldDefinition { GameContent.world(snapshot.world) }
 
     func update(currentTime: TimeInterval) {
         guard phase == .playing else { lastTime = currentTime; return }
@@ -120,7 +129,20 @@ final class GameSessionModel {
         // overlay in the middle of the render frame, which showed up as a visible
         // hitch. Ten updates per second keeps counters fluid without coupling them
         // to the much hotter simulation event stream.
-        if currentTime - lastHUDPublishTime >= 0.10 {
+        let beginsIntermission = events.contains { event in
+            switch event {
+            case .checkpoint, .worldTransitioned:
+                true
+            default:
+                false
+            }
+        }
+        // Keep the completed wave visible beneath the draft. `choose(_:)`
+        // publishes the already-advanced simulation snapshot as the draft
+        // dismisses, so the player actually sees the wave counter roll into
+        // the next value instead of having that animation hidden by the
+        // intermission.
+        if !beginsIntermission && currentTime - lastHUDPublishTime >= 0.10 {
             hudState = HUDState(snapshot: snapshot)
             lastHUDPublishTime = currentTime
         }
@@ -167,11 +189,19 @@ final class GameSessionModel {
         lastTime = nil
     }
 
+    func completeWorldTransition() {
+        guard case .worldTransition(_, _, let draft) = phase else { return }
+        phase = .draft(draft)
+        lastTime = nil
+    }
+
     private func handle(_ event: SimulationEvent) {
         lastEvent = event
         switch event {
         case .checkpoint:
             phase = .draft(makeDraft())
+        case .worldTransitioned(let from, let to):
+            phase = .worldTransition(from: from, to: to, draft: makeDraft())
         case .finished:
             phase = .finished
             didFinish = true

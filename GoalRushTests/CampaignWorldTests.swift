@@ -24,6 +24,7 @@ struct CampaignWorldTests {
         #expect(WorldJourneyCatalog.pages[0].compactMap(\.world) == [.earth, .moon, .mars])
         #expect(WorldJourneyCatalog.pages[1].map(\.id) == ["jupiter"])
         #expect(WorldJourneyCatalog.pages[1][0].isFuture)
+        #expect(WorldJourneyCatalog.pageIndicesTopToBottom == [1, 0])
     }
 
     @Test func everyWorldMapHasTenOrderedLandmarks() {

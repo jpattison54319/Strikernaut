@@ -61,14 +61,32 @@ final class GameAudio {
         case .checkpoint: play("confirm", volume: 0.50); return .success
         case .abilityChosen: play("confirm", volume: 0.58); return .success
         case .bossPhase: play("boss-phase", volume: 0.84); return .boss
+        case .bossAttackTelegraphed:
+            play("ui-whoosh", volume: 0.72)
+            return .critical
+        case .bossAttackActivated(let kind, _):
+            play(kind == .meteorStrike ? "impact" : "boss-phase", volume: 0.74)
+            return kind == .meteorStrike ? .meteor : .boss
         case .waveCompleted: play("confirm", volume: 0.68); return .success
+        case .worldTransitioned:
+            play("ui-whoosh", volume: 0.92)
+            play("boss-phase", volume: 0.42)
+            return .boss
         case .meteorKick: play("boss-phase", volume: 0.38); return .critical
         case .comboMilestone: play("ui-combo", volume: 0.45); return .reward
         case .comboChanged: return nil
-        case .worldEffectActivated: play("ui-whoosh", volume: 0.62); return .success
-        case .volatileCoreBurst:
+        case .worldEffectActivated:
+            play("ui-whoosh", volume: 0.72)
+            return .critical
+        case .worldEffectImpact:
+            play("impact", volume: 0.76)
+            return .damage
+        case .volatileCoreNeutralized:
+            play("confirm", volume: 0.62)
+            return .success
+        case .volatileCoreDetonated:
             play("impact", volume: 0.88)
-            return .meteor
+            return .damage
         case .temporaryAbilityActivated: play("confirm", volume: 0.72); return .success
         case .characterAbilityActivated: play("boss-phase", volume: 0.78); return .critical
         case .characterAbilityTargets: return nil

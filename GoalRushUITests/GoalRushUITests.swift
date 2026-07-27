@@ -66,14 +66,21 @@ final class GoalRushUITests: XCTestCase {
         let earth = app.buttons["planet-earth"]
         XCTAssertTrue(earth.waitForExistence(timeout: 3))
         XCTAssertTrue(earth.isHittable)
-        XCTAssertFalse(app.buttons["planet-jupiter"].isHittable)
+        let jupiter = app.buttons["planet-jupiter"]
+        XCTAssertTrue(jupiter.exists)
+        XCTAssertFalse(jupiter.isHittable)
+        let jupiterYBeforePaging = jupiter.frame.midY
 
         let next = app.buttons["planet-page-next"]
         XCTAssertTrue(next.exists)
         next.tap()
-        let jupiter = app.buttons["planet-jupiter"]
         XCTAssertTrue(jupiter.waitForExistence(timeout: 2))
         XCTAssertTrue(jupiter.isHittable)
+        XCTAssertGreaterThan(
+            jupiter.frame.midY,
+            jupiterYBeforePaging,
+            "Jupiter should enter from above as the journey progresses upward."
+        )
 
         let previous = app.buttons["planet-page-previous"]
         XCTAssertTrue(previous.isEnabled)
@@ -343,7 +350,9 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Kick Off"].waitForExistence(timeout: 3))
         app.buttons["Kick Off"].tap()
 
-        XCTAssertTrue(app.staticTexts["WAVE 1 OF 3"].waitForExistence(timeout: 3))
+        let objective = app.otherElements["wave-objective"]
+        XCTAssertTrue(objective.waitForExistence(timeout: 3))
+        XCTAssertEqual(objective.label, "Wave 1 of 3, 18 enemies remaining")
         let timer = app.otherElements["temporary-ability-timer"]
         XCTAssertTrue(timer.waitForExistence(timeout: 2))
         XCTAssertEqual(timer.label, "Ice Balls")
@@ -471,15 +480,21 @@ final class GoalRushUITests: XCTestCase {
         app.launch()
         app.buttons["Kick Off"].tap()
 
-        XCTAssertTrue(app.staticTexts["BOSS • WAVE 5 OF 5"].waitForExistence(timeout: 3))
+        let bossObjective = app.otherElements["wave-objective"]
+        XCTAssertTrue(bossObjective.waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            bossObjective.label,
+            "Wave 5 of 5, boss objective, 1 enemy remaining"
+        )
         XCTAssertTrue(app.otherElements["boss-health"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["WORLD BOSS"].exists)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Earth Mega Boss Wave"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
 
-    func testRoundEightOpeningWaveNeverShowsBossHUD() {
+    func testRoundEightOpeningWaveNeverShowsABossObjective() {
         let app = XCUIApplication()
         app.launchArguments = [
             "--reset-save",
@@ -495,12 +510,14 @@ final class GoalRushUITests: XCTestCase {
         }
 
         XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["WAVE 1 OF 5"].waitForExistence(timeout: 3))
-        XCTAssertFalse(app.otherElements["boss-health"].exists)
-        XCTAssertFalse(app.staticTexts["BOSS • WAVE 1 OF 5"].exists)
+        let objective = app.otherElements["wave-objective"]
+        XCTAssertTrue(objective.waitForExistence(timeout: 3))
+        XCTAssertTrue(objective.label.contains("Wave 1 of 5"))
+        XCTAssertTrue(objective.label.contains("enemies remaining"))
+        XCTAssertFalse(objective.label.contains("boss objective"))
     }
 
-    func testComboFloatsBelowHUDAndUsesFightingGameCountStyle() {
+    func testComboFloatsBelowHUDAsABareCount() {
         let app = XCUIApplication()
         app.launchArguments = [
             "--reset-save",
@@ -513,15 +530,17 @@ final class GoalRushUITests: XCTestCase {
         let combo = app.otherElements["combo-meter"]
         XCTAssertTrue(combo.waitForExistence(timeout: 3))
         XCTAssertEqual(combo.label, "Combo times 7")
-        XCTAssertFalse(app.staticTexts["COMBO ×7"].exists)
+        XCTAssertFalse(app.staticTexts["COMBO"].exists)
+        XCTAssertTrue(app.otherElements["gameplay-status-bar"].exists)
+        XCTAssertTrue(app.otherElements["stamina-meter"].exists)
 
         let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Floating Fighting Game Combo"
+        screenshot.name = "Compact HUD With Bare Combo"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
 
-    func testLevelSixFinalWaveBossIsClearlyIdentified() {
+    func testLevelSixFinalWaveBossUsesOnlyItsInWorldHealthPlate() {
         let app = XCUIApplication()
         app.launchArguments = [
             "--reset-save",
@@ -533,8 +552,11 @@ final class GoalRushUITests: XCTestCase {
         app.launch()
         app.buttons["Kick Off"].tap()
 
+        let objective = app.otherElements["wave-objective"]
+        XCTAssertTrue(objective.waitForExistence(timeout: 3))
+        XCTAssertTrue(objective.label.contains("boss objective"))
         XCTAssertTrue(app.otherElements["boss-health"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["WAVE BOSS"].exists)
+        XCTAssertFalse(app.staticTexts["WAVE BOSS"].exists)
 
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Level Six Wave Boss"
@@ -542,7 +564,7 @@ final class GoalRushUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testEarthHasNoWorldModifierHUD() {
+    func testWorldEffectsNeverAddPersistentHUD() {
         let app = XCUIApplication()
         app.launchArguments = [
             "--reset-save",
@@ -564,7 +586,20 @@ final class GoalRushUITests: XCTestCase {
         app.launch()
         app.buttons["Kick Off"].tap()
 
-        XCTAssertTrue(app.otherElements["world-effect"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.otherElements["world-effect"].exists)
+
+        app.terminate()
+        app.launchArguments = [
+            "--reset-save",
+            "--level", "21",
+            "--fixed-seed", "42"
+        ]
+        app.launch()
+        app.buttons["Kick Off"].tap()
+
+        XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.otherElements["world-effect"].exists)
     }
 
     func testEarthEnemyArtPreviewCapturesEveryRole() {
@@ -748,44 +783,83 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(app.buttons["level-preview-play"].exists)
     }
 
-    func testMarsEndlessStartsFromHubAndAdvances() {
+    func testEndlessCircuitStartsOnEarthAndAdvances() {
         let app = XCUIApplication()
-        app.launchArguments = ["--reset-save", "--unlock-worlds", "--screen", "endless", "--fixed-seed", "42"]
+        app.launchArguments = ["--reset-save", "--screen", "endless", "--fixed-seed", "42"]
         app.launch()
 
-        let mars = app.buttons["endless-world-mars"]
-        XCTAssertTrue(mars.waitForExistence(timeout: 3))
-        mars.tap()
+        XCTAssertTrue(app.scrollViews["endless-world-circuit"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["endless-world-earth"].exists)
+        XCTAssertFalse(app.buttons["endless-world-mars"].exists)
         let start = app.buttons["start-endless"]
-        XCTAssertTrue(start.label.contains("Mars"))
+        XCTAssertEqual(start.label, "Start Endless")
         start.tap()
 
         let ability = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ability-")).firstMatch
         XCTAssertTrue(ability.waitForExistence(timeout: 3))
         ability.tap()
 
-        let progress = app.progressIndicators["run-progress"]
-        XCTAssertTrue(progress.waitForExistence(timeout: 2))
-        let initialValue = String(describing: progress.value)
-        expectation(for: NSPredicate(format: "value != %@", initialValue), evaluatedWith: progress)
-        waitForExpectations(timeout: 4)
+        let objective = app.otherElements["wave-objective"]
+        XCTAssertTrue(objective.waitForExistence(timeout: 2))
+        XCTAssertEqual(objective.label, "Wave 1, 18 enemies remaining")
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Unified Endless Earth Opening"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
-    func testMarsEndlessAdvancesAfterInitialDraft() {
+    func testEndlessEnemyCounterAdvancesAfterInitialDraft() {
         let app = XCUIApplication()
-        app.launchArguments = ["--reset-save", "--unlock-worlds", "--endless", "mars", "--fixed-seed", "42"]
+        app.launchArguments = [
+            "--reset-save", "--endless",
+            "--fixed-seed", "42", "--enemy-swarm-preview"
+        ]
         app.launch()
 
         let ability = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ability-")).firstMatch
         XCTAssertTrue(ability.waitForExistence(timeout: 3))
         ability.tap()
 
-        let progress = app.progressIndicators["run-progress"]
-        XCTAssertTrue(progress.waitForExistence(timeout: 2))
-        let initialValue = String(describing: progress.value)
-        let advanced = NSPredicate(format: "value != %@", initialValue)
-        expectation(for: advanced, evaluatedWith: progress)
-        waitForExpectations(timeout: 4)
+        let objective = app.otherElements["wave-objective"]
+        XCTAssertTrue(objective.waitForExistence(timeout: 2))
+        let authoredStartingLabel = "Wave 1, 18 enemies remaining"
+        expectation(
+            for: NSPredicate(format: "label != %@", authoredStartingLabel),
+            evaluatedWith: objective
+        )
+        waitForExpectations(timeout: 6)
+        XCTAssertTrue(objective.label.hasPrefix("Wave 1, "))
+        XCTAssertTrue(objective.label.hasSuffix(" enemies remaining"))
+    }
+
+    func testEndlessWorldTransitionHandsEarthOffToMoonBeforeDraft() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--endless", "--endless-wave", "11",
+            "--world-transition-preview", "--fixed-seed", "42"
+        ]
+        app.launch()
+
+        let transition = app.otherElements["endless-world-transition"]
+        XCTAssertTrue(transition.waitForExistence(timeout: 3))
+        XCTAssertEqual(transition.label, "Leaving Earth. Entering Moon.")
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Earth To Moon World Transition"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        let ability = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "ability-")
+        ).firstMatch
+        XCTAssertTrue(ability.waitForExistence(timeout: 5))
+        XCTAssertFalse(transition.exists)
+        ability.tap()
+
+        let objective = app.otherElements["wave-objective"]
+        XCTAssertTrue(objective.waitForExistence(timeout: 2))
+        XCTAssertTrue(objective.label.hasPrefix("Wave 11, "))
     }
 
     func testOnboardingShowsOnceAndStartsFirstLevel() {
@@ -896,7 +970,7 @@ final class GoalRushUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["result-more-map"].waitForExistence(timeout: 3))
         app.buttons["result-more-map"].tap()
-        XCTAssertTrue(app.buttons["endless-world-earth"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.scrollViews["endless-world-circuit"].waitForExistence(timeout: 2))
 
         app.terminate()
         app.launch()

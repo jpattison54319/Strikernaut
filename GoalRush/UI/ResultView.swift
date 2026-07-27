@@ -9,17 +9,17 @@ struct ResultView: View {
     var body: some View {
         AtmosphericGameScreen(backgroundImage: backgroundImage) {
             ZStack {
-                result.mode.world.secondaryColor.opacity(0.12)
+                result.world.secondaryColor.opacity(0.12)
                     .ignoresSafeArea()
                     .accessibilityHidden(true)
 
                 if celebrationEffectsAllowed && isNotableRun {
-                    ResultBurst(accent: result.mode.world.accentColor)
+                    ResultBurst(accent: result.world.accentColor)
                         .scaleEffect(appeared ? 1 : 0.35)
                         .opacity(appeared ? 1 : 0)
                         .animation(.spring(duration: 0.75, bounce: 0.26), value: appeared)
                         .accessibilityHidden(true)
-                    ConfettiBurst(accent: result.mode.world.accentColor)
+                    ConfettiBurst(accent: result.world.accentColor)
                 }
 
                 ScrollView {
@@ -131,7 +131,7 @@ struct ResultView: View {
                 statRow(label: "Final score", icon: "trophy.fill") {
                     CountUpText(value: result.score, font: .body.bold(), color: .primary)
                 }
-                let best = store.progress.endlessRecord(for: result.mode.world)
+                let best = store.progress.endlessRecord
                 statRow(label: "Personal best", value: "Wave \(best.bestWave)", icon: "crown.fill")
             } else {
                 LabeledContent("Stamina remaining", value: "\(Int(result.remainingStamina))")
@@ -186,9 +186,9 @@ struct ResultView: View {
                     action: openUpgrades
                 )
                 resultDestination(
-                    title: result.mode.isEndless ? "Arenas" : "Map",
+                    title: result.mode.isEndless ? "Endless" : "Map",
                     systemImage: "map.fill",
-                    accent: result.mode.world.accentColor,
+                    accent: result.world.accentColor,
                     identifier: "result-more-map",
                     action: openModeSelection
                 )
@@ -258,7 +258,7 @@ struct ResultView: View {
     }
 
     private var backgroundImage: String {
-        GameContent.world(result.mode.world).heroAsset
+        GameContent.world(result.world).heroAsset
     }
 
     private var heroIcon: String {
@@ -268,7 +268,7 @@ struct ResultView: View {
     }
 
     private var heroColor: Color {
-        if result.mode.isEndless { return result.mode.world.accentColor }
+        if result.mode.isEndless { return result.world.accentColor }
         return result.didWin ? GoalRushTheme.gold : GoalRushTheme.orange
     }
 
@@ -280,7 +280,7 @@ struct ResultView: View {
 
     private var heroSubtitle: String {
         switch result.mode {
-        case .endless(let world): "\(GameContent.world(world).name) • Powers reset"
+        case .endless: "\(GameContent.world(result.world).name) • Powers reset"
         case .campaign(let level): result.didWin ? GameContent.level(level).name : "Tokens kept • Upgrade and retry"
         }
     }
@@ -297,7 +297,7 @@ struct ResultView: View {
     private func primaryAction() {
         store.uiAudio.play(.tap)
         switch result.mode {
-        case .endless(let world): store.startEndless(world: world)
+        case .endless: store.startEndless()
         case .campaign(let level):
             store.start(level: result.didWin ? min(level + 1, GameContent.levels.count) : level)
         }
@@ -319,7 +319,7 @@ struct ResultView: View {
         case .endless:
             store.route = .endless
         case .campaign(let level):
-            store.openWorldMap(result.mode.world, focusLevel: level)
+            store.openWorldMap(result.world, focusLevel: level)
         }
     }
 }

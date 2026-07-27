@@ -7,12 +7,14 @@ final class GoalRushScene: SKScene {
     private let targetLayer = SKNode()
     private let characterAttackLayer = SKNode()
     private let projectileLayer = SKNode()
+    private let bossHazardLayer = SKNode()
     private let effectsLayer = SKNode()
     private let playerNode: SKNode
     private let touchGuide = SKNode()
     private var targetNodes: [Int: SKNode] = [:]
     private var projectileNodes: [Int: SKNode] = [:]
     private var characterAttackNodes: [Int: SKSpriteNode] = [:]
+    private var bossHazardNodes: [Int: SKShapeNode] = [:]
     private var targetKinds: [Int: TargetState.Kind] = [:]
     private var targetNodePools: [TargetState.Kind: [SKNode]] = [:]
     private var friendlyProjectilePool: [SKNode] = []
@@ -32,13 +34,18 @@ final class GoalRushScene: SKScene {
     private var liveTargetIDs = Set<Int>()
     private var liveProjectileIDs = Set<Int>()
     private var liveCharacterAttackIDs = Set<Int>()
+    private var liveBossHazardIDs = Set<Int>()
     private var targetHealthRatios: [Int: Double] = [:]
     private var configuredSize = CGSize.zero
+    private var renderedWorldID: WorldID
     private var lastHandledEventPulse = 0
     private var targetPrewarmQueue: [TargetState.Kind]
     private var targetPrewarmIndex = 0
     private var impactPrewarmIndex = 0
     private let reducedEffects: Bool
+#if DEBUG
+    private var didShowRewardPreview = false
+#endif
     private lazy var meteorTexture = SKTexture(imageNamed: "AbilityMeteor")
     private lazy var shockwaveTexture = SKTexture(imageNamed: "AbilityShockwave")
     private lazy var meteorImpactTexture = SKTexture(imageNamed: "AbilityMeteorImpact")
@@ -48,17 +55,20 @@ final class GoalRushScene: SKScene {
         self.session = session
         self.reducedEffects = reducedEffects
         self.playerNode = GameNodeFactory.player(character: session.character.id)
+        self.renderedWorldID = session.snapshot.world
         if let level = session.level {
             self.targetPrewarmQueue = level.enemies.map(TargetState.Kind.enemy)
                 + level.objects.map(TargetState.Kind.fieldObject)
                 + TemporaryBallAbility.allCases.map(TargetState.Kind.powerUp)
                 + [.enemy(session.world.boss)]
         } else {
-            let levels = GameContent.levels(in: session.world.id)
             self.targetPrewarmQueue = Array(Set(
-                levels.flatMap { $0.enemies.map(TargetState.Kind.enemy) + $0.objects.map(TargetState.Kind.fieldObject) }
+                GameContent.levels.flatMap {
+                    $0.enemies.map(TargetState.Kind.enemy)
+                        + $0.objects.map(TargetState.Kind.fieldObject)
+                }
             )) + TemporaryBallAbility.allCases.map(TargetState.Kind.powerUp)
-                + [.enemy(session.world.boss)]
+                + GameContent.worlds.map { .enemy($0.boss) }
         }
         super.init(size: .init(width: 390, height: 844))
         scaleMode = .resizeFill
@@ -74,6 +84,7 @@ final class GoalRushScene: SKScene {
         world.addChild(targetLayer)
         world.addChild(characterAttackLayer)
         world.addChild(projectileLayer)
+        world.addChild(bossHazardLayer)
         world.addChild(effectsLayer)
         world.addChild(playerNode)
         configureTouchGuide()
@@ -97,6 +108,9 @@ final class GoalRushScene: SKScene {
     }
 
     override func update(_ currentTime: TimeInterval) {
+#if DEBUG
+        showRewardPreviewIfRequested()
+#endif
         // Spread prototype construction across early frames, before the first
         // scheduled spawn, instead of blocking the exact frame a target appears.
         if targetPrewarmIndex < targetPrewarmQueue.count {
@@ -144,9 +158,14 @@ final class GoalRushScene: SKScene {
         touchGuide.setScale(1)
     }
 
-    private func rebuildField() {
-        world.childNode(withName: "field")?.removeFromParent()
-        let texture = SKTexture(imageNamed: session.world.gameplayAsset)
+    private func rebuildField(animated: Bool = false) {
+        let retiringField = world.childNode(withName: "field")
+        let retiringTint = world.childNode(withName: "arena-tint")
+        retiringField?.name = "retiring-field"
+        retiringTint?.name = "retiring-arena-tint"
+
+        let definition = GameContent.world(renderedWorldID)
+        let texture = SKTexture(imageNamed: definition.gameplayAsset)
         let field = SKSpriteNode(texture: texture)
         field.name = "field"
         let textureSize = texture.size()
@@ -154,25 +173,48 @@ final class GoalRushScene: SKScene {
         field.size = CGSize(width: textureSize.width * scale, height: textureSize.height * scale)
         field.position = CGPoint(x: size.width / 2, y: size.height / 2)
         field.zPosition = -200
+        field.alpha = animated ? 0 : 1
         world.insertChild(field, at: 0)
 
         let turfTint = SKShapeNode(rectOf: size)
-        turfTint.fillColor = session.world.id == .mars
+        turfTint.fillColor = renderedWorldID == .mars
             ? SKColor(red: 0.20, green: 0.02, blue: 0.22, alpha: 0.10)
             : SKColor(red: 0.02, green: 0.10, blue: 0.16, alpha: 0.12)
         turfTint.strokeColor = .clear
         turfTint.position = field.position
         turfTint.zPosition = -190
         turfTint.name = "arena-tint"
+        turfTint.alpha = animated ? 0 : 1
         world.insertChild(turfTint, at: 1)
+
+        if animated {
+            field.run(.fadeIn(withDuration: 0.32))
+            turfTint.run(.fadeIn(withDuration: 0.32))
+            retiringField?.run(.sequence([
+                .fadeOut(withDuration: 0.24),
+                .removeFromParent()
+            ]))
+            retiringTint?.run(.sequence([
+                .fadeOut(withDuration: 0.24),
+                .removeFromParent()
+            ]))
+        } else {
+            retiringField?.removeFromParent()
+            retiringTint?.removeFromParent()
+        }
     }
 
     private func render(_ snapshot: SimulationSnapshot) {
+        if renderedWorldID != snapshot.world {
+            renderedWorldID = snapshot.world
+            rebuildField(animated: !reducesMotion)
+        }
         playerNode.position = point(x: snapshot.playerX, y: 0.08)
         playerNode.zPosition = 1_000
         syncTargets(snapshot.targets)
         syncCharacterAttacks(snapshot.characterAttacks)
         syncProjectiles(snapshot.projectiles)
+        syncBossHazards(snapshot.bossHazards)
     }
 
     private func syncTargets(_ targets: [TargetState]) {
@@ -201,7 +243,13 @@ final class GoalRushScene: SKScene {
             }
             node.position = targetPoint
             let bossMultiplier = scale * CGFloat(CampaignBalance.bossScale(tier: target.bossTier))
-            node.setScale(bossMultiplier)
+            if case .volatileCore = target.kind {
+                let arming = min(1, max(0, target.phase / 2.75))
+                let pulse = reducesMotion ? 0 : (sin(target.phase * 13) + 1) * 0.035
+                node.setScale(bossMultiplier * CGFloat(1 + arming * 0.14 + pulse))
+            } else {
+                node.setScale(bossMultiplier)
+            }
             if isFrozen {
                 node.zRotation = 0
             } else if case .enemy(let enemy) = target.kind, enemy == .tackleBot || enemy == .craterCrawler {
@@ -293,6 +341,88 @@ final class GoalRushScene: SKScene {
         }
     }
 
+    private func syncBossHazards(_ hazards: [BossHazardState]) {
+        liveBossHazardIDs.removeAll(keepingCapacity: true)
+        for hazard in hazards { liveBossHazardIDs.insert(hazard.id) }
+        for id in bossHazardNodes.keys where !liveBossHazardIDs.contains(id) {
+            bossHazardNodes.removeValue(forKey: id)?.removeFromParent()
+        }
+
+        for hazard in hazards {
+            let node = bossHazardNodes[hazard.id] ?? {
+                let newNode = SKShapeNode()
+                newNode.lineJoin = .round
+                newNode.zPosition = 1_450
+                bossHazardLayer.addChild(newNode)
+                bossHazardNodes[hazard.id] = newNode
+                return newNode
+            }()
+            node.path = bossHazardPath(for: hazard)
+            node.position = .zero
+
+            let color = bossHazardColor(for: hazard.kind)
+            if hazard.isActive {
+                node.fillColor = color.withAlphaComponent(reducedEffects ? 0.38 : 0.62)
+                node.strokeColor = .white.withAlphaComponent(0.92)
+                node.lineWidth = 3.5
+                node.glowWidth = reducedEffects ? 0 : 14
+                node.alpha = 1
+            } else {
+                let progress = CGFloat(hazard.telegraphProgress)
+                let pulse = (sin(progress * .pi * 8) + 1) * 0.5
+                node.fillColor = color.withAlphaComponent(0.10 + pulse * 0.10)
+                node.strokeColor = color.withAlphaComponent(0.58 + pulse * 0.38)
+                node.lineWidth = 2 + progress * 2
+                node.glowWidth = reducedEffects ? 0 : 3 + progress * 7
+                node.alpha = 0.82
+            }
+        }
+    }
+
+    private func bossHazardPath(for hazard: BossHazardState) -> CGPath {
+        switch hazard.kind {
+        case .meteorStrike:
+            let center = point(x: hazard.position.x, y: hazard.position.y)
+            let width = max(54, size.width * CGFloat(hazard.halfWidth) * 0.86)
+            return CGPath(
+                ellipseIn: CGRect(
+                    x: center.x - width,
+                    y: center.y - width * 0.34,
+                    width: width * 2,
+                    height: width * 0.68
+                ),
+                transform: nil
+            )
+        case .orbitalLaser, .eclipseLane, .lunarDebris:
+            let bottomY = 0.02
+            let topY = renderedWorldID == .mars ? 0.86 : 0.92
+            let bottom = point(x: hazard.position.x, y: bottomY)
+            let top = point(x: hazard.position.x, y: topY)
+            let bottomHalfWidth = size.width * CGFloat(hazard.halfWidth) * 0.43
+            let topHalfWidth = size.width * CGFloat(hazard.halfWidth) * 0.23
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: bottom.x - bottomHalfWidth, y: bottom.y))
+            path.addLine(to: CGPoint(x: top.x - topHalfWidth, y: top.y))
+            path.addLine(to: CGPoint(x: top.x + topHalfWidth, y: top.y))
+            path.addLine(to: CGPoint(x: bottom.x + bottomHalfWidth, y: bottom.y))
+            path.closeSubpath()
+            return path
+        }
+    }
+
+    private func bossHazardColor(for kind: BossAttackKind) -> SKColor {
+        switch kind {
+        case .orbitalLaser:
+            SKColor(red: 1, green: 0.24, blue: 0.06, alpha: 1)
+        case .eclipseLane:
+            SKColor(red: 0.70, green: 0.36, blue: 1, alpha: 1)
+        case .meteorStrike:
+            SKColor(red: 0.20, green: 0.90, blue: 1, alpha: 1)
+        case .lunarDebris:
+            SKColor(red: 0.76, green: 0.88, blue: 1, alpha: 1)
+        }
+    }
+
     private func dequeueCharacterAttack(kind: CharacterAttackKind) -> SKSpriteNode {
         let node: SKSpriteNode
         switch kind {
@@ -324,9 +454,10 @@ final class GoalRushScene: SKScene {
     private func dequeueTarget(for target: TargetState) -> SKNode {
         if var pool = targetNodePools[target.kind], let node = pool.popLast() {
             targetNodePools[target.kind] = pool
+            GameNodeFactory.configureTarget(node, target: target, world: renderedWorldID)
             return node
         }
-        return GameNodeFactory.target(target)
+        return GameNodeFactory.target(target, world: renderedWorldID)
     }
 
     private func recycleTarget(_ node: SKNode, kind: TargetState.Kind) {
@@ -369,7 +500,7 @@ final class GoalRushScene: SKScene {
 
     private func point(x: Double, y: Double) -> CGPoint {
         let narrowing = 0.43 - 0.22 * y
-        let verticalPosition = session.world.id == .mars
+        let verticalPosition = renderedWorldID == .mars
             ? 0.08 + y * 0.60
             : 0.10 + y * 0.78
         return CGPoint(
@@ -405,9 +536,15 @@ final class GoalRushScene: SKScene {
             case .bossPhase:
                 showScreenPulse(color: SKColor(red: 1, green: 0.24, blue: 0.08, alpha: 1), strength: 0.55)
                 shake(intensity: 11)
+            case .bossAttackTelegraphed(let kind):
+                showBossAttackWarning(kind)
+            case .bossAttackActivated(let kind, let position):
+                activateBossAttackFeedback(kind, at: point(x: position.x, y: position.y))
             case .waveCompleted(let wave):
                 showWaveBanner(wave: wave)
                 showScreenPulse(color: SKColor(red: 0.18, green: 0.90, blue: 1, alpha: 1), strength: 0.30)
+            case .worldTransitioned:
+                break
             case .meteorKick:
                 showScreenPulse(color: SKColor(red: 1, green: 0.34, blue: 0.08, alpha: 1), strength: 0.22)
                 spawnMeteorAura()
@@ -415,11 +552,18 @@ final class GoalRushScene: SKScene {
                 showComboPopup(count: count)
             case .worldEffectActivated(let rule, let position):
                 showWorldEffect(rule, at: point(x: position.x, y: position.y))
-            case .volatileCoreBurst(let position):
+            case .worldEffectImpact(let rule, let position):
+                showWorldEffectImpact(rule, at: point(x: position.x, y: position.y))
+            case .volatileCoreNeutralized(let position):
                 let location = point(x: position.x, y: position.y)
-                showComicCallout("CORE BREAK!", at: location, color: SKColor(red: 1, green: 0.48, blue: 0.05, alpha: 1))
+                showComicCallout("CORE SAFE!", at: location, color: SKColor(red: 0.20, green: 0.92, blue: 1, alpha: 1))
                 spawnImpact(at: location, flavor: .explosive, critical: true)
-                shake(intensity: 8)
+            case .volatileCoreDetonated(let position):
+                let location = point(x: position.x, y: position.y)
+                showComicCallout("CORE BLAST!", at: location, color: SKColor(red: 1, green: 0.24, blue: 0.04, alpha: 1))
+                spawnImpact(at: location, flavor: .explosive, critical: true)
+                showScreenPulse(color: SKColor(red: 1, green: 0.16, blue: 0.03, alpha: 1), strength: 0.40)
+                if !reducedEffects { shake(intensity: 8) }
             case .comboChanged:
                 break
             case .temporaryAbilityActivated(let ability, _, let position):
@@ -443,6 +587,37 @@ final class GoalRushScene: SKScene {
     }
 
     private var reducesMotion: Bool { reducedEffects || UIAccessibility.isReduceMotionEnabled }
+
+    private func showBossAttackWarning(_ kind: BossAttackKind) {
+        let text: String
+        let color: SKColor
+        switch kind {
+        case .orbitalLaser:
+            text = "ORBITAL LOCK!"
+            color = SKColor(red: 1, green: 0.30, blue: 0.06, alpha: 1)
+        case .eclipseLane:
+            text = "FIND THE SAFE LANE!"
+            color = SKColor(red: 0.72, green: 0.42, blue: 1, alpha: 1)
+        case .meteorStrike:
+            text = "METEOR MARKERS!"
+            color = SKColor(red: 0.20, green: 0.90, blue: 1, alpha: 1)
+        case .lunarDebris:
+            text = "ORBITAL DEBRIS!"
+            color = SKColor(red: 0.76, green: 0.88, blue: 1, alpha: 1)
+        }
+        showComicCallout(text, at: CGPoint(x: size.width * 0.5, y: size.height * 0.62), color: color)
+    }
+
+    private func activateBossAttackFeedback(_ kind: BossAttackKind, at position: CGPoint) {
+        let color = bossHazardColor(for: kind)
+        showScreenPulse(color: color, strength: kind == .meteorStrike ? 0.18 : 0.24)
+        if !reducedEffects {
+            shake(intensity: kind == .orbitalLaser ? 8 : 5)
+        }
+        if kind == .meteorStrike || kind == .lunarDebris {
+            spawnImpact(at: position, flavor: .explosive, critical: true)
+        }
+    }
 
     private func configureTouchGuide() {
         let outer = SKShapeNode(circleOfRadius: 28)
@@ -777,8 +952,18 @@ final class GoalRushScene: SKScene {
     private func showWorldEffect(_ rule: WorldRule, at position: CGPoint) {
         switch rule {
         case .lunarCycle:
-            showComicCallout("ZERO-G!", at: position, color: SKColor(red: 0.66, green: 0.72, blue: 1, alpha: 1))
-            showScreenPulse(color: SKColor(red: 0.42, green: 0.34, blue: 0.92, alpha: 1), strength: 0.22)
+            showComicCallout("ORBITAL DEBRIS!", at: position, color: SKColor(red: 0.76, green: 0.88, blue: 1, alpha: 1))
+        case .volatileCores:
+            showComicCallout("CORE ARMED!", at: position, color: SKColor(red: 1, green: 0.46, blue: 0.04, alpha: 1))
+        }
+    }
+
+    private func showWorldEffectImpact(_ rule: WorldRule, at position: CGPoint) {
+        switch rule {
+        case .lunarCycle:
+            spawnImpact(at: position, flavor: .ice, critical: true)
+            showScreenPulse(color: SKColor(red: 0.64, green: 0.78, blue: 1, alpha: 1), strength: 0.20)
+            if !reducedEffects { shake(intensity: 5) }
         case .volatileCores:
             break
         }
@@ -803,24 +988,102 @@ final class GoalRushScene: SKScene {
     }
 
     private func spawnReward(value: Int, from position: CGPoint) {
-        let container = SKNode()
-        container.position = position
-        container.zPosition = 2_100
-        let token = GameNodeFactory.rewardToken()
-        container.addChild(token)
-        let label = SKLabelNode(text: "+\(value)")
-        label.fontName = "AvenirNext-Heavy"
-        label.fontSize = 15
-        label.fontColor = .white
-        label.verticalAlignmentMode = .center
-        label.position.x = 27
-        container.addChild(label)
-        effectsLayer.addChild(container)
+        let tokenCount = max(1, value)
         let target = CGPoint(x: size.width * 0.77, y: size.height * 0.90)
-        let move = SKAction.move(to: target, duration: reducesMotion ? 0.18 : 0.48)
-        move.timingMode = .easeInEaseOut
-        container.run(.sequence([.group([move, .rotate(byAngle: .pi * 2, duration: reducesMotion ? 0.18 : 0.48), .scale(to: 0.72, duration: reducesMotion ? 0.18 : 0.48)]), .fadeOut(withDuration: 0.10), .removeFromParent()]))
+        let scatterDuration = reducesMotion ? 0.08 : 0.18
+        let pileHold = reducesMotion ? 0.05 : 0.10
+        let streamDuration = Self.rewardStreamDuration(for: tokenCount)
+            * (reducesMotion ? 0.65 : 1)
+        let flightDuration = reducesMotion ? 0.18 : 0.32
+
+        for index in 0..<tokenCount {
+            let token = GameNodeFactory.rewardToken()
+            token.name = "reward-token"
+            token.position = position
+            token.zPosition = 2_100 + CGFloat(index % 12)
+            token.setScale(reducesMotion ? 0.82 : 0.70)
+            effectsLayer.addChild(token)
+
+            let pileOffset = rewardPileOffset(index: index, count: tokenCount)
+            let pilePoint = CGPoint(
+                x: position.x + pileOffset.x,
+                y: position.y + pileOffset.y
+            )
+            let scatter = SKAction.move(to: pilePoint, duration: scatterDuration)
+            scatter.timingMode = .easeOut
+            let settle = SKAction.scale(to: 1, duration: scatterDuration)
+            settle.timingMode = .easeOut
+            let flightDelay = Self.rewardFlightDelay(
+                index: index,
+                count: tokenCount,
+                streamDuration: streamDuration
+            )
+            let fly = SKAction.move(to: target, duration: flightDuration)
+            fly.timingMode = .easeInEaseOut
+            let spin = SKAction.rotate(
+                byAngle: reducesMotion ? 0 : .pi * 2,
+                duration: flightDuration
+            )
+            let shrink = SKAction.scale(to: 0.64, duration: flightDuration)
+
+            token.run(
+                .sequence([
+                    .group([scatter, settle]),
+                    .wait(forDuration: pileHold + flightDelay),
+                    .group([fly, spin, shrink]),
+                    .fadeOut(withDuration: 0.06),
+                    .removeFromParent()
+                ]),
+                withKey: "reward-flight"
+            )
+        }
     }
+
+    static func rewardFlightDelay(
+        index: Int,
+        count: Int,
+        streamDuration: TimeInterval
+    ) -> TimeInterval {
+        guard count > 1 else { return streamDuration }
+        let progress = Double(min(max(index, 0), count - 1)) / Double(count - 1)
+        return streamDuration * progress
+    }
+
+    static func rewardStreamDuration(for count: Int) -> TimeInterval {
+        guard count > 1 else { return 0.12 }
+        return min(1.20, 0.12 + 0.085 * sqrt(Double(max(0, count - 2))))
+    }
+
+    private func rewardPileOffset(index: Int, count: Int) -> CGPoint {
+        let angle = Double(index) * 2.399963229728653
+        let fullness = sqrt(Double(index + 1) / Double(max(1, count)))
+        let horizontalRadius = 8 + 28 * fullness
+        let verticalRadius = 4 + 10 * fullness
+        return CGPoint(
+            x: cos(angle) * horizontalRadius,
+            y: -10 + sin(angle) * verticalRadius
+        )
+    }
+
+#if DEBUG
+    private func showRewardPreviewIfRequested() {
+        guard !didShowRewardPreview,
+              session.phase == .playing,
+              let argumentIndex = ProcessInfo.processInfo.arguments.firstIndex(of: "--reward-preview"),
+              ProcessInfo.processInfo.arguments.indices.contains(argumentIndex + 1),
+              let value = Int(ProcessInfo.processInfo.arguments[argumentIndex + 1]) else { return }
+        didShowRewardPreview = true
+        spawnReward(value: value, from: point(x: 0.16, y: 0.53))
+    }
+
+    func spawnRewardForTesting(value: Int, from position: CGPoint = .zero) {
+        spawnReward(value: value, from: position)
+    }
+
+    var rewardTokensForTesting: [SKNode] {
+        effectsLayer.children.filter { $0.name == "reward-token" }
+    }
+#endif
 
     private func spawnHeal(amount: Double, from position: CGPoint) {
         let label = SKLabelNode(text: "+\(Int(amount)) STAMINA")

@@ -81,7 +81,7 @@ private extension RunMode {
     var transitionIdentity: String {
         switch self {
         case .campaign(let level): "campaign-\(level)"
-        case .endless(let world): "endless-\(world.rawValue)"
+        case .endless: "endless"
         }
     }
 }

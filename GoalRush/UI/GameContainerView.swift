@@ -22,31 +22,41 @@ struct GameContainerView: View {
             SpriteView(scene: scene, isPaused: session.phase == .paused, preferredFramesPerSecond: 60)
                 .ignoresSafeArea()
                 .accessibilityLabel("Active soccer training run")
-            VStack(spacing: 10) {
-                hud
-                if session.hudState.combo > 0 {
-                    HStack {
-                        Spacer()
-                        FloatingComboView(combo: session.hudState.combo)
-                    }
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .scale(scale: 0.82, anchor: .topTrailing)
-                                .combined(with: .opacity)
+            VStack(spacing: 6) {
+                GameplayStatusBar(
+                    world: session.world.id,
+                    stamina: session.hudState.stamina,
+                    maxStamina: session.hudState.maxStamina,
+                    staminaTint: staminaColor,
+                    tokens: session.hudState.tokens,
+                    shieldCharges: session.hudState.shieldCharges,
+                    pause: pauseRun
+                )
+
+                HStack(alignment: .center, spacing: GoalRushTheme.Metrics.compactSpacing) {
+                    WaveObjectiveHUD(
+                        world: session.world.id,
+                        wave: session.hudState.wave,
+                        waveCount: session.hudState.waveCount,
+                        remainingEnemies: session.hudState.remainingEnemies,
+                        isEndless: session.mode.isEndless,
+                        isBossWave: session.hudState.isBossWave
                     )
-                }
-                if let worldRule = session.world.rule {
-                    HStack {
-                        WorldEffectBadge(
-                            rule: worldRule,
-                            accentColor: session.world.id.accentColor,
-                            isActive: session.hudState.worldEffectActive,
-                            progress: session.hudState.worldEffectProgress
-                        )
-                        Spacer()
+
+                    Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
+
+                    if session.hudState.combo > 0 {
+                        FloatingComboView(combo: session.hudState.combo)
+                            .transition(
+                                reduceMotion
+                                    ? .opacity
+                                    : .scale(scale: 0.86, anchor: .topTrailing)
+                                        .combined(with: .opacity)
+                            )
                     }
                 }
+                .frame(minHeight: 38)
+
                 if let ability = session.hudState.activeTemporaryAbility {
                     HStack {
                         Spacer()
@@ -72,8 +82,8 @@ struct GameContainerView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 8)
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
             .animation(
                 reduceMotion ? .easeOut(duration: 0.16) : .snappy(duration: 0.20),
                 value: session.hudState.combo > 0
@@ -107,6 +117,16 @@ struct GameContainerView: View {
                 pauseOverlay
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
+            if case .worldTransition(let from, let to, _) = session.phase {
+                EndlessWorldTransitionView(
+                    from: from,
+                    to: to,
+                    hapticsEnabled: store.settings.hapticsEnabled,
+                    onComplete: session.completeWorldTransition
+                )
+                .transition(.opacity)
+                .zIndex(20)
+            }
         }
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: session.phase)
         .onChange(of: session.phase) { _, phase in
@@ -131,148 +151,6 @@ struct GameContainerView: View {
             scene.eventHandler = nil
             audio.stop()
         }
-    }
-
-    private var hud: some View {
-        VStack(spacing: 9) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "heart.fill")
-                            .foregroundStyle(staminaColor)
-                        Text("STAMINA")
-                            .font(GoalRushTheme.Typography.caption2)
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 4)
-                        Text("\(Int(session.hudState.stamina))")
-                            .font(GoalRushTheme.Typography.subheadlineEmphasized)
-                            .monospacedDigit()
-                            .contentTransition(.numericText())
-                    }
-                    ProgressView(value: session.hudState.stamina, total: session.hudState.maxStamina)
-                        .tint(staminaColor)
-                        .scaleEffect(y: 1.35)
-                        .pulseGlow(session.hudState.stamina / max(1, session.hudState.maxStamina) <= 0.28, color: GoalRushTheme.orange)
-                }
-                .frame(maxWidth: .infinity)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Stamina \(Int(session.hudState.stamina)) of \(Int(session.hudState.maxStamina))")
-
-                Rectangle()
-                    .fill(.white.opacity(0.12))
-                    .frame(width: 1, height: 38)
-
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text("TOKENS")
-                        .font(GoalRushTheme.Typography.caption2)
-                        .foregroundStyle(.secondary)
-                    HStack(spacing: 4) {
-                        TrainingTokenIcon(size: 21)
-                        Text(session.hudState.tokens.formatted())
-                            .font(GoalRushTheme.Typography.headline)
-                            .monospacedDigit()
-                            .contentTransition(.numericText())
-                    }
-                    .animation(.snappy, value: session.hudState.tokens)
-                }
-                    .foregroundStyle(GoalRushTheme.gold)
-
-                if session.hudState.shieldCharges > 0 {
-                    Label("\(session.hudState.shieldCharges)", systemImage: "shield.fill")
-                        .labelStyle(.iconOnly)
-                        .foregroundStyle(GoalRushTheme.cyan)
-                        .overlay(alignment: .topTrailing) {
-                            Text("\(session.hudState.shieldCharges)")
-                                .font(GoalRushTheme.Typography.caption2)
-                                .padding(3)
-                                .background(GoalRushTheme.navy, in: .circle)
-                                .offset(x: 8, y: -7)
-                        }
-                        .frame(width: 32)
-                        .accessibilityLabel("\(session.hudState.shieldCharges) shield blocks")
-                }
-
-                Button("Pause", systemImage: "pause.fill") {
-                    store.uiAudio.play(.whoosh, volume: 0.4)
-                    session.togglePause()
-                }
-                    .labelStyle(.iconOnly)
-                    .font(GoalRushTheme.Typography.headline)
-                    .frame(width: 44, height: 44)
-                    .background(.white.opacity(0.11), in: .circle)
-                    .overlay { Circle().stroke(.white.opacity(0.18)) }
-                    .contentShape(.circle)
-                    .accessibilityIdentifier("pause")
-            }
-
-            if session.hudState.bossActive {
-                BossHealthView(
-                    name: session.hudState.bossName ?? "Boss",
-                    healthFraction: session.hudState.bossHealthFraction,
-                    tier: session.hudState.bossTier ?? .miniBoss
-                )
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            HStack(spacing: 9) {
-                Text(progressLabel)
-                    .font(GoalRushTheme.Typography.caption2)
-                    .foregroundStyle(session.hudState.bossActive ? GoalRushTheme.orange : .secondary)
-                ProgressView(value: levelProgress)
-                    .tint(session.hudState.bossActive ? GoalRushTheme.orange : GoalRushTheme.cyan)
-                    .accessibilityIdentifier("run-progress")
-                if session.mode.isEndless {
-                    Label(session.hudState.score.formatted(), systemImage: "trophy.fill")
-                        .font(GoalRushTheme.Typography.caption2)
-                        .monospacedDigit()
-                        .foregroundStyle(GoalRushTheme.gold)
-                        .frame(minWidth: 58, alignment: .trailing)
-                        .accessibilityLabel("Score \(session.hudState.score)")
-                } else {
-                    Text("\(Int(levelProgress * 100))%")
-                        .font(GoalRushTheme.Typography.caption2)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .frame(width: 34, alignment: .trailing)
-                }
-            }
-        }
-        .padding(12)
-        // A live material samples and blurs the SpriteKit surface whenever this
-        // frequently-changing HUD redraws. An opaque game surface preserves the
-        // visual hierarchy without forcing that expensive cross-framework pass.
-        .background(hudBackground, in: ComicPanelShape(cut: 10))
-        .overlay {
-            ComicInkTexture(opacity: 0.07)
-                .clipShape(ComicPanelShape(cut: 10))
-        }
-        .overlay {
-            ComicPanelShape(cut: 10)
-                .stroke(hudBorderColor, lineWidth: session.world.id == .mars ? 2.5 : 2)
-        }
-        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: session.hudState.bossActive)
-    }
-
-    private var hudBackground: AnyShapeStyle {
-        if session.world.id == .mars {
-            return AnyShapeStyle(
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.12, green: 0.035, blue: 0.20).opacity(0.95),
-                        Color(red: 0.035, green: 0.09, blue: 0.18).opacity(0.93)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-        }
-        return AnyShapeStyle(GoalRushTheme.navy.opacity(0.90))
-    }
-
-    private var hudBorderColor: Color {
-        session.world.id == .mars
-            ? Color(red: 0.25, green: 0.88, blue: 1).opacity(0.42)
-            : .white.opacity(0.15)
     }
 
     private var pauseOverlay: some View {
@@ -305,6 +183,11 @@ struct GameContainerView: View {
 
     private func continueRun() {
         store.uiAudio.play(.tap)
+        session.togglePause()
+    }
+
+    private func pauseRun() {
+        store.uiAudio.play(.whoosh, volume: 0.4)
         session.togglePause()
     }
 
@@ -345,10 +228,6 @@ struct GameContainerView: View {
         if ratio > 0.55 { return GoalRushTheme.positive }
         if ratio > 0.28 { return GoalRushTheme.gold }
         return GoalRushTheme.orange
-    }
-
-    private var levelProgress: Double {
-        min(1, max(0, session.hudState.waveElapsed / max(1, session.hudState.waveDuration)))
     }
 
     private func buildResult(didWin: Bool, bonus: Int = 0) -> RunResult {
@@ -393,63 +272,13 @@ struct GameContainerView: View {
     private func handleSimulationEvents(_ events: [SimulationEvent], snapshot: SimulationSnapshot) {
         audio.handle(events)
         audio.updateIntensity(
-            progress: snapshot.waveElapsed / max(1, snapshot.waveDuration),
+            progress: snapshot.waveObjectiveProgress,
             bossActive: snapshot.targets.contains { target in
                 target.bossTier != .standard
             }
         )
     }
 
-    private var progressLabel: String {
-        if session.hudState.bossActive {
-            return session.mode.isEndless
-                ? "BOSS WAVE \(session.hudState.wave)"
-                : "BOSS • WAVE \(session.hudState.wave) OF \(session.hudState.waveCount)"
-        }
-        if session.mode.isEndless {
-            return session.hudState.waveElapsed >= session.hudState.waveDuration
-                ? "CLEAR WAVE \(session.hudState.wave)"
-                : "WAVE \(session.hudState.wave)"
-        }
-        return "WAVE \(session.hudState.wave) OF \(session.hudState.waveCount)"
-    }
-
-}
-
-private struct BossHealthView: View {
-    let name: String
-    let healthFraction: Double
-    let tier: CampaignBossTier
-
-    var body: some View {
-        VStack(spacing: 6) {
-            HStack {
-                Label(tier == .megaBoss ? "WORLD BOSS" : "WAVE BOSS", systemImage: "exclamationmark.triangle.fill")
-                    .font(GoalRushTheme.Typography.captionEmphasized)
-                    .foregroundStyle(GoalRushTheme.orange)
-                Spacer()
-                Text(name.uppercased())
-                    .font(GoalRushTheme.Typography.captionEmphasized)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-            }
-
-            ProgressView(value: healthFraction)
-                .tint(GoalRushTheme.orange)
-                .scaleEffect(y: 2)
-                .accessibilityHidden(true)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(GoalRushTheme.orange.opacity(0.14), in: ComicPanelShape(cut: 6))
-        .overlay {
-            ComicPanelShape(cut: 6)
-                .stroke(GoalRushTheme.orange, lineWidth: 2)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(tier == .megaBoss ? "World boss" : "Wave boss"), \(name), \(Int((healthFraction * 100).rounded())) percent health")
-        .accessibilityIdentifier("boss-health")
-    }
 }
 
 private extension GameSessionModel.Phase {

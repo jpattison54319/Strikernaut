@@ -56,10 +56,10 @@ struct PlanetJourneyView: View {
         GeometryReader { geometry in
             ScrollView(.vertical) {
                 VStack(spacing: 0) {
-                    ForEach(Array(WorldJourneyCatalog.pages.enumerated()), id: \.offset) { index, destinations in
+                    ForEach(WorldJourneyCatalog.pageIndicesTopToBottom, id: \.self) { index in
                         PlanetJourneyPageView(
                             pageIndex: index,
-                            destinations: destinations,
+                            destinations: WorldJourneyCatalog.pages[index],
                             progress: store.progress,
                             onSelect: select
                         )
@@ -71,6 +71,7 @@ struct PlanetJourneyView: View {
             }
             .scrollIndicators(.hidden)
             .scrollTargetBehavior(.paging)
+            .defaultScrollAnchor(.bottom)
             .scrollPosition(id: $selectedPage)
             .overlay(alignment: .bottom) {
                 paginationControls

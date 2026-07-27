@@ -32,16 +32,16 @@ enum CampaignBriefingCatalog {
         case .lunarCycle:
             .init(
                 subject: .concept(concept),
-                title: "Lunar Cycle",
-                detail: "Gravity shifts every sixteen seconds. In zero-G, threats slow and your balls rebound from the rails.",
+                title: "Orbital Debris",
+                detail: "Moon debris periodically marks a dangerous lane. Move clear before it strikes.",
                 systemImage: "moon.stars.fill"
             )
         case .marsArena:
             .init(
                 subject: .concept(concept),
-                title: "Mars Arena",
-                detail: "Alien enemies and Martian field objects await.",
-                systemImage: "circle.grid.cross.fill"
+                title: "Volatile Cores",
+                detail: "Armed cores appear as enemies fall. Shoot each core before it detonates against you.",
+                systemImage: "flame.fill"
             )
         }
     }
@@ -55,10 +55,10 @@ enum CampaignBriefingCatalog {
         case .ballLauncher: ("Ball Launcher", "Fires back from range. Move when a red ball appears.")
         case .titanKeeper: ("Titan Keeper", "Earth’s boss. It fires, changes phases, and calls reinforcements.")
         case .regolithRunner: ("Regolith Runner", "A quick lunar scout built for low-gravity lanes.")
-        case .lunarHopper: ("Lunar Hopper", "Bounds sideways through the zero-G cycle.")
+        case .lunarHopper: ("Lunar Hopper", "Bounds sideways through crowded lunar lanes.")
         case .orbitDrone: ("Orbit Drone", "A heavily armored defender that floats between lanes.")
         case .eclipseKeeper: ("Eclipse Keeper", "A shadow-armored blocker that demands focused fire.")
-        case .gravityStriker: ("Gravity Striker", "Fires from range while the arena’s gravity changes.")
+        case .gravityStriker: ("Gravity Striker", "Fires from range while orbital debris pressures your lane.")
         case .lunarWarden: ("Lunar Warden", "The Moon’s boss. It commands eclipse phases and lunar reinforcements.")
         case .dustSprite: ("Dust Sprite", "Mars’s quickest grunt. Fragile, but dangerous in groups.")
         case .roverRaider: ("Rover Raider", "A durable alien that absorbs several hits.")

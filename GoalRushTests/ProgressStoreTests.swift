@@ -33,7 +33,7 @@ struct ProgressStoreTests {
         #expect(progress.trainingTokens == 777)
         #expect(progress.highestUnlockedLevel == 6)
         #expect(progress.unlockedCharacters == [.ace])
-        #expect(progress.endlessRecords.isEmpty)
+        #expect(progress.endlessRecord == .empty)
     }
 
     @Test func corruptSaveRecoversToNewPlayer() throws {
@@ -43,6 +43,31 @@ struct ProgressStoreTests {
         try Data("not-json".utf8).write(to: url)
         let store = FileProgressStore(fileURL: url)
         #expect(try store.load() == .newPlayer)
+    }
+
+    @Test func resettingAccountRemovesSaveAndRestartsOnboarding() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let saveURL = directory.appending(path: "save.json")
+        let persistence = FileProgressStore(fileURL: saveURL)
+        var progress = PlayerProgress.newPlayer
+        progress.trainingTokens = 8_000
+        progress.highestUnlockedLevel = 21
+        progress.hasSeenOnboarding = true
+        try persistence.save(progress)
+
+        let gameStore = GameStore(progress: progress, settings: .init(), persistence: persistence)
+        gameStore.selectedLevel = 24
+        gameStore.selectedWorld = .mars
+        gameStore.pendingResetConfirmation = true
+
+        gameStore.resetProgress()
+
+        #expect(gameStore.progress == .newPlayer)
+        #expect(gameStore.selectedLevel == 1)
+        #expect(gameStore.selectedWorld == .earth)
+        #expect(!gameStore.pendingResetConfirmation)
+        #expect(gameStore.route == .onboarding)
+        #expect(!FileManager.default.fileExists(atPath: saveURL.path))
     }
 
     @Test func upgradeCostsRiseThroughMasteryThenRemainSteadyForever() {
@@ -114,7 +139,7 @@ struct ProgressStoreTests {
 
         progress.reconcileUnlockedContent()
 
-        #expect(progress.schemaVersion == 7)
+        #expect(progress.schemaVersion == 8)
         #expect(progress.prestigeCount(for: .impact) == 2)
         #expect(progress.rank(for: .impact) == 21)
     }
@@ -182,7 +207,7 @@ struct ProgressStoreTests {
             persistence: FileProgressStore(fileURL: directory.appending(path: "save.json"))
         )
 
-        #expect(gameStore.progress.schemaVersion == 7)
+        #expect(gameStore.progress.schemaVersion == 8)
         #expect(gameStore.progress.highestUnlockedLevel == 21)
         #expect(gameStore.progress.unlockedCharacters == [.ace, .volt, .nova])
         #expect(GameContent.isWorldUnlocked(.mars, progress: gameStore.progress))
@@ -243,17 +268,51 @@ struct ProgressStoreTests {
         #expect(gameStore.progress.selectedCharacter == .nova)
     }
 
-    @Test func endlessRecordsAreIndependentPerWorld() throws {
+    @Test func endlessRecordIsSharedAcrossTheWorldCircuit() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let gameStore = GameStore(
             progress: .newPlayer,
             settings: .init(),
             persistence: FileProgressStore(fileURL: directory.appending(path: "save.json"))
         )
-        gameStore.finish(.init(mode: .endless(world: .earth), didWin: false, tokensEarned: 9, remainingStamina: 0, wave: 12, score: 45_000))
-        gameStore.finish(.init(mode: .endless(world: .earth), didWin: false, tokensEarned: 1, remainingStamina: 0, wave: 7, score: 8_000))
-        #expect(gameStore.progress.endlessRecord(for: .earth) == .init(bestWave: 12, bestScore: 45_000))
-        #expect(gameStore.progress.endlessRecord(for: .mars) == .empty)
+        gameStore.finish(.init(mode: .endless, didWin: false, tokensEarned: 9, remainingStamina: 0, wave: 12, score: 45_000))
+        gameStore.finish(.init(mode: .endless, didWin: false, tokensEarned: 1, remainingStamina: 0, wave: 7, score: 8_000))
+        #expect(gameStore.progress.endlessRecord == .init(bestWave: 12, bestScore: 45_000))
+    }
+
+    @Test func legacyPerWorldEndlessRecordsMergeIntoTheSingleCircuitRecord() throws {
+        let json = """
+        {
+          "schemaVersion": 7,
+          "trainingTokens": 12,
+          "highestUnlockedLevel": 30,
+          "upgradeRanks": {},
+          "upgradePrestiges": {},
+          "levelRecords": {},
+          "hasMovedInTutorial": true,
+          "endlessRecords": {
+            "earth": {"bestWave": 18, "bestScore": 42000},
+            "moon": {"bestWave": 24, "bestScore": 39000},
+            "mars": {"bestWave": 20, "bestScore": 61000}
+          }
+        }
+        """
+
+        var progress = try JSONDecoder().decode(
+            PlayerProgress.self,
+            from: Data(json.utf8)
+        )
+
+        #expect(progress.endlessRecord == .init(bestWave: 24, bestScore: 61_000))
+        progress.reconcileUnlockedContent()
+        #expect(progress.schemaVersion == 8)
+
+        let encoded = try JSONEncoder().encode(progress)
+        let object = try #require(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        #expect(object["endlessRecord"] != nil)
+        #expect(object["endlessRecords"] == nil)
     }
 
     @Test func expectedAudioAssetsAreBundled() {
@@ -264,7 +323,7 @@ struct ProgressStoreTests {
         }
     }
 
-    @Test func versionTwoSaveMigratesToSixWithCurrentDefaults() throws {
+    @Test func versionTwoSaveMigratesToEightWithCurrentDefaults() throws {
         let json = """
         {
           "schemaVersion": 2,
@@ -280,7 +339,7 @@ struct ProgressStoreTests {
         """
         var progress = try JSONDecoder().decode(PlayerProgress.self, from: Data(json.utf8))
         progress.reconcileUnlockedContent()
-        #expect(progress.schemaVersion == 7)
+        #expect(progress.schemaVersion == 8)
         #expect(progress.trainingTokens == 321)
         #expect(progress.lifetimeStats == LifetimeStats())
         #expect(progress.dailyReward == DailyRewardState())

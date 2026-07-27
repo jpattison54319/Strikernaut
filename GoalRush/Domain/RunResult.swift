@@ -17,6 +17,13 @@ struct RunResult: Equatable, Sendable {
     var newBestWave: Bool
     var newBestScore: Bool
 
+    var world: WorldID {
+        if mode.isEndless {
+            return EndlessRules.world(for: max(1, wave))
+        }
+        return mode.world
+    }
+
     init(
         mode: RunMode,
         didWin: Bool,

@@ -87,9 +87,9 @@ final class GameStore {
             case "onboarding": store.route = .onboarding
             case "trophies": store.route = .trophies
             case "result-endless":
-                store.progress.endlessRecords[.earth] = .init(bestWave: 11, bestScore: 150_000)
+                store.progress.endlessRecord = .init(bestWave: 11, bestScore: 150_000)
                 store.route = .result(.init(
-                    mode: .endless(world: .earth),
+                    mode: .endless,
                     didWin: false,
                     tokensEarned: 286,
                     remainingStamina: 0,
@@ -148,12 +148,8 @@ final class GameStore {
             store.selectedWorld = GameContent.level(level).world
             store.route = .playing(.campaign(level: level))
         }
-        if let endlessIndex = arguments.firstIndex(of: "--endless"),
-           arguments.indices.contains(endlessIndex + 1),
-           let world = WorldID(rawValue: arguments[endlessIndex + 1]),
-           GameContent.isWorldUnlocked(world, progress: store.progress) {
-            store.selectedWorld = world
-            store.route = .playing(.endless(world: world))
+        if arguments.contains("--endless") {
+            store.route = .playing(.endless)
         }
         return store
     }
@@ -189,10 +185,8 @@ final class GameStore {
         return true
     }
 
-    func startEndless(world: WorldID) {
-        guard GameContent.isWorldUnlocked(world, progress: progress) else { return }
-        selectedWorld = world
-        route = .playing(.endless(world: world))
+    func startEndless() {
+        route = .playing(.endless)
     }
 
     func finish(_ result: RunResult, tokensAlreadyCredited: Int = 0) {
@@ -219,11 +213,11 @@ final class GameStore {
                     finalResult.characterEarned = character.id
                 }
             }
-        case .endless(let world):
-            let previous = progress.endlessRecord(for: world)
+        case .endless:
+            let previous = progress.endlessRecord
             finalResult.newBestWave = result.wave > previous.bestWave
             finalResult.newBestScore = result.score > previous.bestScore
-            progress.endlessRecords[world] = EndlessRecord(
+            progress.endlessRecord = EndlessRecord(
                 bestWave: max(previous.bestWave, result.wave),
                 bestScore: max(previous.bestScore, result.score)
             )
@@ -276,8 +270,13 @@ final class GameStore {
     }
 
     func resetProgress() {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = nil
         try? persistence.reset()
         progress = .newPlayer
+        selectedLevel = 1
+        selectedWorld = .earth
+        pendingResetConfirmation = false
         celebrations = []
         route = .onboarding
     }

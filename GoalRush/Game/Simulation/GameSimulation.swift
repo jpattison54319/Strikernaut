@@ -4,7 +4,6 @@ final class GameSimulation {
     private(set) var snapshot: SimulationSnapshot
     private let mode: RunMode
     private let level: LevelDefinition?
-    private let world: WorldID
     private let stats: PlayerStats
     private let character: CharacterDefinition
     private let assistMode: Bool
@@ -16,15 +15,20 @@ final class GameSimulation {
     private var abilities: [AbilityKind: Int] = [:]
     private var finished = false
     private var bossSpawned = false
-    private var campaignBossDefeated = false
+    private var bossDefeated = false
     private var bossPhase = 1
     private var powerUpSpawned = false
-    private var nextPowerUpTime = 0.0
+    private var nextPowerUpDefeat = 0
+    private var bossPowerUpClock = 7.0
+    private var bossSignatureClock = 6.0
+    private var pendingReinforcementPhases: [Int] = []
+    private var reinforcementQuietClock = 0.0
+    private var hadActiveReinforcements = false
+    private var pendingMeteorMarkers = 0
+    private var meteorMarkerClock = 0.0
     private var kickCount = 0
-    static let comboWindow: Double = 3.0
     private static let comboMilestones: Set<Int> = [5, 10, 15, 25, 50, 100]
     private var comboCount = 0
-    private var comboTimer = 0.0
     private var removedTargetIDs = Set<Int>()
     private var removedProjectileIDs = Set<Int>()
     private var hitTargetIDs = Set<Int>()
@@ -33,9 +37,13 @@ final class GameSimulation {
     private var fieldObjectPreviewSpawned = false
     private var shockwaveBurstsRemaining = 0
     private var shockwaveBurstClock = 0.0
-    private var lastWorldEffectActive = false
+    private var worldEffectElapsed = 0.0
+    private var nextLunarEffectTime = 10.0
+    private var pendingLunarDebrisStrikes = 0
+    private var lunarDebrisClock = 0.0
     private var marsDefeatCount = 0
     private var pendingVolatileCorePositions: [Vector2] = []
+    private var world: WorldID { snapshot.world }
 
     convenience init(level: LevelDefinition, progress: PlayerProgress, assistMode: Bool, seed: UInt64) {
         self.init(mode: .campaign(level: level.number), progress: progress, assistMode: assistMode, seed: seed)
@@ -44,28 +52,35 @@ final class GameSimulation {
     init(mode: RunMode, progress: PlayerProgress, assistMode: Bool, seed: UInt64) {
         self.mode = mode
         self.level = mode.campaignLevel.map(GameContent.level)
-        self.world = mode.world
         self.stats = PlayerStats(progress: progress)
         self.character = CharacterCatalog.character(progress.selectedCharacter)
         self.assistMode = assistMode
         self.random = SeededGenerator(seed: seed)
-        let duration = level?.duration ?? EndlessRules.waveDuration
+        let openingWorld = level?.world ?? EndlessRules.world(for: 1)
         let waveCount = level?.waveCount ?? Int.max
-        let waveDuration = level?.waveDuration ?? EndlessRules.waveDuration
+        let openingBossWave = level.map {
+            CampaignBalance.wave(1, for: $0).isBossWave
+        } ?? EndlessRules.isBossWave(1)
+        let openingQuota = level.map {
+            CampaignBalance.wave(1, for: $0).enemyQuota
+        } ?? EndlessRules.enemyQuota(wave: 1)
         self.snapshot = SimulationSnapshot(
+            world: openingWorld,
             playerX: 0,
             stamina: stats.maxStamina,
             maxStamina: stats.maxStamina,
             elapsed: 0,
-            duration: duration,
             tokens: 0,
             targets: [],
             projectiles: [],
             characterAttacks: [],
+            bossHazards: [],
             shieldCharges: stats.startingShields,
             wave: 1,
             waveElapsed: 0,
-            waveDuration: waveDuration,
+            waveDefeats: 0,
+            waveEnemyQuota: openingBossWave ? 1 : openingQuota,
+            isBossWave: openingBossWave,
             score: 0,
             isEndless: mode.isEndless,
             combo: 0,
@@ -78,11 +93,9 @@ final class GameSimulation {
             temporaryAbilityRemaining: 0,
             temporaryAbilityDuration: 0,
             characterAbilityCharge: 0,
-            characterAbilityReady: false,
-            worldEffectActive: false,
-            worldEffectProgress: 0
+            characterAbilityReady: false
         )
-        schedulePowerUp()
+        scheduleWavePowerUp()
 #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
         if let previewIndex = arguments.firstIndex(of: "--status-effect-preview"),
@@ -99,24 +112,31 @@ final class GameSimulation {
            arguments.indices.contains(waveArgumentIndex + 1),
            let requestedWave = Int(arguments[waveArgumentIndex + 1]) {
             snapshot.wave = min(max(requestedWave, 1), level.waveCount)
+            configureWaveObjective()
+        }
+        if mode.isEndless,
+           let waveArgumentIndex = arguments.firstIndex(of: "--endless-wave"),
+           arguments.indices.contains(waveArgumentIndex + 1),
+           let requestedWave = Int(arguments[waveArgumentIndex + 1]) {
+            snapshot.wave = max(1, requestedWave)
+            snapshot.world = EndlessRules.world(for: snapshot.wave)
+            configureWaveObjective()
         }
         if let comboArgumentIndex = arguments.firstIndex(of: "--combo-preview"),
            arguments.indices.contains(comboArgumentIndex + 1),
            let requestedCombo = Int(arguments[comboArgumentIndex + 1]) {
             comboCount = max(0, requestedCombo)
-            comboTimer = 30
             snapshot.combo = comboCount
             snapshot.comboFraction = comboCount > 0 ? 1 : 0
         }
         if level != nil, arguments.contains("--boss-preview") {
-            snapshot.waveElapsed = snapshot.waveDuration * 0.69
             powerUpSpawned = true
         } else if level != nil, arguments.contains("--wave-complete-preview") {
-            snapshot.waveElapsed = snapshot.waveDuration
-            bossSpawned = true
+            snapshot.waveDefeats = snapshot.waveEnemyQuota
             powerUpSpawned = true
         } else if arguments.contains("--power-up-preview") {
-            nextPowerUpTime = 0
+            nextPowerUpDefeat = 0
+            bossPowerUpClock = 0
         }
         if arguments.contains("--enemy-swarm-preview") {
             let enemyPool = level?.enemies ?? [.coneRunner]
@@ -171,8 +191,23 @@ final class GameSimulation {
     func setCampaignWaveForTesting(_ wave: Int, elapsed: Double = 0) {
         guard let level else { return }
         snapshot.wave = min(max(wave, 1), level.waveCount)
+        resetWaveRuntime()
         snapshot.waveElapsed = max(0, elapsed)
-        bossSpawned = false
+    }
+
+    func setEndlessWaveForTesting(_ wave: Int) {
+        guard mode.isEndless else { return }
+        snapshot.wave = max(1, wave)
+        snapshot.world = EndlessRules.world(for: snapshot.wave)
+        resetWaveRuntime()
+    }
+
+    func setWaveDefeatsForTesting(_ defeats: Int) {
+        snapshot.waveDefeats = min(max(defeats, 0), snapshot.waveEnemyQuota)
+    }
+
+    func forceBossSignatureAttackForTesting() {
+        bossSignatureClock = 0
     }
 
     func spawnFriendlyProjectileForTesting(
@@ -354,20 +389,22 @@ final class GameSimulation {
         snapshot.elapsed += delta
         snapshot.waveElapsed += delta
         updateTemporaryAbility(delta: delta)
-        updateWorldEffect(events: &events)
+        updateWorldEffect(delta: delta, events: &events)
         updatePlayer(delta: delta)
         updateCharacterAttackSchedule(delta: delta, events: &events)
-        updateCombo(delta: delta, events: &events)
         updateSpawning(delta: delta)
-        updatePowerUpSpawning()
+        updateBossSupport(delta: delta)
+        updatePowerUpSpawning(delta: delta)
+        updateBossAttackSchedule(delta: delta, events: &events)
+        updateBossHazards(delta: delta, events: &events)
         updateKicking(delta: delta, events: &events)
         updateTargets(delta: delta, events: &events)
-        if finishCampaignAfterBossDefeat(events: &events) { return events }
+        if finishBossWaveIfNeeded(events: &events) { return events }
         updateCharacterAttacks(delta: delta, events: &events)
-        if finishCampaignAfterBossDefeat(events: &events) { return events }
+        if finishBossWaveIfNeeded(events: &events) { return events }
         updateProjectiles(delta: delta, events: &events)
-        if finishCampaignAfterBossDefeat(events: &events) { return events }
-        spawnPendingVolatileCores()
+        if finishBossWaveIfNeeded(events: &events) { return events }
+        spawnPendingVolatileCores(events: &events)
         evaluateWave(events: &events)
         evaluateFinish(events: &events)
         return events
@@ -387,23 +424,46 @@ final class GameSimulation {
         }
     }
 
-    private func updateWorldEffect(events: inout [SimulationEvent]) {
-        switch world {
-        case .earth:
-            snapshot.worldEffectActive = false
-            snapshot.worldEffectProgress = 0
-        case .moon:
-            let cycle = snapshot.elapsed.truncatingRemainder(dividingBy: 16)
-            snapshot.worldEffectActive = cycle >= 10
-            snapshot.worldEffectProgress = cycle < 10 ? cycle / 10 : (cycle - 10) / 6
-            if snapshot.worldEffectActive && !lastWorldEffectActive {
-                events.append(.worldEffectActivated(.lunarCycle, .init(x: snapshot.playerX, y: 0.34)))
+    private func updateWorldEffect(delta: Double, events: inout [SimulationEvent]) {
+        guard world == .moon else { return }
+        worldEffectElapsed += delta
+
+        if pendingLunarDebrisStrikes > 0 {
+            lunarDebrisClock -= delta
+            if lunarDebrisClock <= 0 {
+                pendingLunarDebrisStrikes -= 1
+                appendLunarDebris(events: &events)
             }
-            lastWorldEffectActive = snapshot.worldEffectActive
-        case .mars:
-            snapshot.worldEffectActive = false
-            snapshot.worldEffectProgress = Double(marsDefeatCount % 6) / 6
         }
+
+        if worldEffectElapsed >= nextLunarEffectTime {
+            nextLunarEffectTime += 16
+            appendLunarDebris(events: &events)
+            pendingLunarDebrisStrikes += 1
+            lunarDebrisClock = 3
+        }
+    }
+
+    private func appendLunarDebris(events: inout [SimulationEvent]) {
+        let lanes = [-0.56, 0.0, 0.56]
+        let overlapCounts = lanes.map { lane in
+            snapshot.bossHazards.count { hazard in
+                abs(hazard.position.x - lane) <= hazard.halfWidth + 0.16
+            }
+        }
+        let greatestOverlap = overlapCounts.max() ?? 0
+        let candidates = lanes.indices.filter { overlapCounts[$0] == greatestOverlap }
+        let choice = candidates[Int(random.next() % UInt64(max(1, candidates.count)))]
+        let lane = lanes[choice]
+        appendBossHazard(
+            kind: .lunarDebris,
+            x: lane,
+            halfWidth: 0.18,
+            telegraphDuration: 1.25,
+            activeDuration: 0.35,
+            damage: 16
+        )
+        events.append(.worldEffectActivated(.lunarCycle, .init(x: lane, y: 0.13)))
     }
 
     private func updateSpawning(delta: Double) {
@@ -414,63 +474,255 @@ final class GameSimulation {
             }
             return
         }
-        if mode.isEndless {
-            updateEndlessSpawning(delta: delta)
+        if snapshot.isBossWave {
+            spawnBossIfNeeded()
+        } else if mode.isEndless {
+            updateEndlessQuotaSpawning(delta: delta)
         } else {
-            updateCampaignSpawning(delta: delta)
+            updateCampaignQuotaSpawning(delta: delta)
         }
     }
 
-    private func updateCampaignSpawning(delta: Double) {
+    private func updateCampaignQuotaSpawning(delta: Double) {
         guard let level else { return }
         let wave = CampaignBalance.wave(snapshot.wave, for: level)
-        let bossStart = wave.duration * 0.68
-        if snapshot.waveElapsed >= bossStart,
-           !bossSpawned,
-           let boss = wave.boss,
-           let bossTier = wave.bossTier {
-            bossSpawned = true
-            spawnEnemy(boss, x: 0, y: 0.82, tier: bossTier)
+        let activeQuotaEnemies = snapshot.targets.count {
+            if case .enemy = $0.kind { $0.waveRole == .quota } else { false }
         }
-        guard snapshot.waveElapsed < wave.duration else { return }
+        guard snapshot.waveDefeats + activeQuotaEnemies < snapshot.waveEnemyQuota,
+              activeQuotaEnemies < CampaignBalance.maximumActiveEnemies(
+                wave: snapshot.wave,
+                world: world
+              ) else { return }
         spawnClock += delta
-        let supportPressure = bossSpawned ? 1.42 : 1
-        guard spawnClock >= wave.spawnInterval * supportPressure else { return }
-        spawnClock = 0
+        guard spawnClock >= wave.spawnInterval else { return }
+        spawnClock -= wave.spawnInterval
         let enemy = level.enemies[Int(random.next() % UInt64(level.enemies.count))]
-        spawnEnemy(enemy, x: randomSpawnX(near: 1.04), y: 1.04)
+        spawnEnemy(enemy, x: randomSpawnX(near: 1.04), y: 1.04, role: .quota)
         if random.unit() < 0.12, let object = level.objects.randomElement(using: &random) {
             spawnObject(object, x: randomSpawnX(near: 1.10), y: 1.10)
         }
     }
 
-    private func updateEndlessSpawning(delta: Double) {
-        guard snapshot.waveElapsed < snapshot.waveDuration else { return }
-        if snapshot.wave.isMultiple(of: 5), !bossSpawned, snapshot.waveElapsed >= 1 {
-            bossSpawned = true
-            spawnEnemy(GameContent.world(world).boss, x: 0, y: 0.84, tier: .megaBoss)
+    private func updateEndlessQuotaSpawning(delta: Double) {
+        let activeQuotaEnemies = snapshot.targets.count {
+            if case .enemy = $0.kind { $0.waveRole == .quota } else { false }
         }
-
+        let maximumActive = EndlessRules.maximumActiveEnemies(wave: snapshot.wave)
+        guard snapshot.waveDefeats + activeQuotaEnemies < snapshot.waveEnemyQuota,
+              activeQuotaEnemies < maximumActive else { return }
         spawnClock += delta
-        guard spawnClock >= EndlessRules.spawnInterval(wave: snapshot.wave) else { return }
-        spawnClock = 0
+        let interval = EndlessRules.spawnInterval(wave: snapshot.wave)
+        guard spawnClock >= interval else { return }
+        spawnClock -= interval
         let pool = endlessEnemyPool
-        for _ in 0..<EndlessRules.packSize(wave: snapshot.wave) {
+        let remainingSlots = maximumActive - activeQuotaEnemies
+        let remainingQuota = snapshot.waveEnemyQuota - snapshot.waveDefeats - activeQuotaEnemies
+        let count = min(
+            EndlessRules.packSize(wave: snapshot.wave),
+            min(remainingSlots, remainingQuota)
+        )
+        for _ in 0..<count {
             let enemy = pool[Int(random.next() % UInt64(pool.count))]
             let y = 1.04 + random.unit() * 0.10
-            spawnEnemy(enemy, x: randomSpawnX(near: y), y: y)
+            spawnEnemy(enemy, x: randomSpawnX(near: y), y: y, role: .quota)
         }
         if random.unit() < 0.10, let object = endlessObjectPool.randomElement(using: &random) {
             spawnObject(object, x: randomSpawnX(near: 1.12), y: 1.12)
         }
     }
 
-    private func updatePowerUpSpawning() {
-        guard !powerUpSpawned, snapshot.waveElapsed >= nextPowerUpTime else { return }
+    private func spawnBossIfNeeded() {
+        guard !bossSpawned else { return }
+        if let level {
+            let wave = CampaignBalance.wave(snapshot.wave, for: level)
+            guard let boss = wave.boss, let tier = wave.bossTier else { return }
+            bossSpawned = true
+            spawnEnemy(
+                boss,
+                x: 0,
+                y: CampaignBalance.bossArenaY,
+                tier: tier,
+                role: .boss
+            )
+        } else {
+            bossSpawned = true
+            spawnEnemy(
+                GameContent.world(world).boss,
+                x: 0,
+                y: CampaignBalance.bossArenaY,
+                tier: .megaBoss,
+                role: .boss
+            )
+        }
+    }
+
+    private func updatePowerUpSpawning(delta: Double) {
+        if snapshot.isBossWave {
+            bossPowerUpClock -= delta
+            guard bossPowerUpClock <= 0,
+                  !snapshot.targets.contains(where: {
+                    if case .powerUp = $0.kind { true } else { false }
+                  }) else { return }
+            bossPowerUpClock = 16
+            spawnRandomPowerUp()
+            return
+        }
+        guard !powerUpSpawned, snapshot.waveDefeats >= nextPowerUpDefeat else { return }
         powerUpSpawned = true
+        spawnRandomPowerUp()
+    }
+
+    private func spawnRandomPowerUp() {
         let powers = GameContent.world(world).temporaryPowers
         let power = powers[Int(random.next() % UInt64(powers.count))]
         spawnPowerUp(power, x: randomSpawnX(near: 1.08), y: 1.08)
+    }
+
+    private func updateBossSupport(delta: Double) {
+        guard snapshot.isBossWave else { return }
+        let hasActiveReinforcements = snapshot.targets.contains {
+            if case .enemy = $0.kind { $0.waveRole == .reinforcement } else { false }
+        }
+        if hadActiveReinforcements && !hasActiveReinforcements {
+            reinforcementQuietClock = max(reinforcementQuietClock, 3)
+        }
+        hadActiveReinforcements = hasActiveReinforcements
+        if reinforcementQuietClock > 0 {
+            reinforcementQuietClock = max(0, reinforcementQuietClock - delta)
+        }
+        guard !hasActiveReinforcements,
+              reinforcementQuietClock == 0,
+              !pendingReinforcementPhases.isEmpty else { return }
+        let phase = pendingReinforcementPhases.removeFirst()
+        let pulse = reinforcements(for: phase)
+        for (index, kind) in pulse.enumerated() {
+            let offset = Double(index) - Double(max(0, pulse.count - 1)) / 2
+            spawnEnemy(
+                kind,
+                x: min(0.72, max(-0.72, offset * 0.34)),
+                y: 0.88 + Double(index % 2) * 0.06,
+                role: .reinforcement
+            )
+        }
+        hadActiveReinforcements = true
+    }
+
+    private func updateBossAttackSchedule(delta: Double, events: inout [SimulationEvent]) {
+        guard snapshot.isBossWave,
+              let boss = snapshot.targets.first(where: { $0.waveRole == .boss }),
+              boss.bossTier == .megaBoss else { return }
+
+        if pendingMeteorMarkers > 0 {
+            meteorMarkerClock -= delta
+            if meteorMarkerClock <= 0 {
+                pendingMeteorMarkers -= 1
+                meteorMarkerClock += 0.45
+                appendBossHazard(
+                    kind: .meteorStrike,
+                    x: snapshot.playerX,
+                    halfWidth: 0.15,
+                    telegraphDuration: 1.4,
+                    activeDuration: 0.30,
+                    damage: 18
+                )
+            }
+        }
+
+        guard boss.freezeRemaining <= 0, boss.stunRemaining <= 0 else { return }
+        bossSignatureClock -= delta
+        guard bossSignatureClock <= 0 else { return }
+
+        switch world {
+        case .earth:
+            appendBossHazard(
+                kind: .orbitalLaser,
+                x: snapshot.playerX,
+                halfWidth: 0.14,
+                telegraphDuration: 1.75,
+                activeDuration: 1.25,
+                damage: 24
+            )
+            events.append(.bossAttackTelegraphed(.orbitalLaser))
+            bossSignatureClock = 10
+        case .moon:
+            let lanes = [-0.56, 0.0, 0.56]
+            let safeIndex = Int(random.next() % UInt64(lanes.count))
+            for index in lanes.indices where index != safeIndex {
+                appendBossHazard(
+                    kind: .eclipseLane,
+                    x: lanes[index],
+                    halfWidth: 0.23,
+                    telegraphDuration: 1.6,
+                    activeDuration: 1.2,
+                    damage: 22
+                )
+            }
+            events.append(.bossAttackTelegraphed(.eclipseLane))
+            bossSignatureClock = 11
+        case .mars:
+            appendBossHazard(
+                kind: .meteorStrike,
+                x: snapshot.playerX,
+                halfWidth: 0.15,
+                telegraphDuration: 1.4,
+                activeDuration: 0.30,
+                damage: 18
+            )
+            pendingMeteorMarkers = 2
+            meteorMarkerClock = 0.45
+            events.append(.bossAttackTelegraphed(.meteorStrike))
+            bossSignatureClock = 10
+        }
+    }
+
+    private func appendBossHazard(
+        kind: BossAttackKind,
+        x: Double,
+        halfWidth: Double,
+        telegraphDuration: Double,
+        activeDuration: Double,
+        damage: Double
+    ) {
+        snapshot.bossHazards.append(BossHazardState(
+            id: identifier(),
+            kind: kind,
+            position: .init(x: min(0.82, max(-0.82, x)), y: 0.13),
+            halfWidth: halfWidth,
+            telegraphDuration: telegraphDuration,
+            telegraphRemaining: telegraphDuration,
+            activeDuration: activeDuration,
+            activeRemaining: activeDuration,
+            damage: damage
+        ))
+    }
+
+    private func updateBossHazards(delta: Double, events: inout [SimulationEvent]) {
+        guard !snapshot.bossHazards.isEmpty else { return }
+        for index in snapshot.bossHazards.indices {
+            var hazard = snapshot.bossHazards[index]
+            if hazard.telegraphRemaining > 0 {
+                let previous = hazard.telegraphRemaining
+                hazard.telegraphRemaining = max(0, previous - delta)
+                if previous > 0, hazard.telegraphRemaining == 0 {
+                    if hazard.kind == .lunarDebris {
+                        events.append(.worldEffectImpact(.lunarCycle, hazard.position))
+                    } else {
+                        events.append(.bossAttackActivated(hazard.kind, hazard.position))
+                    }
+                }
+            } else {
+                hazard.activeRemaining = max(0, hazard.activeRemaining - delta)
+            }
+            if hazard.isActive,
+               !hazard.hasDamagedPlayer,
+               abs(snapshot.playerX - hazard.position.x) <= hazard.halfWidth {
+                hazard.hasDamagedPlayer = true
+                applyDamage(hazard.damage * activeDamageMultiplier, events: &events)
+            }
+            snapshot.bossHazards[index] = hazard
+        }
+        snapshot.bossHazards.removeAll(where: { $0.isFinished })
     }
 
     private func updateKicking(delta: Double, events: inout [SimulationEvent]) {
@@ -557,9 +809,7 @@ final class GameSimulation {
 
     private func updateTargets(delta: Double, events: inout [SimulationEvent]) {
         removedTargetIDs.removeAll(keepingCapacity: true)
-        var bossReinforcements: [EnemyKind] = []
         let slowFactor = 0.35 + 0.65 * pow(0.90, Double(abilities[.gravityBoots, default: 0]))
-        let lunarSpeedFactor = snapshot.worldEffectActive ? 0.65 : 1
         for index in snapshot.targets.indices {
             var target = snapshot.targets[index]
             target.phase += delta
@@ -595,12 +845,15 @@ final class GameSimulation {
                     target.position.x = sin(target.phase * movementRate * direction) * amplitude * freezeFactor
                     let healthRatio = target.hitPoints / target.maximumHitPoints
                     let newPhase = healthRatio > 0.66 ? 1 : (healthRatio > 0.33 ? 2 : 3)
-                    if newPhase != bossPhase {
+                    if newPhase > bossPhase {
+                        let crossedPhases = (bossPhase + 1)...newPhase
                         bossPhase = newPhase
-                        events.append(.bossPhase(newPhase))
-                        bossReinforcements = reinforcements(for: newPhase)
-                        if world == .mars {
-                            pendingVolatileCorePositions.append(target.position)
+                        for crossedPhase in crossedPhases {
+                            events.append(.bossPhase(crossedPhase))
+                            pendingReinforcementPhases.append(crossedPhase)
+                            if world == .mars {
+                                pendingVolatileCorePositions.append(target.position)
+                            }
                         }
                     }
                     let attackInterval = max(0.90, 2.3 - Double(bossPhase) * 0.3)
@@ -617,7 +870,7 @@ final class GameSimulation {
                         )
                     }
                 } else {
-                    target.position.y -= enemySpeed(kind) * activeSpeedMultiplier * slowFactor * lunarSpeedFactor * freezeFactor * direction * delta
+                    target.position.y -= enemySpeed(kind) * activeSpeedMultiplier * slowFactor * freezeFactor * direction * delta
                     if kind == .tackleBot || kind == .craterCrawler || kind == .lunarHopper {
                         target.position.x += sin(target.phase * 5.2) * delta * 0.23 * direction * freezeFactor
                     }
@@ -643,27 +896,26 @@ final class GameSimulation {
                     target.position.y = 1.18
                 }
             case .fieldObject:
-                target.position.y -= 0.11 * activeSpeedMultiplier * slowFactor * lunarSpeedFactor * delta
+                target.position.y -= 0.11 * activeSpeedMultiplier * slowFactor * delta
                 if target.position.y <= 0.12 { removedTargetIDs.insert(target.id) }
             case .powerUp:
-                target.position.y -= 0.26 * lunarSpeedFactor * delta
+                target.position.y -= 0.26 * delta
                 target.position.x += sin(target.phase * 9.5) * 2.2 * delta
                 target.position.x = min(0.82, max(-0.82, target.position.x))
                 if target.position.y <= 0.12 { removedTargetIDs.insert(target.id) }
             case .volatileCore:
                 target.position.y -= 0.10 * delta
                 target.position.x += sin(target.phase * 6.5) * 0.08 * delta
-                if target.phase >= 3 || target.position.y <= 0.12 {
+                if target.phase >= 2.75 || target.position.y <= 0.12 {
                     removedTargetIDs.insert(target.id)
+                    events.append(.volatileCoreDetonated(target.position))
+                    applyDamage(18 * activeDamageMultiplier, events: &events)
                 }
             }
             snapshot.targets[index] = target
         }
         if !removedTargetIDs.isEmpty {
             snapshot.targets.removeAll { removedTargetIDs.contains($0.id) }
-        }
-        for (index, kind) in bossReinforcements.enumerated() {
-            spawnEnemy(kind, x: index.isMultiple(of: 2) ? -0.58 : 0.58, y: 0.88)
         }
     }
 
@@ -789,18 +1041,7 @@ final class GameSimulation {
                 }
             }
             projectile.position.x += projectile.velocity.x * delta
-            let lunarProjectileFactor = projectile.hostile && snapshot.worldEffectActive ? 0.65 : 1
-            projectile.position.y += projectile.velocity.y * delta * lunarProjectileFactor
-            if !projectile.hostile,
-               projectile.characterProjectile == nil,
-               snapshot.worldEffectActive,
-               projectile.lunarRailBouncesRemaining > 0,
-               abs(projectile.position.x) >= 0.90 {
-                projectile.position.x = min(0.90, max(-0.90, projectile.position.x))
-                projectile.velocity.x = abs(projectile.velocity.x) * (projectile.position.x < 0 ? 1 : -1)
-                projectile.lunarRailBouncesRemaining -= 1
-                events.append(.characterProjectileRicochet(projectile.position))
-            }
+            projectile.position.y += projectile.velocity.y * delta
             if projectile.characterProjectile == .pinballBlitz {
                 projectile.remainingLifetime -= delta
                 let lateralLimit = 0.88
@@ -906,14 +1147,7 @@ final class GameSimulation {
         if case .volatileCore = snapshot.targets[targetIndex].kind {
             let position = snapshot.targets[targetIndex].position
             hitTargetIDs.insert(snapshot.targets[targetIndex].id)
-            applyExplosion(
-                centeredAt: position,
-                excluding: snapshot.targets[targetIndex].id,
-                damage: stats.ballDamage * 2.4,
-                awardsAbilityCharge: projectile.characterProjectile == nil,
-                events: &events
-            )
-            events.append(.volatileCoreBurst(position))
+            events.append(.volatileCoreNeutralized(position))
             return
         }
 
@@ -986,7 +1220,10 @@ final class GameSimulation {
         hitTargetIDs.insert(target.id)
         awardReward(for: target, events: &events)
         if case .powerUp = target.kind { return }
-        if case .volatileCore = target.kind { return }
+        if case .volatileCore = target.kind {
+            events.append(.volatileCoreNeutralized(target.position))
+            return
+        }
         registerDefeat(target, awardsAbilityCharge: awardsAbilityCharge, events: &events)
     }
 
@@ -1008,9 +1245,16 @@ final class GameSimulation {
     }
 
     private func evaluateWave(events: inout [SimulationEvent]) {
-        guard snapshot.waveElapsed >= snapshot.waveDuration,
-              !snapshot.targets.contains(where: isWaveBlockingTarget) else { return }
+        guard !snapshot.isBossWave,
+              snapshot.waveDefeats >= snapshot.waveEnemyQuota else { return }
+        completeWave(events: &events)
+    }
+
+    private func completeWave(events: inout [SimulationEvent]) {
         let completedWave = snapshot.wave
+        let endlessWorldTransition = mode.isEndless
+            ? EndlessRules.worldTransition(after: completedWave)
+            : nil
         if mode.isEndless {
             snapshot.score += EndlessRules.waveClearScore(wave: completedWave)
             let tokenBonus = max(4, completedWave * 2)
@@ -1029,6 +1273,11 @@ final class GameSimulation {
 
         if let level, completedWave >= level.waveCount {
             finished = true
+            snapshot.targets.removeAll()
+            snapshot.projectiles.removeAll()
+            snapshot.characterAttacks.removeAll()
+            snapshot.bossHazards.removeAll()
+            pendingVolatileCorePositions.removeAll(keepingCapacity: true)
             events.append(.waveCompleted(completedWave))
             events.append(.finished(true))
             return
@@ -1036,18 +1285,26 @@ final class GameSimulation {
 
         snapshot.targets.removeAll()
         snapshot.wave += 1
-        snapshot.waveElapsed = 0
+        if mode.isEndless {
+            snapshot.world = EndlessRules.world(for: snapshot.wave)
+        }
         snapshot.projectiles.removeAll()
         snapshot.characterAttacks.removeAll()
-        shockwaveBurstsRemaining = 0
-        shockwaveBurstClock = 0
-        spawnClock = 0
-        bossSpawned = false
-        bossPhase = 1
-        powerUpSpawned = false
-        schedulePowerUp()
+        snapshot.bossHazards.removeAll()
+        pendingVolatileCorePositions.removeAll(keepingCapacity: true)
+        if endlessWorldTransition != nil {
+            resetWorldRuntime()
+        }
+        resetWaveRuntime()
         events.append(.waveCompleted(completedWave))
-        events.append(.checkpoint(completedWave))
+        if let endlessWorldTransition {
+            events.append(.worldTransitioned(
+                from: endlessWorldTransition.from,
+                to: endlessWorldTransition.to
+            ))
+        } else {
+            events.append(.checkpoint(completedWave))
+        }
     }
 
     private func evaluateFinish(events: inout [SimulationEvent]) {
@@ -1059,15 +1316,9 @@ final class GameSimulation {
         guard level != nil else { return }
     }
 
-    private func finishCampaignAfterBossDefeat(events: inout [SimulationEvent]) -> Bool {
-        guard campaignBossDefeated, level != nil else { return false }
-        finished = true
-        snapshot.targets.removeAll()
-        snapshot.projectiles.removeAll()
-        snapshot.characterAttacks.removeAll()
-        pendingVolatileCorePositions.removeAll(keepingCapacity: true)
-        events.append(.waveCompleted(snapshot.wave))
-        events.append(.finished(true))
+    private func finishBossWaveIfNeeded(events: inout [SimulationEvent]) -> Bool {
+        guard snapshot.isBossWave, bossDefeated else { return false }
+        completeWave(events: &events)
         return true
     }
 
@@ -1075,10 +1326,10 @@ final class GameSimulation {
         if snapshot.shieldCharges > 0 {
             snapshot.shieldCharges -= 1
         } else {
+            let previousStamina = snapshot.stamina
             snapshot.stamina = max(0, snapshot.stamina - amount)
-            if comboCount > 0 {
+            if snapshot.stamina < previousStamina, comboCount > 0 {
                 comboCount = 0
-                comboTimer = 0
                 snapshot.combo = 0
                 snapshot.comboFraction = 0
                 events.append(.comboChanged(0))
@@ -1087,25 +1338,12 @@ final class GameSimulation {
         events.append(.damage)
     }
 
-    private func updateCombo(delta: Double, events: inout [SimulationEvent]) {
-        guard comboCount > 0 else { return }
-        comboTimer -= delta
-        snapshot.comboFraction = max(0, comboTimer / Self.comboWindow)
-        if comboTimer <= 0 {
-            comboCount = 0
-            snapshot.combo = 0
-            snapshot.comboFraction = 0
-            events.append(.comboChanged(0))
-        }
-    }
-
     private func registerDefeat(
         _ target: TargetState,
         awardsAbilityCharge: Bool = true,
         events: inout [SimulationEvent]
     ) {
         comboCount += 1
-        comboTimer = Self.comboWindow
         snapshot.combo = comboCount
         snapshot.comboFraction = 1
         snapshot.bestCombo = max(snapshot.bestCombo, comboCount)
@@ -1114,18 +1352,19 @@ final class GameSimulation {
             snapshot.characterAbilityCharge = min(100, snapshot.characterAbilityCharge + 20)
             snapshot.characterAbilityReady = snapshot.characterAbilityCharge >= 100
         }
-        if world == .mars,
-           case .enemy = target.kind,
-           target.bossTier == .standard {
-            marsDefeatCount += 1
-            if marsDefeatCount.isMultiple(of: 6) {
-                pendingVolatileCorePositions.append(target.position)
+        if case .enemy = target.kind {
+            if target.waveRole == .quota, target.bossTier == .standard {
+                snapshot.waveDefeats = min(snapshot.waveEnemyQuota, snapshot.waveDefeats + 1)
             }
-        }
-        if case .enemy = target.kind, target.bossTier != .standard {
-            snapshot.bossesDefeated += 1
-            if let level, snapshot.wave == level.waveCount {
-                campaignBossDefeated = true
+            if world == .mars, target.bossTier == .standard {
+                marsDefeatCount += 1
+                if marsDefeatCount.isMultiple(of: 6) {
+                    pendingVolatileCorePositions.append(target.position)
+                }
+            }
+            if target.waveRole == .boss || target.bossTier != .standard {
+                snapshot.bossesDefeated += 1
+                bossDefeated = true
             }
         }
         events.append(.comboChanged(comboCount))
@@ -1136,7 +1375,8 @@ final class GameSimulation {
         _ kind: EnemyKind,
         x: Double,
         y: Double,
-        tier: CampaignBossTier = .standard
+        tier: CampaignBossTier = .standard,
+        role: WaveEnemyRole = .quota
     ) {
         var multiplier: Double
         if mode.isEndless {
@@ -1147,7 +1387,11 @@ final class GameSimulation {
                 ? 1 + Double(level.number - 1) * 0.025
                 : CampaignBalance.wave(snapshot.wave, for: level).healthMultiplier
         }
-        let tierMultiplier = CampaignBalance.bossHealthMultiplier(tier: tier, wave: snapshot.wave)
+        let tierMultiplier = CampaignBalance.bossHealthMultiplier(
+            tier: tier,
+            wave: snapshot.wave,
+            world: world
+        )
         let hitPoints = enemyHealth(kind) * multiplier * tierMultiplier
         var target = TargetState(
             id: identifier(),
@@ -1156,7 +1400,8 @@ final class GameSimulation {
             hitPoints: hitPoints,
             maximumHitPoints: hitPoints,
             phase: 0,
-            bossTier: tier
+            bossTier: tier,
+            waveRole: role
         )
         applyStatusEffectPreview(to: &target)
         snapshot.targets.append(target)
@@ -1209,7 +1454,7 @@ final class GameSimulation {
         ))
     }
 
-    private func spawnPendingVolatileCores() {
+    private func spawnPendingVolatileCores(events: inout [SimulationEvent]) {
         guard !pendingVolatileCorePositions.isEmpty else { return }
         for position in pendingVolatileCorePositions {
             snapshot.targets.append(TargetState(
@@ -1220,6 +1465,7 @@ final class GameSimulation {
                 maximumHitPoints: 1,
                 phase: 0
             ))
+            events.append(.worldEffectActivated(.volatileCores, position))
         }
         pendingVolatileCorePositions.removeAll(keepingCapacity: true)
     }
@@ -1361,7 +1607,6 @@ final class GameSimulation {
             isCritical: critical,
             temporaryAbility: temporaryAbility,
             canSplit: canSplit,
-            lunarRailBouncesRemaining: world == .moon ? 1 : 0,
             orbitChainsRemaining: temporaryAbility == .orbitShot ? 3 : 0
         ))
     }
@@ -1476,7 +1721,11 @@ final class GameSimulation {
         case .moon: [.regolithRunner, .lunarHopper, .orbitDrone, .eclipseKeeper, .gravityStriker]
         case .mars: [.dustSprite, .roverRaider, .craterCrawler, .saucerKeeper, .plasmaStriker]
         }
-        let count = min(ordered.count, 1 + max(0, snapshot.wave - 1) / 2)
+        let completedCircuits = EndlessRules.chapterIndex(for: snapshot.wave)
+            / max(1, EndlessRules.worldSequence.count)
+        let count = completedCircuits > 0
+            ? ordered.count
+            : min(ordered.count, 1 + (EndlessRules.waveInWorld(for: snapshot.wave) - 1) / 2)
         return Array(ordered.prefix(count))
     }
 
@@ -1490,27 +1739,72 @@ final class GameSimulation {
 
     private func reinforcements(for phase: Int) -> [EnemyKind] {
         if let level {
-            let count = phase == 2 ? 2 : 3
+            let count = CampaignBalance.reinforcementPulseSize(levelNumber: level.number)
             return (0..<count).map { _ in
                 level.enemies[Int(random.next() % UInt64(level.enemies.count))]
             }
         }
-        return switch world {
-        case .earth: phase == 2 ? [.coneRunner, .coneRunner] : [.tackleBot, .keeperDrone]
-        case .moon: phase == 2 ? [.regolithRunner, .regolithRunner] : [.lunarHopper, .eclipseKeeper]
-        case .mars: phase == 2 ? [.dustSprite, .dustSprite] : [.craterCrawler, .saucerKeeper]
+        let count = min(4, 2 + max(0, snapshot.wave - 1) / 10)
+        let ordered: [EnemyKind] = switch world {
+        case .earth: phase == 2
+            ? [.coneRunner, .dummyDefender, .tackleBot, .keeperDrone]
+            : [.tackleBot, .keeperDrone, .ballLauncher, .dummyDefender]
+        case .moon: phase == 2
+            ? [.regolithRunner, .lunarHopper, .orbitDrone, .eclipseKeeper]
+            : [.lunarHopper, .eclipseKeeper, .gravityStriker, .orbitDrone]
+        case .mars: phase == 2
+            ? [.dustSprite, .roverRaider, .craterCrawler, .saucerKeeper]
+            : [.craterCrawler, .saucerKeeper, .plasmaStriker, .roverRaider]
         }
+        return Array(ordered.prefix(count))
     }
 
-    private func schedulePowerUp() {
-        let earliest = snapshot.waveDuration * 0.25
-        let window = snapshot.waveDuration * 0.28
-        nextPowerUpTime = earliest + random.unit() * window
+    private func configureWaveObjective() {
+        if let level {
+            let wave = CampaignBalance.wave(snapshot.wave, for: level)
+            snapshot.isBossWave = wave.isBossWave
+            snapshot.waveEnemyQuota = wave.enemyQuota
+        } else {
+            snapshot.isBossWave = EndlessRules.isBossWave(snapshot.wave)
+            snapshot.waveEnemyQuota = snapshot.isBossWave
+                ? 1
+                : EndlessRules.enemyQuota(wave: snapshot.wave)
+        }
+        snapshot.waveDefeats = 0
     }
 
-    private func isWaveBlockingTarget(_ target: TargetState) -> Bool {
-        if case .enemy = target.kind { return true }
-        return false
+    private func resetWaveRuntime() {
+        snapshot.waveElapsed = 0
+        snapshot.bossHazards.removeAll()
+        configureWaveObjective()
+        spawnClock = 0
+        bossSpawned = false
+        bossDefeated = false
+        bossPhase = 1
+        bossPowerUpClock = 7
+        bossSignatureClock = 6
+        pendingReinforcementPhases.removeAll(keepingCapacity: true)
+        reinforcementQuietClock = 0
+        hadActiveReinforcements = false
+        pendingMeteorMarkers = 0
+        meteorMarkerClock = 0
+        shockwaveBurstsRemaining = 0
+        shockwaveBurstClock = 0
+        powerUpSpawned = false
+        scheduleWavePowerUp()
+    }
+
+    private func resetWorldRuntime() {
+        worldEffectElapsed = 0
+        nextLunarEffectTime = 10
+        pendingLunarDebrisStrikes = 0
+        lunarDebrisClock = 0
+        marsDefeatCount = 0
+        pendingVolatileCorePositions.removeAll(keepingCapacity: true)
+    }
+
+    private func scheduleWavePowerUp() {
+        nextPowerUpDefeat = max(1, snapshot.waveEnemyQuota / 2)
     }
 
     private func damageFlavor(for ability: TemporaryBallAbility?) -> DamageFlavor {

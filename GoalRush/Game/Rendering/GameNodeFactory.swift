@@ -21,6 +21,13 @@ enum GameNodeFactory {
             return (name, texture)
         })
     }()
+    private static let bossFactionTextures: [WorldID: SKTexture] = {
+        Dictionary(uniqueKeysWithValues: WorldID.allCases.map { world in
+            let texture = SKTexture(imageNamed: world.factionSigilAsset(isBoss: true))
+            texture.filteringMode = .linear
+            return (world, texture)
+        })
+    }()
     static let renderedEnemyAssetNames: [EnemyKind: String] = [
         .coneRunner: "EarthScoutRunner",
         .dummyDefender: "EarthBlockerDefender",
@@ -334,20 +341,37 @@ enum GameNodeFactory {
         )
     }
 
-    static func target(_ target: TargetState) -> SKNode {
+    static func target(_ target: TargetState, world: WorldID? = nil) -> SKNode {
+        let resolvedWorld = world ?? inferredWorld(for: target.kind)
         if let prototype = targetPrototypes[target.kind],
            let node = prototype.copy() as? TargetRenderNode {
             node.cacheRenderNodes()
+            configureTarget(node, target: target, world: resolvedWorld)
             return node
         }
 
         let prototype = makeTarget(kind: target.kind)
         targetPrototypes[target.kind] = prototype
         guard let node = prototype.copy() as? TargetRenderNode else {
-            return makeTarget(kind: target.kind)
+            configureTarget(prototype, target: target, world: resolvedWorld)
+            return prototype
         }
         node.cacheRenderNodes()
+        configureTarget(node, target: target, world: resolvedWorld)
         return node
+    }
+
+    static func configureTarget(_ node: SKNode, target: TargetState, world: WorldID) {
+        guard let renderNode = node as? TargetRenderNode else { return }
+        let isBoss = target.bossTier != .standard
+        renderNode.configureHealthPresentation(
+            isBoss: isBoss,
+            bossIconTexture: isBoss ? bossFactionTextures[world] : nil
+        )
+        updateHealth(
+            on: renderNode,
+            ratio: target.hitPoints / max(1, target.maximumHitPoints)
+        )
     }
 
     /// Builds each shape hierarchy once. Copies retain SpriteKit's immutable
@@ -384,6 +408,50 @@ enum GameNodeFactory {
         fill.fillColor = color(0.16, 0.92, 0.42)
         fill.strokeColor = .clear
         health.addChild(fill)
+
+        let bossHealth = SKNode()
+        bossHealth.name = "boss-health"
+        bossHealth.position.y = healthBarHeight(for: kind)
+        bossHealth.zPosition = 1_200
+        bossHealth.isHidden = true
+
+        let iconBackdrop = SKShapeNode(circleOfRadius: 11)
+        iconBackdrop.name = "boss-health-icon-backdrop"
+        iconBackdrop.position.x = -40
+        iconBackdrop.fillColor = color(0.08, 0.01, 0.02).withAlphaComponent(0.96)
+        iconBackdrop.strokeColor = color(1, 0.12, 0.08)
+        iconBackdrop.lineWidth = 1.6
+        bossHealth.addChild(iconBackdrop)
+
+        let bossIcon = SKSpriteNode()
+        bossIcon.name = "boss-health-icon"
+        bossIcon.position.x = -40
+        bossIcon.size = CGSize(width: 18, height: 18)
+        bossIcon.zPosition = 1
+        bossHealth.addChild(bossIcon)
+
+        let bossTrack = SKShapeNode(
+            rectOf: CGSize(width: 66, height: 8),
+            cornerRadius: 4
+        )
+        bossTrack.name = "boss-health-track"
+        bossTrack.position.x = 5
+        bossTrack.fillColor = color(0.08, 0.01, 0.02).withAlphaComponent(0.94)
+        bossTrack.strokeColor = color(0.56, 0.04, 0.04)
+        bossTrack.lineWidth = 1
+        bossHealth.addChild(bossTrack)
+
+        let bossFill = SKShapeNode(
+            rectOf: CGSize(width: 62, height: 4),
+            cornerRadius: 2
+        )
+        bossFill.name = "boss-health-fill"
+        bossFill.fillColor = color(1, 0.10, 0.07)
+        bossFill.strokeColor = .clear
+        bossFill.glowWidth = 1.5
+        bossTrack.addChild(bossFill)
+        root.addChild(bossHealth)
+
         installStatusEffects(on: root, kind: kind)
         root.cacheRenderNodes()
         return root
@@ -546,11 +614,23 @@ enum GameNodeFactory {
     }
 
     static func updateHealth(on node: SKNode, ratio: Double) {
-        guard let fill = (node as? TargetRenderNode)?.healthFill else { return }
-        fill.xScale = max(0.02, ratio)
-        fill.position.x = CGFloat(-23 * (1 - ratio))
+        guard let renderNode = node as? TargetRenderNode,
+              let fill = renderNode.healthFill else { return }
+        let clampedRatio = min(1, max(0, ratio))
+        fill.xScale = max(0.02, clampedRatio)
+        if renderNode.showsBossHealth {
+            fill.position.x = CGFloat(-31 * (1 - clampedRatio))
+        } else {
+            fill.position.x = CGFloat(-23 * (1 - clampedRatio))
+        }
         if let shape = fill as? SKShapeNode {
-            shape.fillColor = ratio > 0.5 ? color(0.16, 0.92, 0.42) : (ratio > 0.25 ? color(1, 0.72, 0.10) : color(1, 0.22, 0.08))
+            shape.fillColor = renderNode.showsBossHealth
+                ? color(1, 0.10, 0.07)
+                : (clampedRatio > 0.5
+                    ? color(0.16, 0.92, 0.42)
+                    : (clampedRatio > 0.25
+                        ? color(1, 0.72, 0.10)
+                        : color(1, 0.22, 0.08)))
         }
     }
 
@@ -1077,6 +1157,13 @@ enum GameNodeFactory {
         }
     }
 
+    private static func inferredWorld(for kind: TargetState.Kind) -> WorldID {
+        guard case .enemy(let enemy) = kind else { return .earth }
+        if enemy.isLunar { return .moon }
+        if enemy.isMartian { return .mars }
+        return .earth
+    }
+
     @discardableResult
     private static func robot(_ root: SKNode, body: SKColor, head: SKColor, wide: Bool) -> SKNode {
         let rig = motionBody(on: root)
@@ -1443,6 +1530,15 @@ private extension EnemyKind {
     var isLunar: Bool {
         switch self {
         case .regolithRunner, .lunarHopper, .orbitDrone, .eclipseKeeper, .gravityStriker, .lunarWarden:
+            true
+        default:
+            false
+        }
+    }
+
+    var isMartian: Bool {
+        switch self {
+        case .dustSprite, .roverRaider, .craterCrawler, .saucerKeeper, .plasmaStriker, .marsColossus:
             true
         default:
             false

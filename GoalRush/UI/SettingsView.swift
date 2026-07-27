@@ -26,7 +26,7 @@ struct SettingsView: View {
 
                         preferenceGroups
 
-                        Button("Reset Progress", systemImage: "trash", role: .destructive) {
+                        Button("Reset Account", systemImage: "arrow.counterclockwise", role: .destructive) {
                             store.uiAudio.play(.tap)
                             store.pendingResetConfirmation = true
                         }
@@ -34,8 +34,9 @@ struct SettingsView: View {
                         .foregroundStyle(.red)
                         .frame(maxWidth: .infinity, minHeight: 52)
                         .gameSurface(.panel)
+                        .accessibilityIdentifier("settings-reset-account")
 
-                        Text("This permanently removes campaign progress, Endless records, characters, upgrades, and Training Tokens from this device.")
+                        Text("Restart as a new player. This permanently removes campaign progress, Endless records, characters, upgrades, and Training Tokens from this device.")
                             .font(GoalRushTheme.Typography.caption)
                             .foregroundStyle(.white.opacity(0.72))
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -50,8 +51,8 @@ struct SettingsView: View {
             SettingsGroupSheet(group: group)
                 .presentationDetents([.medium, .large])
         }
-        .confirmationDialog("Reset all progress?", isPresented: $store.pendingResetConfirmation, titleVisibility: .visible) {
-            Button("Reset Progress", role: .destructive) {
+        .confirmationDialog("Reset your account?", isPresented: $store.pendingResetConfirmation, titleVisibility: .visible) {
+            Button("Reset Account", role: .destructive) {
                 store.uiAudio.requestFeedback(.warning)
                 store.resetProgress()
             }
@@ -59,7 +60,7 @@ struct SettingsView: View {
                 store.uiAudio.requestFeedback(.selection)
             }
         } message: {
-            Text("Campaign progress, Endless records, characters, upgrades, and Training Tokens cannot be recovered.")
+            Text("You will return to onboarding as a new player. Your progress cannot be recovered.")
         }
         .onChange(of: store.settings) { oldValue, newValue in
             if oldValue.hapticsEnabled {
