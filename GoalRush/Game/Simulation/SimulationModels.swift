@@ -49,6 +49,7 @@ struct TargetState: Identifiable, Equatable, Sendable {
     var waveRole: WaveEnemyRole = .quota
     var burnRemaining: Double = 0
     var burnTickClock: Double = 0
+    var burnTickDamage: Double = 0
     var freezeRemaining: Double = 0
     var reverseRemaining: Double = 0
     var stunRemaining: Double = 0
@@ -97,6 +98,7 @@ struct ProjectileState: Identifiable, Equatable, Sendable {
     var remainingLifetime: Double = .infinity
     var contactedTargetIDs: Set<Int> = []
     var orbitChainsRemaining: Int = 0
+    var hasTriggeredVoltChain = false
 }
 
 struct SimulationSnapshot: Equatable, Sendable {
@@ -199,15 +201,48 @@ struct HUDState: Equatable, Sendable {
     }
 }
 
+enum ImpactDelivery: Equatable, Sendable {
+    case direct
+    case area
+    case damageOverTime
+}
+
+struct ImpactEvent: Equatable, Sendable {
+    let targetID: Int
+    let position: Vector2
+    let impulse: Vector2
+    let damage: Double
+    let flavor: DamageFlavor
+    let isCritical: Bool
+    let isDefeating: Bool
+    let delivery: ImpactDelivery
+}
+
+struct VoltArc: Equatable, Sendable {
+    let source: Vector2
+    let targetID: Int
+    let destination: Vector2
+    let generation: Int
+    let recipientOrder: Int
+    let damage: Double
+    let isDefeating: Bool
+}
+
+struct VoltChainEvent: Equatable, Sendable {
+    let originTargetID: Int
+    let origin: Vector2
+    let arcs: [VoltArc]
+}
+
 enum SimulationEvent: Equatable, Sendable {
     case checkpoint(Int)
     case damage
     case kick
-    case impact(Vector2, Double, DamageFlavor, Bool)
+    case impact(ImpactEvent)
     case elementalReaction(Vector2)
     case reward(Int, Vector2)
     case heal(Double, Vector2)
-    case abilityChosen(AbilityKind)
+    case upgradeChosen(RunUpgradeChoice)
     case bossPhase(Int)
     case bossAttackTelegraphed(BossAttackKind)
     case bossAttackActivated(BossAttackKind, Vector2)
@@ -227,6 +262,7 @@ enum SimulationEvent: Equatable, Sendable {
     case characterMeteorImpact(Vector2)
     case characterShockwaveBurst(Vector2)
     case characterShockwaveHit(Vector2)
+    case voltChain(VoltChainEvent)
     case finished(Bool)
 }
 

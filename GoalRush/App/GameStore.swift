@@ -56,9 +56,15 @@ final class GameStore {
            let value = Int(arguments[currencyIndex + 1]) {
             progress.trainingTokens = value
         }
+        var settings = GameSettings.load()
+#if DEBUG
+        if arguments.contains("--reduced-effects") {
+            settings.reducedFlashes = true
+        }
+#endif
         let store = GameStore(
             progress: progress,
-            settings: GameSettings.load(),
+            settings: settings,
             persistence: persistence
         )
         // Engagement bootstrap: migrate veteran saves past onboarding, arm daily systems.
@@ -119,6 +125,14 @@ final class GameStore {
         }
         if arguments.contains("--unlock-worlds") {
             store.progress.highestUnlockedLevel = GameContent.levels.count
+        }
+        if arguments.contains("--endless-records") {
+            store.progress.endlessRecord = .init(
+                bestWave: 24,
+                bestScore: 384_500,
+                lastWave: 17,
+                lastScore: 216_750
+            )
         }
         if arguments.contains("--unlock-gear") || arguments.contains("--unlock-characters") {
             store.progress.unlockedCharacters = Set(CharacterID.allCases)
@@ -219,7 +233,9 @@ final class GameStore {
             finalResult.newBestScore = result.score > previous.bestScore
             progress.endlessRecord = EndlessRecord(
                 bestWave: max(previous.bestWave, result.wave),
-                bestScore: max(previous.bestScore, result.score)
+                bestScore: max(previous.bestScore, result.score),
+                lastWave: result.wave,
+                lastScore: result.score
             )
         }
         recordRunStats(finalResult)

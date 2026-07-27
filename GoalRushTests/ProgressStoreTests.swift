@@ -139,7 +139,7 @@ struct ProgressStoreTests {
 
         progress.reconcileUnlockedContent()
 
-        #expect(progress.schemaVersion == 8)
+        #expect(progress.schemaVersion == 9)
         #expect(progress.prestigeCount(for: .impact) == 2)
         #expect(progress.rank(for: .impact) == 21)
     }
@@ -207,7 +207,7 @@ struct ProgressStoreTests {
             persistence: FileProgressStore(fileURL: directory.appending(path: "save.json"))
         )
 
-        #expect(gameStore.progress.schemaVersion == 8)
+        #expect(gameStore.progress.schemaVersion == 9)
         #expect(gameStore.progress.highestUnlockedLevel == 21)
         #expect(gameStore.progress.unlockedCharacters == [.ace, .volt, .nova])
         #expect(GameContent.isWorldUnlocked(.mars, progress: gameStore.progress))
@@ -277,7 +277,59 @@ struct ProgressStoreTests {
         )
         gameStore.finish(.init(mode: .endless, didWin: false, tokensEarned: 9, remainingStamina: 0, wave: 12, score: 45_000))
         gameStore.finish(.init(mode: .endless, didWin: false, tokensEarned: 1, remainingStamina: 0, wave: 7, score: 8_000))
-        #expect(gameStore.progress.endlessRecord == .init(bestWave: 12, bestScore: 45_000))
+        #expect(gameStore.progress.endlessRecord == .init(
+            bestWave: 12,
+            bestScore: 45_000,
+            lastWave: 7,
+            lastScore: 8_000
+        ))
+    }
+
+    @Test func endlessRecordPreservesBestAndPersistsTheMostRecentRun() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let url = directory.appending(path: "save.json")
+        let persistence = FileProgressStore(fileURL: url)
+        let gameStore = GameStore(
+            progress: .newPlayer,
+            settings: .init(),
+            persistence: persistence
+        )
+
+        gameStore.finish(.init(
+            mode: .endless,
+            didWin: false,
+            tokensEarned: 4,
+            remainingStamina: 0,
+            wave: 18,
+            score: 92_000
+        ))
+        gameStore.finish(.init(
+            mode: .endless,
+            didWin: false,
+            tokensEarned: 2,
+            remainingStamina: 0,
+            wave: 6,
+            score: 14_000
+        ))
+
+        let loaded = try persistence.load()
+        #expect(loaded.endlessRecord == .init(
+            bestWave: 18,
+            bestScore: 92_000,
+            lastWave: 6,
+            lastScore: 14_000
+        ))
+    }
+
+    @Test func legacyEndlessRecordDecodesWithoutInventingALastRun() throws {
+        let record = try JSONDecoder().decode(
+            EndlessRecord.self,
+            from: Data(#"{"bestWave":14,"bestScore":88000}"#.utf8)
+        )
+
+        #expect(record == .init(bestWave: 14, bestScore: 88_000))
+        #expect(record.lastWave == nil)
+        #expect(record.lastScore == nil)
     }
 
     @Test func legacyPerWorldEndlessRecordsMergeIntoTheSingleCircuitRecord() throws {
@@ -305,7 +357,7 @@ struct ProgressStoreTests {
 
         #expect(progress.endlessRecord == .init(bestWave: 24, bestScore: 61_000))
         progress.reconcileUnlockedContent()
-        #expect(progress.schemaVersion == 8)
+        #expect(progress.schemaVersion == 9)
 
         let encoded = try JSONEncoder().encode(progress)
         let object = try #require(
@@ -317,7 +369,7 @@ struct ProgressStoreTests {
 
     @Test func expectedAudioAssetsAreBundled() {
         let names = ["kick", "kick-2", "kick-3", "impact", "impact-2", "impact-3", "coin", "heal", "confirm", "victory", "defeat", "boss-phase", "music-calm", "music-pressure", "music-boss",
-                     "ui-tap", "ui-whoosh", "ui-purchase", "ui-claim", "ui-fanfare", "ui-draft", "ui-locked", "ui-combo"]
+                     "ui-tap", "ui-whoosh", "ui-purchase", "ui-claim", "ui-fanfare", "ui-draft", "ui-locked", "ui-combo", "volt-chain"]
         for name in names {
             #expect(Bundle.main.url(forResource: name, withExtension: "wav") != nil)
         }
@@ -339,7 +391,7 @@ struct ProgressStoreTests {
         """
         var progress = try JSONDecoder().decode(PlayerProgress.self, from: Data(json.utf8))
         progress.reconcileUnlockedContent()
-        #expect(progress.schemaVersion == 8)
+        #expect(progress.schemaVersion == 9)
         #expect(progress.trainingTokens == 321)
         #expect(progress.lifetimeStats == LifetimeStats())
         #expect(progress.dailyReward == DailyRewardState())

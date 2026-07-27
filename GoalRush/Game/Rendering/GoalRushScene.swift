@@ -22,11 +22,14 @@ final class GoalRushScene: SKScene {
     private var kickWavePool: [SKShapeNode] = []
     private var normalImpactPool: [SKShapeNode] = []
     private var criticalImpactPool: [SKShapeNode] = []
+    private var criticalRingPool: [SKShapeNode] = []
     private var damageNumberPool: [SKNode] = []
+    private var defeatFragmentPool: [SKSpriteNode] = []
     private var meteorAttackPool: [SKSpriteNode] = []
     private var shockwaveAttackPool: [SKSpriteNode] = []
     private var ricochetFlashPool: [SKShapeNode] = []
     private var freezeCrystalPool: [SKShapeNode] = []
+    private var voltArcPool: [SKNode] = []
     private var meteorImpactPool: [SKSpriteNode] = []
     private var shockwaveLaunchPool: [SKShapeNode] = []
     private var shockwaveContactPool: [SKShapeNode] = []
@@ -36,6 +39,7 @@ final class GoalRushScene: SKScene {
     private var liveCharacterAttackIDs = Set<Int>()
     private var liveBossHazardIDs = Set<Int>()
     private var targetHealthRatios: [Int: Double] = [:]
+    private var fragmentedTargetIDs = Set<Int>()
     private var configuredSize = CGSize.zero
     private var renderedWorldID: WorldID
     private var lastHandledEventPulse = 0
@@ -116,14 +120,18 @@ final class GoalRushScene: SKScene {
         if targetPrewarmIndex < targetPrewarmQueue.count {
             GameNodeFactory.prewarmTarget(kind: targetPrewarmQueue[targetPrewarmIndex])
             targetPrewarmIndex += 1
-        } else if impactPrewarmIndex < 35 {
+        } else if impactPrewarmIndex < 63 {
             // A single small node per frame keeps impact feedback allocation-free
             // without concentrating setup work into navigation or gameplay events.
             if impactPrewarmIndex < 19 {
                 let critical = impactPrewarmIndex >= 7
                 recycleImpactSpark(makeImpactSpark(critical: critical), critical: critical)
-            } else {
+            } else if impactPrewarmIndex < 35 {
                 recycleDamageNumber(makeDamageNumber())
+            } else if impactPrewarmIndex < 59 {
+                defeatFragmentPool.append(makeDefeatFragment())
+            } else {
+                criticalRingPool.append(makeCriticalRing())
             }
             impactPrewarmIndex += 1
         }
@@ -462,6 +470,7 @@ final class GoalRushScene: SKScene {
 
     private func recycleTarget(_ node: SKNode, kind: TargetState.Kind) {
         GameNodeFactory.resetStatus(on: node)
+        (node as? TargetRenderNode)?.resetHitReaction()
         node.removeFromParent()
         var pool = targetNodePools[kind, default: []]
         if pool.count < 12 { pool.append(node) }
@@ -512,15 +521,22 @@ final class GoalRushScene: SKScene {
     private func perspectiveScale(_ y: Double) -> CGFloat { CGFloat(1.05 - min(max(y, 0), 1) * 0.48) }
 
     private func handle(_ events: [SimulationEvent]) {
+        fragmentedTargetIDs.removeAll(keepingCapacity: true)
         for event in events {
             switch event {
             case .kick:
                 GameNodeFactory.animateKick(on: playerNode, reducedMotion: reducesMotion)
                 spawnKickWave()
-            case .impact(let position, let damage, let flavor, let critical):
-                let location = point(x: position.x, y: position.y)
-                spawnImpact(at: location, flavor: flavor, critical: critical)
-                spawnDamageNumber(damage, flavor: flavor, critical: critical, at: location)
+            case .impact(let impact):
+                let location = point(x: impact.position.x, y: impact.position.y)
+                animateTargetImpact(impact)
+                spawnImpact(at: location, flavor: impact.flavor, critical: impact.isCritical)
+                spawnDamageNumber(
+                    impact.damage,
+                    flavor: impact.flavor,
+                    critical: impact.isCritical,
+                    at: location
+                )
             case .elementalReaction(let position):
                 spawnSteamReaction(at: point(x: position.x, y: position.y))
             case .reward(let value, let position):
@@ -531,7 +547,7 @@ final class GoalRushScene: SKScene {
                 showDamageFeedback()
             case .checkpoint:
                 showScreenPulse(color: SKColor(red: 1, green: 0.72, blue: 0.10, alpha: 1), strength: 0.38)
-            case .abilityChosen:
+            case .upgradeChosen:
                 spawnAbilityAura()
             case .bossPhase:
                 showScreenPulse(color: SKColor(red: 1, green: 0.24, blue: 0.08, alpha: 1), strength: 0.55)
@@ -580,6 +596,8 @@ final class GoalRushScene: SKScene {
                 spawnShockwaveLaunch(at: point(x: position.x, y: position.y))
             case .characterShockwaveHit(let position):
                 spawnShockwaveContact(at: point(x: position.x, y: position.y))
+            case .voltChain(let chain):
+                showVoltChain(chain)
             case .finished(let won):
                 if won { showScreenPulse(color: SKColor(red: 1, green: 0.78, blue: 0.16, alpha: 1), strength: 0.48) }
             }
@@ -699,6 +717,26 @@ final class GoalRushScene: SKScene {
             }
         }
         if critical {
+            let ring = criticalRingPool.popLast() ?? makeCriticalRing()
+            ring.removeAllActions()
+            ring.position = position
+            ring.zPosition = 2_030
+            ring.strokeColor = impactStyle(for: flavor, critical: true).palette[0]
+            ring.alpha = 0.92
+            ring.setScale(reducesMotion ? 0.92 : 0.54)
+            effectsLayer.addChild(ring)
+            let ringDuration = reducesMotion ? 0.10 : 0.22
+            ring.run(.group([
+                .scale(to: reducesMotion ? 1.16 : 2.25, duration: ringDuration),
+                .fadeOut(withDuration: ringDuration)
+            ])) { [weak self, weak ring] in
+                guard let self, let ring else { return }
+                ring.removeFromParent()
+                if self.criticalRingPool.count < 4 {
+                    self.criticalRingPool.append(ring)
+                }
+            }
+
             let label = criticalLabelPool.popLast() ?? makeCriticalLabel()
             label.removeAllActions()
             label.alpha = 1
@@ -714,12 +752,350 @@ final class GoalRushScene: SKScene {
         }
     }
 
+    private func animateTargetImpact(_ impact: ImpactEvent) {
+        guard let kind = targetKinds[impact.targetID],
+              case .enemy = kind,
+              let node = targetNodes[impact.targetID] as? TargetRenderNode else {
+            return
+        }
+
+        if impact.isDefeating {
+            guard fragmentedTargetIDs.insert(impact.targetID).inserted else { return }
+            spawnDefeatFragments(from: node, impact: impact)
+        } else {
+            node.playHitReaction(impact, reducedMotion: reducesMotion)
+        }
+
+        guard impact.delivery != .damageOverTime,
+              impact.isCritical || impact.isDefeating else {
+            return
+        }
+        let intensity: CGFloat
+        if node.showsBossHealth {
+            intensity = 1.4
+        } else if impact.isDefeating {
+            intensity = 3.2
+        } else {
+            intensity = 2.2
+        }
+        shake(intensity: intensity)
+    }
+
+    private func spawnDefeatFragments(from node: TargetRenderNode, impact: ImpactEvent) {
+        guard let source = node.bodySprite, let texture = source.texture else { return }
+
+        let isExpandedBurst = impact.isCritical || node.showsBossHealth
+        let columns = 2
+        let rows = isExpandedBurst ? 3 : 2
+        let fragmentCount = reducesMotion ? 1 : columns * rows
+        let center = source.convert(CGPoint.zero, to: effectsLayer)
+        let xUnit = source.convert(CGPoint(x: 1, y: 0), to: effectsLayer)
+        let yUnit = source.convert(CGPoint(x: 0, y: 1), to: effectsLayer)
+        let scaleX = hypot(xUnit.x - center.x, xUnit.y - center.y)
+        let scaleY = hypot(yUnit.x - center.x, yUnit.y - center.y)
+        let rotation = atan2(xUnit.y - center.y, xUnit.x - center.x)
+        let tint = fragmentTint(for: impact.flavor)
+
+        for index in 0..<fragmentCount {
+            let column = reducesMotion ? 0 : index % columns
+            let row = reducesMotion ? 0 : index / columns
+            let rect = reducesMotion
+                ? CGRect(x: 0, y: 0, width: 1, height: 1)
+                : CGRect(
+                    x: CGFloat(column) / CGFloat(columns),
+                    y: CGFloat(row) / CGFloat(rows),
+                    width: 1 / CGFloat(columns),
+                    height: 1 / CGFloat(rows)
+                )
+            let fragment = dequeueDefeatFragment()
+            let fragmentTexture = SKTexture(rect: rect, in: texture)
+            fragmentTexture.filteringMode = .linear
+            fragment.texture = fragmentTexture
+            fragment.size = CGSize(
+                width: source.size.width * rect.width * scaleX,
+                height: source.size.height * rect.height * scaleY
+            )
+            let localCenter = CGPoint(
+                x: (rect.midX - source.anchorPoint.x) * source.size.width,
+                y: (rect.midY - source.anchorPoint.y) * source.size.height
+            )
+            fragment.position = source.convert(localCenter, to: effectsLayer)
+            fragment.zRotation = rotation
+            fragment.zPosition = 2_040
+            fragment.alpha = 1
+            fragment.color = tint
+            fragment.colorBlendFactor = impact.isCritical ? 0.62 : 0.42
+            fragment.setScale(1)
+            effectsLayer.addChild(fragment)
+
+            if reducesMotion {
+                fragment.run(.group([
+                    .scale(to: 1.04, duration: 0.12),
+                    .fadeOut(withDuration: 0.12)
+                ])) { [weak self, weak fragment] in
+                    guard let self, let fragment else { return }
+                    self.recycleDefeatFragment(fragment)
+                }
+                continue
+            }
+
+            let outwardX = (CGFloat(column) - CGFloat(columns - 1) * 0.5) * 22
+            let outwardY = (CGFloat(row) - CGFloat(rows - 1) * 0.5) * 19
+            let impulseDistance: CGFloat = isExpandedBurst ? 18 : 13
+            let destination = CGPoint(
+                x: outwardX + CGFloat(impact.impulse.x) * impulseDistance,
+                y: outwardY + CGFloat(impact.impulse.y) * impulseDistance + 12
+            )
+            let duration = isExpandedBurst ? 0.29 : 0.24
+            let travel = SKAction.moveBy(
+                x: destination.x,
+                y: destination.y,
+                duration: duration
+            )
+            travel.timingMode = .easeOut
+            let spinDirection: CGFloat = index.isMultiple(of: 2) ? -1 : 1
+            fragment.run(.group([
+                travel,
+                .rotate(byAngle: spinDirection * (0.48 + CGFloat(index % 3) * 0.16), duration: duration),
+                .scale(to: 0.72, duration: duration),
+                .sequence([
+                    .wait(forDuration: duration * 0.38),
+                    .fadeOut(withDuration: duration * 0.62)
+                ])
+            ])) { [weak self, weak fragment] in
+                guard let self, let fragment else { return }
+                self.recycleDefeatFragment(fragment)
+            }
+        }
+    }
+
+    private func fragmentTint(for flavor: DamageFlavor) -> SKColor {
+        switch flavor {
+        case .fire, .explosive:
+            SKColor(red: 1, green: 0.34, blue: 0.05, alpha: 1)
+        case .ice:
+            SKColor(red: 0.38, green: 0.86, blue: 1, alpha: 1)
+        case .reverse:
+            SKColor(red: 0.72, green: 0.28, blue: 1, alpha: 1)
+        case .split:
+            SKColor(red: 0.18, green: 1, blue: 0.54, alpha: 1)
+        case .volt:
+            SKColor(red: 0.08, green: 0.86, blue: 1, alpha: 1)
+        case .standard:
+            .white
+        }
+    }
+
+    private func dequeueDefeatFragment() -> SKSpriteNode {
+        defeatFragmentPool.popLast() ?? makeDefeatFragment()
+    }
+
+    private func recycleDefeatFragment(_ fragment: SKSpriteNode) {
+        fragment.removeAllActions()
+        fragment.removeFromParent()
+        fragment.texture = nil
+        fragment.colorBlendFactor = 0
+        fragment.alpha = 1
+        fragment.zRotation = 0
+        fragment.setScale(1)
+        if defeatFragmentPool.count < 24 {
+            defeatFragmentPool.append(fragment)
+        }
+    }
+
+    private func makeDefeatFragment() -> SKSpriteNode {
+        let fragment = SKSpriteNode()
+        fragment.name = "defeat-fragment"
+        fragment.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        return fragment
+    }
+
     private func makeCriticalLabel() -> SKLabelNode {
         let label = SKLabelNode(text: "CRITICAL")
         label.fontName = "AvenirNext-Heavy"
         label.fontSize = 13
         label.fontColor = SKColor(red: 1, green: 0.78, blue: 0.12, alpha: 1)
         return label
+    }
+
+    private func makeCriticalRing() -> SKShapeNode {
+        let ring = SKShapeNode(circleOfRadius: 14)
+        ring.name = "critical-impact-ring"
+        ring.fillColor = .clear
+        ring.strokeColor = .white
+        ring.lineWidth = 3
+        ring.glowWidth = 6
+        return ring
+    }
+
+    private func showVoltChain(_ chain: VoltChainEvent) {
+        spawnVoltOriginPulse(at: point(x: chain.origin.x, y: chain.origin.y))
+        for arc in chain.arcs {
+            let delay = reducesMotion ? 0 : Double(max(0, arc.generation - 1)) * 0.07
+            spawnVoltArc(
+                arc,
+                seed: UInt64(max(1, chain.originTargetID &* 1_009 + arc.recipientOrder)),
+                delay: delay
+            )
+            effectsLayer.run(.sequence([
+                .wait(forDuration: delay),
+                .run { [weak self] in
+                    guard let self else { return }
+                    let destination = self.point(
+                        x: arc.destination.x,
+                        y: arc.destination.y
+                    )
+                    self.spawnVoltCorona(at: destination, defeating: arc.isDefeating)
+                    self.spawnDamageNumber(
+                        arc.damage,
+                        flavor: .volt,
+                        critical: false,
+                        at: destination
+                    )
+                }
+            ]))
+        }
+    }
+
+    private func spawnVoltArc(_ arc: VoltArc, seed: UInt64, delay: TimeInterval) {
+        let node = voltArcPool.popLast() ?? makeVoltArcNode()
+        node.removeAllActions()
+        node.alpha = 0
+        node.zPosition = 2_110
+        effectsLayer.addChild(node)
+
+        let source = point(x: arc.source.x, y: arc.source.y)
+        let destination = point(x: arc.destination.x, y: arc.destination.y)
+        updateVoltArcPath(node, from: source, to: destination, seed: seed)
+        let activeDuration = reducesMotion ? 0.12 : 0.30
+        let animate = SKAction.customAction(withDuration: activeDuration) { [weak self, weak node] _, elapsed in
+            guard let self, let node else { return }
+            if self.reducesMotion {
+                node.alpha = 0.72
+                return
+            }
+            let phase = UInt64(max(0, Int(elapsed * 42)))
+            self.updateVoltArcPath(
+                node,
+                from: source,
+                to: destination,
+                seed: seed &+ phase &* 7_919
+            )
+            node.alpha = phase.isMultiple(of: 3) ? 0.72 : 1
+        }
+        node.run(.sequence([
+            .wait(forDuration: delay),
+            .run { node.alpha = 1 },
+            animate,
+            .fadeOut(withDuration: reducesMotion ? 0.06 : 0.10)
+        ])) { [weak self, weak node] in
+            guard let self, let node else { return }
+            node.removeFromParent()
+            node.alpha = 1
+            if self.voltArcPool.count < 48 {
+                self.voltArcPool.append(node)
+            }
+        }
+    }
+
+    private func makeVoltArcNode() -> SKNode {
+        let node = SKNode()
+        node.name = "volt-arc"
+
+        let glow = SKShapeNode()
+        glow.name = "volt-glow"
+        glow.strokeColor = SKColor(red: 0.05, green: 0.58, blue: 1, alpha: 0.52)
+        glow.lineWidth = 9
+        glow.glowWidth = 13
+        glow.lineCap = .round
+        node.addChild(glow)
+
+        let body = SKShapeNode()
+        body.name = "volt-body"
+        body.strokeColor = SKColor(red: 0.06, green: 0.88, blue: 1, alpha: 0.95)
+        body.lineWidth = 4
+        body.glowWidth = 5
+        body.lineCap = .round
+        node.addChild(body)
+
+        let core = SKShapeNode()
+        core.name = "volt-core"
+        core.strokeColor = .white
+        core.lineWidth = 1.35
+        core.lineCap = .round
+        node.addChild(core)
+        return node
+    }
+
+    private func updateVoltArcPath(
+        _ node: SKNode,
+        from source: CGPoint,
+        to destination: CGPoint,
+        seed: UInt64
+    ) {
+        let path = voltPath(from: source, to: destination, seed: seed)
+        for name in ["volt-glow", "volt-body", "volt-core"] {
+            (node.childNode(withName: name) as? SKShapeNode)?.path = path
+        }
+    }
+
+    private func voltPath(from source: CGPoint, to destination: CGPoint, seed: UInt64) -> CGPath {
+        let dx = destination.x - source.x
+        let dy = destination.y - source.y
+        let length = max(1, hypot(dx, dy))
+        let segmentCount = max(5, min(13, Int(length / 24)))
+        let normal = CGPoint(x: -dy / length, y: dx / length)
+        let amplitude = min(14, max(5, length * 0.075))
+        var generator = SeededGenerator(seed: seed)
+        let path = CGMutablePath()
+        path.move(to: source)
+        for segment in 1..<segmentCount {
+            let progress = CGFloat(segment) / CGFloat(segmentCount)
+            let envelope = sin(progress * .pi)
+            let jitter = CGFloat(generator.unit() * 2 - 1) * amplitude * envelope
+            path.addLine(to: CGPoint(
+                x: source.x + dx * progress + normal.x * jitter,
+                y: source.y + dy * progress + normal.y * jitter
+            ))
+        }
+        path.addLine(to: destination)
+        return path
+    }
+
+    private func spawnVoltOriginPulse(at position: CGPoint) {
+        let pulse = SKShapeNode(circleOfRadius: 12)
+        pulse.position = position
+        pulse.zPosition = 2_105
+        pulse.fillColor = SKColor(red: 0.08, green: 0.75, blue: 1, alpha: 0.20)
+        pulse.strokeColor = .white
+        pulse.lineWidth = 2
+        pulse.glowWidth = reducesMotion ? 2 : 9
+        effectsLayer.addChild(pulse)
+        pulse.run(.sequence([
+            .group([
+                .scale(to: reducesMotion ? 1.25 : 2.2, duration: reducesMotion ? 0.12 : 0.25),
+                .fadeOut(withDuration: reducesMotion ? 0.12 : 0.25)
+            ]),
+            .removeFromParent()
+        ]))
+    }
+
+    private func spawnVoltCorona(at position: CGPoint, defeating: Bool) {
+        let corona = SKShapeNode(circleOfRadius: defeating ? 18 : 14)
+        corona.position = position
+        corona.zPosition = 2_140
+        corona.fillColor = .clear
+        corona.strokeColor = SKColor(red: 0.22, green: 0.92, blue: 1, alpha: 0.95)
+        corona.lineWidth = 2.5
+        corona.glowWidth = reducesMotion ? 2 : 8
+        effectsLayer.addChild(corona)
+        corona.run(.sequence([
+            .group([
+                .scale(to: reducesMotion ? 1.12 : 1.65, duration: reducesMotion ? 0.10 : 0.20),
+                .fadeOut(withDuration: reducesMotion ? 0.10 : 0.20)
+            ]),
+            .removeFromParent()
+        ]))
     }
 
     private struct ImpactStyle {
@@ -746,6 +1122,8 @@ final class GoalRushScene: SKScene {
             [.white, gold, SKColor(red: 1, green: 0.18, blue: 0.01, alpha: 1)]
         case .split:
             [.white, SKColor(red: 0.06, green: 0.92, blue: 0.42, alpha: 1)]
+        case .volt:
+            [.white, SKColor(red: 0.12, green: 0.88, blue: 1, alpha: 1), SKColor(red: 0.18, green: 0.34, blue: 1, alpha: 1)]
         case .standard:
             [.white, SKColor(red: 0.18, green: 0.78, blue: 1, alpha: 1)]
         }
@@ -753,7 +1131,7 @@ final class GoalRushScene: SKScene {
             palette: critical ? [gold] + palette : palette,
             stroke: flavor == .reverse ? palette[0] : .clear,
             lineWidth: flavor == .reverse ? 1.8 : 0,
-            glow: flavor == .fire || flavor == .explosive ? 2.5 : 0,
+            glow: flavor == .fire || flavor == .explosive || flavor == .volt ? 2.5 : 0,
             duration: flavor == .fire ? 0.34 : 0.24,
             distanceMultiplier: flavor == .explosive ? 1.35 : 1,
             verticalLift: flavor == .fire ? 11 : 0,
@@ -793,6 +1171,11 @@ final class GoalRushScene: SKScene {
             path.addLine(to: CGPoint(x: radius * 1.5, y: -radius))
             path.addLine(to: CGPoint(x: -radius * 1.5, y: -radius))
             path.closeSubpath()
+        case .volt:
+            path.move(to: CGPoint(x: -radius * 1.8, y: radius * 1.8))
+            path.addLine(to: CGPoint(x: radius * 0.2, y: radius * 0.35))
+            path.addLine(to: CGPoint(x: -radius * 0.35, y: radius * 0.25))
+            path.addLine(to: CGPoint(x: radius * 1.8, y: -radius * 1.8))
         case .standard, .split:
             path.addEllipse(in: CGRect(x: -radius, y: -radius, width: radius * 2, height: radius * 2))
         }
@@ -927,6 +1310,7 @@ final class GoalRushScene: SKScene {
         case .ice: SKColor(red: 0.34, green: 0.90, blue: 1, alpha: 1)
         case .reverse: SKColor(red: 0.82, green: 0.38, blue: 1, alpha: 1)
         case .split: SKColor(red: 0.32, green: 1, blue: 0.54, alpha: 1)
+        case .volt: SKColor(red: 0.24, green: 0.92, blue: 1, alpha: 1)
         }
     }
 
@@ -1082,6 +1466,54 @@ final class GoalRushScene: SKScene {
 
     var rewardTokensForTesting: [SKNode] {
         effectsLayer.children.filter { $0.name == "reward-token" }
+    }
+
+    func handleImpactForTesting(_ impact: ImpactEvent, target: TargetState) {
+        if world.parent == nil {
+            addChild(world)
+        }
+        if targetLayer.parent == nil {
+            world.addChild(targetLayer)
+        }
+        if effectsLayer.parent == nil {
+            world.addChild(effectsLayer)
+        }
+        let node = GameNodeFactory.target(target, world: renderedWorldID)
+        node.position = point(x: target.position.x, y: target.position.y)
+        node.setScale(perspectiveScale(target.position.y))
+        targetLayer.addChild(node)
+        targetNodes[target.id] = node
+        targetKinds[target.id] = target.kind
+        handle([.impact(impact)])
+    }
+
+    var defeatFragmentsForTesting: [SKSpriteNode] {
+        effectsLayer.children.compactMap { node in
+            guard node.name == "defeat-fragment" else { return nil }
+            return node as? SKSpriteNode
+        }
+    }
+
+    var hasImpactCameraKickForTesting: Bool {
+        world.action(forKey: "screen-shake") != nil
+    }
+
+    var criticalImpactRingsForTesting: [SKNode] {
+        effectsLayer.children.filter { $0.name == "critical-impact-ring" }
+    }
+
+    func handleVoltChainForTesting(_ chain: VoltChainEvent) {
+        if world.parent == nil {
+            addChild(world)
+        }
+        if effectsLayer.parent == nil {
+            world.addChild(effectsLayer)
+        }
+        handle([.voltChain(chain)])
+    }
+
+    var voltArcsForTesting: [SKNode] {
+        effectsLayer.children.filter { $0.name == "volt-arc" }
     }
 #endif
 

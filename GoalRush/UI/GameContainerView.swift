@@ -109,8 +109,8 @@ struct GameContainerView: View {
                 CampaignBriefingView(level: level, discoveries: discoveries, session: session)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
-            if case .draft(let abilities) = session.phase {
-                AbilityDraftView(abilities: abilities, session: session)
+            if case .draft(let choices) = session.phase {
+                AbilityDraftView(choices: choices, session: session)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
             if session.phase == .paused {

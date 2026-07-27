@@ -13,6 +13,7 @@ final class GameSimulation {
     private var kickClock = 0.0
     private var nextIdentifier = 1
     private var abilities: [AbilityKind: Int] = [:]
+    private var specialBallRanks: [TemporaryBallAbility: Int] = [:]
     private var finished = false
     private var bossSpawned = false
     private var bossDefeated = false
@@ -176,7 +177,20 @@ final class GameSimulation {
         }
     }
 
+    func apply(_ choice: RunUpgradeChoice) {
+        switch choice {
+        case .ability(let ability):
+            apply(ability)
+        case .specialBall(let ability):
+            guard mode.isEndless, EndlessSpecialBallRules.isAvailable(ability) else { return }
+            specialBallRanks[ability, default: 0] += 1
+        }
+    }
+
     func abilityRank(_ ability: AbilityKind) -> Int { abilities[ability, default: 0] }
+    func specialBallRank(_ ability: TemporaryBallAbility) -> Int {
+        specialBallRanks[ability, default: 0]
+    }
 
 #if DEBUG
     func fullyChargeCharacterAbilityForTesting() {
@@ -376,10 +390,20 @@ final class GameSimulation {
     func kickInterval(atAbilityRank rank: Int) -> Double {
         let safeRank = max(0, rank)
         if mode.isEndless {
-            let safetyFloor = 0.14
-            return safetyFloor + (stats.kickCooldown - safetyFloor) * pow(0.88, Double(safeRank))
+            return EndlessAbilityRules.renderedKickInterval(
+                base: stats.kickCooldown,
+                rank: safeRank
+            )
         }
         return max(0.14, stats.kickCooldown * pow(0.82, Double(safeRank)))
+    }
+
+    func quickReleaseDamageMultiplier(atAbilityRank rank: Int) -> Double {
+        guard mode.isEndless else { return 1 }
+        return EndlessAbilityRules.quickReleaseDamageMultiplier(
+            base: stats.kickCooldown,
+            rank: rank
+        )
     }
 
     func update(delta rawDelta: Double) -> [SimulationEvent] {
@@ -558,6 +582,7 @@ final class GameSimulation {
     }
 
     private func updatePowerUpSpawning(delta: Double) {
+        guard !mode.isEndless else { return }
         if snapshot.isBossWave {
             bossPowerUpClock -= delta
             guard bossPowerUpClock <= 0,
@@ -574,8 +599,11 @@ final class GameSimulation {
     }
 
     private func spawnRandomPowerUp() {
-        let powers = GameContent.world(world).temporaryPowers
-        let power = powers[Int(random.next() % UInt64(powers.count))]
+        let power = TemporaryAbilityRules.spawnedAbility(
+            worldPowers: GameContent.world(world).temporaryPowers,
+            universalRoll: random.unit(),
+            worldRoll: random.unit()
+        )
         spawnPowerUp(power, x: randomSpawnX(near: 1.08), y: 1.08)
     }
 
@@ -738,6 +766,7 @@ final class GameSimulation {
 
         let powerBase = mode.isEndless ? 1.25 : 1.35
         var baseDamage = stats.ballDamage * pow(powerBase, Double(abilities[.powerDrive, default: 0]))
+        baseDamage *= quickReleaseDamageMultiplier(atAbilityRank: quickRank)
         let meteorRank = abilities[.meteorStrike, default: 0]
         let meteorInterval = max(2, 7 - min(meteorRank, 5))
         let isMeteor = meteorRank > 0 && kickCount.isMultiple(of: meteorInterval)
@@ -752,7 +781,14 @@ final class GameSimulation {
         let criticalTiers = max(isMeteor ? 1 : 0, guaranteedCriticalTiers + fractionalCriticalTier)
         let critical = criticalTiers > 0
         let damage = baseDamage * Double(1 + criticalTiers)
-        let temporaryAbility = snapshot.activeTemporaryAbility
+        let temporaryAbility = if mode.isEndless {
+            EndlessSpecialBallRules.selectedAbility(
+                ranks: specialBallRanks,
+                roll: random.unit()
+            )
+        } else {
+            snapshot.activeTemporaryAbility
+        }
         let pierce = temporaryAbility == .solarPierce
             ? Int.max
             : abilities[.throughBall, default: 0] + stats.extraPierce
@@ -809,7 +845,10 @@ final class GameSimulation {
 
     private func updateTargets(delta: Double, events: inout [SimulationEvent]) {
         removedTargetIDs.removeAll(keepingCapacity: true)
-        let slowFactor = 0.35 + 0.65 * pow(0.90, Double(abilities[.gravityBoots, default: 0]))
+        let gravityRank = abilities[.gravityBoots, default: 0]
+        let slowFactor = mode.isEndless
+            ? EndlessAbilityRules.gravitySpeedFactor(rank: gravityRank)
+            : 0.35 + 0.65 * pow(0.90, Double(gravityRank))
         for index in snapshot.targets.indices {
             var target = snapshot.targets[index]
             target.phase += delta
@@ -822,9 +861,21 @@ final class GameSimulation {
                 target.burnTickClock -= delta
                 if target.burnTickClock <= 0 {
                     target.burnTickClock += 0.5
-                    let burnDamage = max(1, stats.ballDamage * 0.18)
+                    let burnDamage = max(
+                        1,
+                        target.burnTickDamage > 0
+                            ? target.burnTickDamage
+                            : stats.ballDamage * 0.18
+                    )
                     target.hitPoints -= burnDamage
-                    events.append(.impact(target.position, burnDamage, .fire, false))
+                    events.append(impactEvent(
+                        for: target,
+                        damage: burnDamage,
+                        flavor: .fire,
+                        critical: false,
+                        delivery: .damageOverTime,
+                        impulse: .init(x: 0, y: 0)
+                    ))
                     if target.hitPoints <= 0 {
                         removedTargetIDs.insert(target.id)
                         awardReward(for: target, events: &events)
@@ -833,6 +884,9 @@ final class GameSimulation {
                         continue
                     }
                 }
+            }
+            if target.burnRemaining == 0 {
+                target.burnTickDamage = 0
             }
 
             let freezeFactor = target.freezeRemaining > 0 || target.stunRemaining > 0 ? 0 : 1.0
@@ -991,7 +1045,17 @@ final class GameSimulation {
                     + verticalDistance * verticalDistance <= 1 else { continue }
             let damage = target.id == attack.targetID ? attack.damage : attack.damage * 0.55
             snapshot.targets[index].hitPoints -= damage
-            events.append(.impact(target.position, damage, .explosive, true))
+            events.append(impactEvent(
+                for: snapshot.targets[index],
+                damage: damage,
+                flavor: .explosive,
+                critical: true,
+                delivery: .area,
+                impulse: .init(
+                    x: target.position.x - attack.destination.x,
+                    y: target.position.y - attack.destination.y
+                )
+            ))
             registerDefeatIfNeeded(at: index, awardsAbilityCharge: false, events: &events)
         }
     }
@@ -1012,7 +1076,17 @@ final class GameSimulation {
             snapshot.targets[index].hitPoints -= attack.damage
             snapshot.targets[index].stunRemaining = max(snapshot.targets[index].stunRemaining, 0.78)
             events.append(.characterShockwaveHit(target.position))
-            events.append(.impact(target.position, attack.damage, .standard, false))
+            events.append(impactEvent(
+                for: snapshot.targets[index],
+                damage: attack.damage,
+                flavor: .standard,
+                critical: false,
+                delivery: .area,
+                impulse: .init(
+                    x: target.position.x - attack.position.x,
+                    y: 0.3
+                )
+            ))
             registerDefeatIfNeeded(at: index, awardsAbilityCharge: false, events: &events)
         }
     }
@@ -1072,21 +1146,55 @@ final class GameSimulation {
                 }) {
                     let position = snapshot.targets[targetIndex].position
                     let targetID = snapshot.targets[targetIndex].id
+                    let hitEnemy = if case .enemy = snapshot.targets[targetIndex].kind {
+                        true
+                    } else {
+                        false
+                    }
                     applyProjectileHit(projectile, to: targetIndex, events: &events)
+                    if projectile.temporaryAbility == .volt,
+                       !projectile.hasTriggeredVoltChain,
+                       hitEnemy {
+                        projectile.hasTriggeredVoltChain = true
+                        applyVoltChain(
+                            from: position,
+                            originTargetID: targetID,
+                            projectileDamage: projectile.damage,
+                            events: &events
+                        )
+                    }
                     if projectile.temporaryAbility == .explosive {
+                        let explosiveRank = specialBallRank(.explosive)
+                        let damageMultiplier = mode.isEndless
+                            ? EndlessSpecialBallRules.explosionDamageMultiplier(rank: explosiveRank)
+                            : 0.55
+                        let radius = mode.isEndless
+                            ? EndlessSpecialBallRules.explosionRadius(rank: explosiveRank)
+                            : 0.28
                         applyExplosion(
                             centeredAt: position,
                             excluding: snapshot.targets[targetIndex].id,
-                            damage: projectile.damage * 0.55,
+                            damage: projectile.damage * damageMultiplier,
+                            radius: radius,
                             events: &events
                         )
                     }
                     if projectile.temporaryAbility == .split, projectile.canSplit {
+                        let splitRank = specialBallRank(.split)
+                        let damageMultiplier = mode.isEndless
+                            ? EndlessSpecialBallRules.splitDamageMultiplier(rank: splitRank)
+                            : 0.42
+                        let count = mode.isEndless
+                            ? EndlessSpecialBallRules.splitProjectileCount(
+                                rank: splitRank,
+                                isCritical: projectile.isCritical
+                            )
+                            : projectile.isCritical ? 8 : 5
                         splitProjectiles.append(
                             contentsOf: makeSplitProjectiles(
                                 from: position,
-                                damage: projectile.damage * 0.42,
-                                count: projectile.isCritical ? 8 : 5
+                                damage: projectile.damage * damageMultiplier,
+                                count: count
                             )
                         )
                     }
@@ -1159,25 +1267,55 @@ final class GameSimulation {
                 snapshot.targets[targetIndex].freezeRemaining = 0
                 events.append(.elementalReaction(snapshot.targets[targetIndex].position))
             }
-            snapshot.targets[targetIndex].burnRemaining = max(snapshot.targets[targetIndex].burnRemaining, 4)
+            let fireRank = specialBallRank(.fire)
+            let duration = mode.isEndless
+                ? EndlessSpecialBallRules.fireDuration(rank: fireRank)
+                : 4
+            let tickDamage = mode.isEndless
+                ? projectile.damage
+                    * EndlessSpecialBallRules.fireTickDamageMultiplier(rank: fireRank)
+                : stats.ballDamage * 0.18
+            snapshot.targets[targetIndex].burnRemaining = max(
+                snapshot.targets[targetIndex].burnRemaining,
+                duration
+            )
             snapshot.targets[targetIndex].burnTickClock = min(snapshot.targets[targetIndex].burnTickClock, 0.18)
+            snapshot.targets[targetIndex].burnTickDamage = max(
+                snapshot.targets[targetIndex].burnTickDamage,
+                tickDamage
+            )
         case .ice:
             if snapshot.targets[targetIndex].burnRemaining > 0 {
                 snapshot.targets[targetIndex].burnRemaining = 0
                 snapshot.targets[targetIndex].burnTickClock = 0
+                snapshot.targets[targetIndex].burnTickDamage = 0
                 events.append(.elementalReaction(snapshot.targets[targetIndex].position))
             }
-            snapshot.targets[targetIndex].freezeRemaining = max(snapshot.targets[targetIndex].freezeRemaining, 1.7)
+            let duration = mode.isEndless
+                ? EndlessSpecialBallRules.iceDuration(rank: specialBallRank(.ice))
+                : 1.7
+            snapshot.targets[targetIndex].freezeRemaining = max(
+                snapshot.targets[targetIndex].freezeRemaining,
+                duration
+            )
         case .reverse:
-            snapshot.targets[targetIndex].reverseRemaining = max(snapshot.targets[targetIndex].reverseRemaining, 2.8)
+            let duration = mode.isEndless
+                ? EndlessSpecialBallRules.reverseDuration(rank: specialBallRank(.reverse))
+                : 2.8
+            snapshot.targets[targetIndex].reverseRemaining = max(
+                snapshot.targets[targetIndex].reverseRemaining,
+                duration
+            )
         default:
             break
         }
-        events.append(.impact(
-            snapshot.targets[targetIndex].position,
-            projectile.damage,
-            flavor,
-            projectile.isCritical
+        events.append(impactEvent(
+            for: snapshot.targets[targetIndex],
+            damage: projectile.damage,
+            flavor: flavor,
+            critical: projectile.isCritical,
+            delivery: .direct,
+            impulse: projectile.velocity
         ))
         registerDefeatIfNeeded(
             at: targetIndex,
@@ -1190,6 +1328,7 @@ final class GameSimulation {
         centeredAt center: Vector2,
         excluding excludedID: Int,
         damage: Double,
+        radius: Double,
         awardsAbilityCharge: Bool = true,
         events: inout [SimulationEvent]
     ) {
@@ -1197,17 +1336,100 @@ final class GameSimulation {
             let target = snapshot.targets[index]
             guard target.id != excludedID,
                   !hitTargetIDs.contains(target.id),
-                  hypot(target.position.x - center.x, target.position.y - center.y) <= 0.28 else { continue }
+                  hypot(target.position.x - center.x, target.position.y - center.y) <= radius else { continue }
             if case .powerUp = target.kind { continue }
             if case .volatileCore = target.kind { continue }
             snapshot.targets[index].hitPoints -= damage
-            events.append(.impact(target.position, damage, .explosive, false))
+            events.append(impactEvent(
+                for: snapshot.targets[index],
+                damage: damage,
+                flavor: .explosive,
+                critical: false,
+                delivery: .area,
+                impulse: .init(
+                    x: target.position.x - center.x,
+                    y: target.position.y - center.y
+                )
+            ))
             registerDefeatIfNeeded(
                 at: index,
                 awardsAbilityCharge: awardsAbilityCharge,
                 events: &events
             )
         }
+    }
+
+    private func applyVoltChain(
+        from origin: Vector2,
+        originTargetID: Int,
+        projectileDamage: Double,
+        events: inout [SimulationEvent]
+    ) {
+        let orderedTargetIndices = snapshot.targets.indices
+            .filter { index in
+                let target = snapshot.targets[index]
+                guard target.id != originTargetID,
+                      target.hitPoints > 0,
+                      !hitTargetIDs.contains(target.id) else {
+                    return false
+                }
+                if case .enemy = target.kind { return true }
+                return false
+            }
+            .sorted { leftIndex, rightIndex in
+                let left = snapshot.targets[leftIndex]
+                let right = snapshot.targets[rightIndex]
+                let leftDistance = hypot(
+                    left.position.x - origin.x,
+                    left.position.y - origin.y
+                )
+                let rightDistance = hypot(
+                    right.position.x - origin.x,
+                    right.position.y - origin.y
+                )
+                if abs(leftDistance - rightDistance) > 0.000_001 {
+                    return leftDistance < rightDistance
+                }
+                return left.id < right.id
+            }
+
+        guard !orderedTargetIndices.isEmpty else { return }
+
+        var nodePositions = [origin]
+        var arcs: [VoltArc] = []
+        var aftermathEvents: [SimulationEvent] = []
+        for (offset, targetIndex) in orderedTargetIndices.enumerated() {
+            let recipientOrder = offset + 1
+            let target = snapshot.targets[targetIndex]
+            let parentOrder = recipientOrder / 2
+            let damageMultiplier = mode.isEndless
+                ? EndlessSpecialBallRules.voltDamageMultiplier(
+                    recipientOffset: offset,
+                    rank: specialBallRank(.volt)
+                )
+                : 0.15 + Double(offset) * 0.05
+            let damage = projectileDamage * damageMultiplier
+            snapshot.targets[targetIndex].hitPoints -= damage
+            let generation = Int(log2(Double(recipientOrder)).rounded(.down)) + 1
+            arcs.append(VoltArc(
+                source: nodePositions[parentOrder],
+                targetID: target.id,
+                destination: target.position,
+                generation: generation,
+                recipientOrder: recipientOrder,
+                damage: damage,
+                isDefeating: snapshot.targets[targetIndex].hitPoints <= 0
+            ))
+            nodePositions.append(target.position)
+            registerDefeatIfNeeded(at: targetIndex, events: &aftermathEvents)
+        }
+
+        events.append(.voltChain(VoltChainEvent(
+            originTargetID: originTargetID,
+            origin: origin,
+            arcs: arcs
+        )))
+        events.append(contentsOf: aftermathEvents)
     }
 
     private func registerDefeatIfNeeded(
@@ -1434,6 +1656,7 @@ final class GameSimulation {
         case .fire:
             target.burnRemaining = 30
             target.burnTickClock = .greatestFiniteMagnitude
+            target.burnTickDamage = stats.ballDamage * 0.18
         case .ice:
             target.freezeRemaining = 30
         case .reverse:
@@ -1520,7 +1743,7 @@ final class GameSimulation {
         let distance = max(0.001, hypot(dx, dy))
         let speed = max(stats.ballSpeed, hypot(projectile.velocity.x, projectile.velocity.y))
         let desired = Vector2(x: dx / distance * speed, y: dy / distance * speed)
-        let turn = min(1, delta * turnRate)
+        let turn = 1 - exp(-max(0, turnRate) * delta)
         let blended = Vector2(
             x: projectile.velocity.x + (desired.x - projectile.velocity.x) * turn,
             y: projectile.velocity.y + (desired.y - projectile.velocity.y) * turn
@@ -1547,7 +1770,7 @@ final class GameSimulation {
 
     private func curlerTurnRate(rank: Int) -> Double {
         if mode.isEndless {
-            return min(9, 1.8 + Double(rank) * 1.7)
+            return EndlessAbilityRules.curlerTurnRate(rank: rank)
         }
         return [0, 3.5, 6.5, 9][min(max(rank, 0), 3)]
     }
@@ -1814,8 +2037,38 @@ final class GameSimulation {
         case .ice: .ice
         case .reverse: .reverse
         case .split: .split
+        case .volt: .volt
         case .rapidFire, .heatSeeking, .orbitShot, .solarPierce, nil: .standard
         }
+    }
+
+    private func impactEvent(
+        for target: TargetState,
+        damage: Double,
+        flavor: DamageFlavor,
+        critical: Bool,
+        delivery: ImpactDelivery,
+        impulse: Vector2
+    ) -> SimulationEvent {
+        let length = hypot(impulse.x, impulse.y)
+        let normalizedImpulse: Vector2
+        if delivery == .damageOverTime {
+            normalizedImpulse = .init(x: 0, y: 0)
+        } else if length > 0.0001 {
+            normalizedImpulse = .init(x: impulse.x / length, y: impulse.y / length)
+        } else {
+            normalizedImpulse = .init(x: 0, y: 1)
+        }
+        return .impact(ImpactEvent(
+            targetID: target.id,
+            position: target.position,
+            impulse: normalizedImpulse,
+            damage: damage,
+            flavor: flavor,
+            isCritical: critical,
+            isDefeating: target.hitPoints <= 0,
+            delivery: delivery
+        ))
     }
 
     private func randomSpawnX(near y: Double) -> Double {

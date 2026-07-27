@@ -10,6 +10,7 @@ enum TemporaryBallAbility: String, CaseIterable, Identifiable, Sendable {
     case heatSeeking
     case orbitShot
     case solarPierce
+    case volt
 
     var id: String { rawValue }
 }

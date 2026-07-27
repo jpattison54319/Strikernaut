@@ -4,9 +4,21 @@ struct GameDestinationBar: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let title: String
-    let trailingText: String
+    let trailingText: String?
     let onHome: () -> Void
-    let onInfo: () -> Void
+    let onInfo: (() -> Void)?
+
+    init(
+        title: String,
+        trailingText: String? = nil,
+        onHome: @escaping () -> Void,
+        onInfo: (() -> Void)? = nil
+    ) {
+        self.title = title
+        self.trailingText = trailingText
+        self.onHome = onHome
+        self.onInfo = onInfo
+    }
 
     var body: some View {
         Group {
@@ -45,7 +57,9 @@ struct GameDestinationBar: View {
     private var accessibilityControls: some View {
         VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
             homeButton
-            infoButton
+            if onInfo != nil, trailingText != nil {
+                infoButton
+            }
         }
         .frame(maxWidth: .infinity)
         .foregroundStyle(.white)
@@ -63,8 +77,7 @@ struct GameDestinationBar: View {
                 .frame(minWidth: 88, maxWidth: .infinity)
                 .layoutPriority(1)
 
-            infoButton
-                .fixedSize(horizontal: true, vertical: false)
+            trailingControl
         }
         .foregroundStyle(.white)
         .buttonStyle(.plain)
@@ -79,8 +92,10 @@ struct GameDestinationBar: View {
                 homeButton
                     .fixedSize(horizontal: true, vertical: false)
                 Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
-                infoButton
-                    .fixedSize(horizontal: true, vertical: false)
+                if onInfo != nil, trailingText != nil {
+                    infoButton
+                        .fixedSize(horizontal: true, vertical: false)
+                }
             }
         }
         .foregroundStyle(.white)
@@ -103,9 +118,9 @@ struct GameDestinationBar: View {
     }
 
     private var infoButton: some View {
-        Button(action: onInfo) {
+        Button(action: { onInfo?() }) {
             HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
-                Text(trailingText)
+                Text(trailingText ?? "")
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     .fixedSize(horizontal: false, vertical: true)
                 Image(systemName: "info.circle.fill")
@@ -119,6 +134,20 @@ struct GameDestinationBar: View {
                 minHeight: GoalRushTheme.Metrics.minimumTapTarget,
                 alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center
             )
+        }
+    }
+
+    @ViewBuilder
+    private var trailingControl: some View {
+        if onInfo != nil, trailingText != nil {
+            infoButton
+                .fixedSize(horizontal: true, vertical: false)
+        } else {
+            homeButton
+                .hidden()
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
+                .fixedSize(horizontal: true, vertical: false)
         }
     }
 }

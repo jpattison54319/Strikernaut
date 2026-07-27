@@ -50,16 +50,20 @@ final class GameAudio {
     private func handleAudio(for event: SimulationEvent) -> HapticFeedback? {
         switch event {
         case .kick: play("kick", volume: 0.34); return .kick
-        case .impact(_, _, _, let critical):
-            play("impact", volume: critical ? 0.58 : 0.28)
-            return critical ? .critical : .impact
+        case .impact(let impact):
+            if impact.delivery == .damageOverTime {
+                play("impact", volume: 0.16)
+                return nil
+            }
+            play("impact", volume: impact.isCritical || impact.isDefeating ? 0.62 : 0.30)
+            return impact.isCritical || impact.isDefeating ? .critical : .impact
         case .elementalReaction:
             return nil
         case .reward: play("coin", volume: 0.52); return .reward
         case .heal: play("heal", volume: 0.52); return .reward
         case .damage: play("impact", volume: 0.78); return .damage
         case .checkpoint: play("confirm", volume: 0.50); return .success
-        case .abilityChosen: play("confirm", volume: 0.58); return .success
+        case .upgradeChosen: play("confirm", volume: 0.58); return .success
         case .bossPhase: play("boss-phase", volume: 0.84); return .boss
         case .bossAttackTelegraphed:
             play("ui-whoosh", volume: 0.72)
@@ -101,6 +105,9 @@ final class GameAudio {
         case .characterShockwaveHit:
             play("impact", volume: 0.22)
             return nil
+        case .voltChain:
+            play("volt-chain", volume: 0.68)
+            return .critical
         case .finished(let won):
             play(won ? "victory" : "defeat", volume: won ? 0.72 : 0.58)
             return won ? .success : .damage
@@ -136,7 +143,8 @@ final class GameAudio {
             .init(name: "defeat", resources: ["defeat"], voiceCount: 1),
             .init(name: "boss-phase", resources: ["boss-phase"], voiceCount: 2),
             .init(name: "ui-combo", resources: ["ui-combo"], voiceCount: 3),
-            .init(name: "ui-whoosh", resources: ["ui-whoosh"], voiceCount: 4)
+            .init(name: "ui-whoosh", resources: ["ui-whoosh"], voiceCount: 4),
+            .init(name: "volt-chain", resources: ["volt-chain"], voiceCount: 3)
         ]
         await effects.prepare(specs: poolSpecs)
     }

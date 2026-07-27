@@ -13,7 +13,8 @@ enum GameNodeFactory {
             "SoccerBallFire",
             "SoccerBallIce",
             "SoccerBallReverse",
-            "SoccerBallSplit"
+            "SoccerBallSplit",
+            "SoccerBallVolt"
         ]
         return Dictionary(uniqueKeysWithValues: names.map { name in
             let texture = SKTexture(imageNamed: name)
@@ -594,16 +595,19 @@ enum GameNodeFactory {
         case .heatSeeking: ("SoccerBallRapidFire", color(0.10, 0.86, 1), 34)
         case .orbitShot: ("SoccerBallReverse", color(0.55, 0.48, 1), 36)
         case .solarPierce: ("SoccerBallFire", color(1, 0.72, 0.08), 36)
+        case .volt: ("SoccerBallVolt", color(0.06, 0.82, 1), 38)
         case nil: ("SoccerBall", color(0.05, 0.30, 0.78), 27)
         }
         ball.texture = projectileTextures[presentation.asset]
         ball.size = CGSize(width: presentation.size, height: presentation.size)
         ball.color = .white
         ball.colorBlendFactor = 0
-        halo.strokeColor = temporaryAbility == .heatSeeking
+        halo.strokeColor = temporaryAbility == .heatSeeking || temporaryAbility == .volt
             ? color(0.10, 0.86, 1)
             : (critical ? color(1, 0.78, 0.12) : .clear)
-        halo.glowWidth = temporaryAbility == .heatSeeking ? 7 : (critical ? 7 : 0)
+        halo.glowWidth = temporaryAbility == .volt
+            ? 12
+            : (temporaryAbility == .heatSeeking ? 7 : (critical ? 7 : 0))
         trail.fillColor = presentation.accent.withAlphaComponent(0.46)
     }
 
@@ -643,7 +647,9 @@ enum GameNodeFactory {
     }
 
     private static func installStatusEffects(on root: TargetRenderNode, kind: TargetState.Kind) {
-        let parent = root.childNode(withName: "motion-body") ?? root
+        let parent = root.childNode(withName: "//hit-reaction")
+            ?? root.childNode(withName: "motion-body")
+            ?? root
         let profile = statusProfile(for: kind)
 
         let underlay = SKNode()
@@ -990,6 +996,7 @@ enum GameNodeFactory {
         case .heatSeeking: color(0.12, 0.88, 1)
         case .orbitShot: color(0.58, 0.48, 1)
         case .solarPierce: color(1, 0.72, 0.08)
+        case .volt: color(0.08, 0.84, 1)
         }
     }
 
@@ -1004,6 +1011,7 @@ enum GameNodeFactory {
         case .heatSeeking: "◎"
         case .orbitShot: "◉"
         case .solarPierce: "☀"
+        case .volt: "ϟ"
         }
     }
 
@@ -1271,10 +1279,14 @@ enum GameNodeFactory {
     }
 
     private static func motionBody(on root: SKNode) -> SKNode {
-        let rig = SKNode()
-        rig.name = "motion-body"
-        root.addChild(rig)
-        return rig
+        let motionRig = SKNode()
+        motionRig.name = "motion-body"
+        root.addChild(motionRig)
+
+        let hitReactionRig = SKNode()
+        hitReactionRig.name = "hit-reaction"
+        motionRig.addChild(hitReactionRig)
+        return hitReactionRig
     }
 
     private static func articulatedLimb(name: String, position: CGPoint, rotation: CGFloat) -> SKNode {

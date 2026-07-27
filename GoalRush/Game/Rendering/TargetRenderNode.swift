@@ -25,6 +25,8 @@ final class TargetRenderNode: SKNode {
     }
 
     private(set) weak var motionRig: SKNode?
+    private(set) weak var hitReactionRig: SKNode?
+    private(set) weak var bodySprite: SKSpriteNode?
     private(set) weak var healthFill: SKNode?
     private(set) weak var regularHealthBackground: SKNode?
     private(set) weak var regularHealthFill: SKNode?
@@ -53,16 +55,18 @@ final class TargetRenderNode: SKNode {
 
     func cacheRenderNodes() {
         motionRig = childNode(withName: "motion-body")
+        hitReactionRig = childNode(withName: "//hit-reaction")
+        bodySprite = childNode(withName: "//body-sprite") as? SKSpriteNode
         regularHealthBackground = childNode(withName: "health-background")
         regularHealthFill = regularHealthBackground?.childNode(withName: "health-fill")
         bossHealthPlate = childNode(withName: "boss-health")
         bossHealthFill = bossHealthPlate?.childNode(withName: "boss-health-track/boss-health-fill")
         bossHealthIcon = bossHealthPlate?.childNode(withName: "boss-health-icon") as? SKSpriteNode
         healthFill = regularHealthFill
-        leftLeg = motionRig?.childNode(withName: "left-leg")
-        rightLeg = motionRig?.childNode(withName: "right-leg")
-        leftArm = motionRig?.childNode(withName: "left-arm")
-        rightArm = motionRig?.childNode(withName: "right-arm")
+        leftLeg = hitReactionRig?.childNode(withName: "left-leg")
+        rightLeg = hitReactionRig?.childNode(withName: "right-leg")
+        leftArm = hitReactionRig?.childNode(withName: "left-arm")
+        rightArm = hitReactionRig?.childNode(withName: "right-arm")
         statusUnderlay = childNode(withName: "//status-underlay")
         statusOverlay = childNode(withName: "//status-overlay")
         frostGlaze = childNode(withName: "//status-frost-glaze")
@@ -71,9 +75,10 @@ final class TargetRenderNode: SKNode {
         fireFront = childNode(withName: "//status-fire-front")
         stunArcs = childNode(withName: "//status-stun-arcs")
         reverseTrail = childNode(withName: "//status-reverse-trail")
-        motionLights = motionRig?.children.filter { $0.name == "motion-light" } ?? []
+        motionLights = hitReactionRig?.children.filter { $0.name == "motion-light" } ?? []
         cacheTintableNodes()
         resetStatusEffects()
+        resetHitReaction()
     }
 
     func configureHealthPresentation(isBoss: Bool, bossIconTexture: SKTexture?) {
@@ -136,6 +141,78 @@ final class TargetRenderNode: SKNode {
         lastStatusRemaining = 0
     }
 
+    func playHitReaction(_ impact: ImpactEvent, reducedMotion: Bool) {
+        guard let hitReactionRig else { return }
+        resetHitTransform()
+        flashModel(strength: impact.delivery == .damageOverTime ? 0.34 : 0.82)
+
+        if impact.delivery == .damageOverTime {
+            let pulse = reducedMotion ? 1.012 : 1.035
+            hitReactionRig.run(.sequence([
+                .scale(to: pulse, duration: 0.035),
+                .scale(to: 1, duration: 0.075)
+            ]), withKey: "hit-reaction")
+            return
+        }
+
+        if reducedMotion {
+            hitReactionRig.run(.sequence([
+                .scale(to: impact.isCritical ? 1.04 : 1.025, duration: 0.035),
+                .scale(to: 1, duration: 0.085)
+            ]), withKey: "hit-reaction")
+            return
+        }
+
+        let bossMultiplier: CGFloat = showsBossHealth ? 0.42 : 1
+        let distance: CGFloat = (impact.isCritical ? 15 : 9) * bossMultiplier
+        let squashX: CGFloat = impact.isCritical ? 1.13 : 1.08
+        let squashY: CGFloat = impact.isCritical ? 0.78 : 0.85
+        let rotation = CGFloat(-impact.impulse.x) * (impact.isCritical ? 0.11 : 0.065) * bossMultiplier
+        let recoil = CGPoint(
+            x: CGFloat(impact.impulse.x) * distance,
+            y: CGFloat(impact.impulse.y) * distance
+        )
+        let snapDuration = impact.isCritical ? 0.045 : 0.04
+        let returnDuration = impact.isCritical ? 0.16 : 0.13
+        let snap = SKAction.group([
+            .move(to: recoil, duration: snapDuration),
+            .scaleX(to: squashX, y: squashY, duration: snapDuration),
+            .rotate(toAngle: rotation, duration: snapDuration, shortestUnitArc: true)
+        ])
+        snap.timingMode = .easeOut
+        let settle = SKAction.group([
+            .move(to: .zero, duration: returnDuration),
+            .scaleX(to: 1, y: 1, duration: returnDuration),
+            .rotate(toAngle: 0, duration: returnDuration, shortestUnitArc: true)
+        ])
+        settle.timingMode = .easeOut
+        hitReactionRig.run(.sequence([snap, settle]), withKey: "hit-reaction")
+    }
+
+    func resetHitReaction() {
+        removeAction(forKey: "hit-flash")
+        resetHitTransform()
+        restoreActivePalette()
+    }
+
+    private func resetHitTransform() {
+        hitReactionRig?.removeAction(forKey: "hit-reaction")
+        hitReactionRig?.position = .zero
+        hitReactionRig?.zRotation = 0
+        hitReactionRig?.xScale = 1
+        hitReactionRig?.yScale = 1
+    }
+
+    private func flashModel(strength: CGFloat) {
+        removeAction(forKey: "hit-flash")
+        restoreActivePalette()
+        tintModel(toward: .white, amount: strength)
+        run(.sequence([
+            .wait(forDuration: 0.052),
+            .run { [weak self] in self?.restoreActivePalette() }
+        ]), withKey: "hit-flash")
+    }
+
     private func transitionIn(_ status: StatusVisual, reducedMotion: Bool, reapplication: Bool) {
         switch status {
         case .none:
@@ -146,26 +223,26 @@ final class TargetRenderNode: SKNode {
             statusOverlay?.alpha = 1
             frostGlaze?.alpha = 0.72
             iceCrystals?.alpha = 1
-            tintModel(toward: SKColor(red: 0.16, green: 0.66, blue: 1, alpha: 1), amount: 0.46)
+            applyStatusTintUnlessFlashing(.frozen)
             animateIce(reducedMotion: reducedMotion, pulse: reapplication)
         case .burning:
             statusUnderlay?.alpha = 1
             statusOverlay?.alpha = 1
             fireBack?.alpha = 0.82
             fireFront?.alpha = 1
-            tintModel(toward: SKColor(red: 1, green: 0.31, blue: 0.03, alpha: 1), amount: 0.24)
+            applyStatusTintUnlessFlashing(.burning)
             animateFire(reducedMotion: reducedMotion, pulse: reapplication)
         case .stunned:
             statusUnderlay?.alpha = 1
             statusOverlay?.alpha = 1
             stunArcs?.alpha = 1
-            tintModel(toward: SKColor(red: 0.24, green: 0.88, blue: 1, alpha: 1), amount: 0.22)
+            applyStatusTintUnlessFlashing(.stunned)
             animateStun(reducedMotion: reducedMotion, pulse: reapplication)
         case .reversed:
             statusUnderlay?.alpha = 1
             statusOverlay?.alpha = 1
             reverseTrail?.alpha = 0.88
-            tintModel(toward: SKColor(red: 0.68, green: 0.20, blue: 1, alpha: 1), amount: 0.18)
+            applyStatusTintUnlessFlashing(.reversed)
             animateReverse(reducedMotion: reducedMotion, pulse: reapplication)
         }
     }
@@ -339,6 +416,31 @@ final class TargetRenderNode: SKNode {
         for palette in tintShapes {
             palette.node.fillColor = palette.fill
             palette.node.strokeColor = palette.stroke
+        }
+    }
+
+    private func restoreActivePalette() {
+        restoreModelPalette()
+        applyStatusTint(currentStatus)
+    }
+
+    private func applyStatusTintUnlessFlashing(_ status: StatusVisual) {
+        guard action(forKey: "hit-flash") == nil else { return }
+        applyStatusTint(status)
+    }
+
+    private func applyStatusTint(_ status: StatusVisual) {
+        switch status {
+        case .none:
+            break
+        case .frozen:
+            tintModel(toward: SKColor(red: 0.16, green: 0.66, blue: 1, alpha: 1), amount: 0.46)
+        case .burning:
+            tintModel(toward: SKColor(red: 1, green: 0.31, blue: 0.03, alpha: 1), amount: 0.24)
+        case .stunned:
+            tintModel(toward: SKColor(red: 0.24, green: 0.88, blue: 1, alpha: 1), amount: 0.22)
+        case .reversed:
+            tintModel(toward: SKColor(red: 0.68, green: 0.20, blue: 1, alpha: 1), amount: 0.18)
         }
     }
 

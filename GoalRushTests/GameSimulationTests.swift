@@ -223,8 +223,185 @@ struct GameSimulationTests {
         let simulation = GameSimulation(mode: .endless, progress: .newPlayer, assistMode: false, seed: 1)
         for _ in 0..<40 { simulation.apply(.powerDrive) }
         #expect(simulation.abilityRank(.powerDrive) == 40)
-        #expect(simulation.kickInterval(atAbilityRank: 40) < simulation.kickInterval(atAbilityRank: 39))
-        #expect(simulation.kickInterval(atAbilityRank: 40) > 0.14)
+        #expect(simulation.kickInterval(atAbilityRank: 40) == 0.14)
+        #expect(
+            simulation.quickReleaseDamageMultiplier(atAbilityRank: 40)
+                > simulation.quickReleaseDamageMultiplier(atAbilityRank: 39)
+        )
+    }
+
+    @Test func endlessDraftPoolContainsTenCoreAndSixNonRedundantBallTracks() {
+        let pool = RunUpgradeChoice.endlessPool
+        let ballChoices = pool.compactMap { choice -> TemporaryBallAbility? in
+            if case .specialBall(let ability) = choice { return ability }
+            return nil
+        }
+
+        #expect(pool.count == 16)
+        #expect(Set(pool).count == pool.count)
+        #expect(ballChoices == [.volt, .ice, .fire, .reverse, .explosive, .split])
+        #expect(!ballChoices.contains(.rapidFire))
+        #expect(!ballChoices.contains(.heatSeeking))
+        #expect(!ballChoices.contains(.orbitShot))
+        #expect(!ballChoices.contains(.solarPierce))
+    }
+
+    @Test func endlessSpecialBallSelectionUsesEqualOrderedBuckets() {
+        let ranks = Dictionary(
+            uniqueKeysWithValues: EndlessSpecialBallRules.abilities.map { ($0, 1) }
+        )
+        let count = Double(EndlessSpecialBallRules.abilities.count)
+
+        for (index, ability) in EndlessSpecialBallRules.abilities.enumerated() {
+            let roll = (Double(index) + 0.5) / count
+            #expect(
+                EndlessSpecialBallRules.selectedAbility(ranks: ranks, roll: roll)
+                    == ability
+            )
+        }
+
+        #expect(
+            EndlessSpecialBallRules.selectedAbility(
+                ranks: [.ice: 4, .split: 1],
+                roll: 0.49
+            ) == .ice
+        )
+        #expect(
+            EndlessSpecialBallRules.selectedAbility(
+                ranks: [.ice: 4, .split: 1],
+                roll: 0.50
+            ) == .split
+        )
+    }
+
+    @Test func endlessSpecialBallRanksMatchCampaignAtFiveAndKeepGrowing() {
+        #expect(EndlessSpecialBallRules.scale(rank: 1) < 1)
+        #expect(EndlessSpecialBallRules.scale(rank: 5) == 1)
+        #expect(EndlessSpecialBallRules.scale(rank: 6) > 1)
+        #expect(
+            EndlessSpecialBallRules.fireDuration(rank: 10_001)
+                > EndlessSpecialBallRules.fireDuration(rank: 10_000)
+        )
+        #expect(
+            EndlessSpecialBallRules.explosionDamageMultiplier(rank: 10_001)
+                > EndlessSpecialBallRules.explosionDamageMultiplier(rank: 10_000)
+        )
+        #expect(
+            EndlessSpecialBallRules.splitDamageMultiplier(rank: 10_001)
+                > EndlessSpecialBallRules.splitDamageMultiplier(rank: 10_000)
+        )
+
+        #expect(abs(EndlessSpecialBallRules.iceDuration(rank: 5) - 1.7) < 0.000_001)
+        #expect(abs(EndlessSpecialBallRules.fireDuration(rank: 5) - 4) < 0.000_001)
+        #expect(abs(EndlessSpecialBallRules.reverseDuration(rank: 5) - 2.8) < 0.000_001)
+        #expect(abs(EndlessSpecialBallRules.explosionDamageMultiplier(rank: 5) - 0.55) < 0.000_001)
+        #expect(abs(EndlessSpecialBallRules.explosionRadius(rank: 5) - 0.28) < 0.000_001)
+        #expect(EndlessSpecialBallRules.splitProjectileCount(rank: 5, isCritical: false) == 5)
+        #expect(EndlessSpecialBallRules.splitProjectileCount(rank: 5, isCritical: true) == 8)
+        #expect(abs(EndlessSpecialBallRules.splitDamageMultiplier(rank: 5) - 0.42) < 0.000_001)
+        #expect(abs(EndlessSpecialBallRules.voltDamageMultiplier(recipientOffset: 0, rank: 5) - 0.15) < 0.000_001)
+    }
+
+    @Test func endlessSpecialBallRanksAreRunOnlyAndCampaignRejectsThem() {
+        let endless = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 91
+        )
+        for _ in 0..<7 {
+            endless.apply(.specialBall(.fire))
+        }
+        #expect(endless.specialBallRank(.fire) == 7)
+
+        let nextRun = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 91
+        )
+        #expect(nextRun.specialBallRank(.fire) == 0)
+
+        let campaign = GameSimulation(
+            level: GameContent.level(1),
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 91
+        )
+        campaign.apply(.specialBall(.fire))
+        #expect(campaign.specialBallRank(.fire) == 0)
+    }
+
+    @Test func oneEndlessKickGivesEveryVolleyProjectileTheSameOwnedBallType() {
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 97
+        )
+        simulation.apply(.specialBall(.ice))
+        simulation.apply(.ability(.oneTwo))
+        simulation.apply(.ability(.oneTwo))
+
+        var sawKick = false
+        for _ in 0..<30 where !sawKick {
+            sawKick = simulation.update(delta: 0.05).contains(.kick)
+        }
+
+        let friendly = simulation.snapshot.projectiles.filter { !$0.hostile }
+        #expect(sawKick)
+        #expect(friendly.count == 3)
+        #expect(friendly.allSatisfy { $0.temporaryAbility == .ice })
+    }
+
+    @Test func endlessNeverSpawnsShootablePowerUpsOnRegularOrBossWaves() {
+        let regular = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: true,
+            seed: 101
+        )
+        regular.setWaveDefeatsForTesting(regular.snapshot.waveEnemyQuota / 2)
+        for _ in 0..<400 {
+            _ = regular.update(delta: 0.05)
+        }
+        #expect(!regular.snapshot.targets.contains {
+            if case .powerUp = $0.kind { true } else { false }
+        })
+
+        let boss = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: true,
+            seed: 103
+        )
+        boss.setEndlessWaveForTesting(5)
+        for _ in 0..<400 {
+            _ = boss.update(delta: 0.05)
+        }
+        #expect(!boss.snapshot.targets.contains {
+            if case .powerUp = $0.kind { true } else { false }
+        })
+    }
+
+    @Test func everyEndlessUpgradeCardChangesAtVeryHighRank() {
+        for ability in AbilityKind.allCases {
+            let effect = AbilityPresentation.effect(
+                for: ability,
+                currentRank: 40,
+                isEndless: true,
+                baseKickInterval: 1.12
+            )
+            #expect(effect.current != effect.next, "Expected \(ability) to keep improving")
+        }
+
+        for ability in EndlessSpecialBallRules.abilities {
+            let effect = SpecialBallPresentation.presentation(
+                for: ability,
+                currentRank: 40
+            ).effect
+            #expect(effect.current != effect.next, "Expected \(ability) to keep improving")
+        }
     }
 
     @Test func permanentStatsApplyExpectedModifiers() {
@@ -1352,14 +1529,52 @@ struct GameSimulationTests {
         let events = simulation.update(delta: 0.01)
 
         #expect((simulation.snapshot.targets.first?.hitPoints ?? 500) < 500)
-        #expect(events.contains { event in
-            if case .impact = event { return true }
-            return false
-        })
+        let impact = events.compactMap { event -> ImpactEvent? in
+            if case .impact(let impact) = event { return impact }
+            return nil
+        }.first
+        #expect(impact?.targetID == robot.id)
+        #expect(impact?.delivery == .direct)
+        #expect(impact?.isDefeating == false)
+        #expect(abs(hypot(impact?.impulse.x ?? 0, impact?.impulse.y ?? 0) - 1) < 0.001)
         #expect(simulation.snapshot.projectiles.count == 3)
         #expect(simulation.snapshot.projectiles.contains {
             $0.characterProjectile == .pinballBlitz && $0.contactedTargetIDs.contains(robot.id)
         })
+    }
+
+    @Test func defeatingImpactCarriesTheTargetAndOutcomeNeededByRendering() {
+        var progress = PlayerProgress.newPlayer
+        progress.selectedCharacter = .ace
+        let simulation = GameSimulation(
+            level: GameContent.level(1),
+            progress: progress,
+            assistMode: false,
+            seed: 821
+        )
+        let robot = TargetState(
+            id: 9_021,
+            kind: .enemy(.coneRunner),
+            position: .init(x: -0.07, y: 0.18),
+            hitPoints: 1,
+            maximumHitPoints: 1,
+            phase: 0
+        )
+        simulation.replaceTargetsForTesting([robot])
+        simulation.fullyChargeCharacterAbilityForTesting()
+        _ = simulation.activateCharacterAbility()
+
+        let events = simulation.update(delta: 0.01)
+        let impact = events.compactMap { event -> ImpactEvent? in
+            if case .impact(let impact) = event { return impact }
+            return nil
+        }.first
+
+        #expect(impact?.targetID == robot.id)
+        #expect(impact?.delivery == .direct)
+        #expect(impact?.isDefeating == true)
+        #expect(abs((impact?.position.x ?? 0) - robot.position.x) < 0.001)
+        #expect(abs((impact?.position.y ?? 0) - robot.position.y) < 0.001)
     }
 
     @Test func acePinballsRicochetOffThePlayableTrack() {
@@ -1465,14 +1680,21 @@ struct GameSimulationTests {
         simulation.fullyChargeCharacterAbilityForTesting()
         _ = simulation.activateCharacterAbility()
 
+        var impacts: [ImpactEvent] = []
         for _ in 0..<19 {
-            _ = simulation.update(delta: 0.05)
+            impacts.append(contentsOf: simulation.update(delta: 0.05).compactMap { event in
+                if case .impact(let impact) = event { return impact }
+                return nil
+            })
         }
 
         let collateralHealth = simulation.snapshot.targets
             .first(where: { $0.id == collateralTarget.id })?
             .hitPoints ?? 500
         #expect(collateralHealth < 500)
+        #expect(impacts.contains {
+            $0.targetID == collateralTarget.id && $0.delivery == .area
+        })
     }
 
     @Test func shockwaveBurstsCaptureNewOriginsAndStunOnContact() {
@@ -1545,8 +1767,10 @@ struct GameSimulationTests {
                 )
             )
             let rig = node.childNode(withName: "motion-body")
+            let reactionRig = rig?.childNode(withName: "hit-reaction")
             #expect(rig != nil)
-            #expect(rig?.childNode(withName: "body-sprite") != nil)
+            #expect(reactionRig != nil)
+            #expect(reactionRig?.childNode(withName: "body-sprite") != nil)
             #expect(rig?.childNode(withName: "left-leg") == nil)
             #expect(rig?.childNode(withName: "right-leg") == nil)
         }
@@ -1565,7 +1789,7 @@ struct GameSimulationTests {
                 )
             )
             let rig = node.childNode(withName: "motion-body")
-            let sprite = rig?.childNode(withName: "body-sprite") as? SKSpriteNode
+            let sprite = rig?.childNode(withName: "//body-sprite") as? SKSpriteNode
 
             #expect(rig != nil)
             #expect(sprite?.texture != nil)
@@ -1593,6 +1817,71 @@ struct GameSimulationTests {
         #expect(node.position == startingRootPosition)
         #expect(node.childNode(withName: "motion-body")?.position != startingRigPosition)
         #expect(node.childNode(withName: "health-background")?.position.y == 51)
+    }
+
+    @Test func directImpactAnimatesAnIndependentReactionRigAndFlashesTheModel() {
+        let target = TargetState(
+            id: 1,
+            kind: .enemy(.tackleBot),
+            position: .init(x: 0.4, y: 0.5),
+            hitPoints: 10,
+            maximumHitPoints: 10,
+            phase: 0
+        )
+        let node = GameNodeFactory.target(target) as? TargetRenderNode
+        let rootPosition = node?.position
+        let motionPosition = node?.motionRig?.position
+
+        node?.playHitReaction(
+            ImpactEvent(
+                targetID: target.id,
+                position: target.position,
+                impulse: .init(x: 0.6, y: 0.8),
+                damage: 4,
+                flavor: .standard,
+                isCritical: false,
+                isDefeating: false,
+                delivery: .direct
+            ),
+            reducedMotion: false
+        )
+
+        #expect(node?.hitReactionRig?.action(forKey: "hit-reaction") != nil)
+        #expect(node?.motionRig?.action(forKey: "hit-reaction") == nil)
+        #expect(node?.position == rootPosition)
+        #expect(node?.motionRig?.position == motionPosition)
+        #expect(node?.bodySprite?.colorBlendFactor ?? 0 > 0.81)
+        #expect(node?.childNode(withName: "health-background")?.parent === node)
+    }
+
+    @Test func damageOverTimeUsesAPulseWithoutDirectionalRecoil() {
+        let target = TargetState(
+            id: 2,
+            kind: .enemy(.tackleBot),
+            position: .init(x: 0, y: 0.5),
+            hitPoints: 10,
+            maximumHitPoints: 10,
+            phase: 0
+        )
+        let node = GameNodeFactory.target(target) as? TargetRenderNode
+
+        node?.playHitReaction(
+            ImpactEvent(
+                targetID: target.id,
+                position: target.position,
+                impulse: .init(x: 0, y: 0),
+                damage: 1,
+                flavor: .fire,
+                isCritical: false,
+                isDefeating: false,
+                delivery: .damageOverTime
+            ),
+            reducedMotion: false
+        )
+
+        #expect(node?.hitReactionRig?.action(forKey: "hit-reaction") != nil)
+        #expect(node?.hitReactionRig?.position == .zero)
+        #expect(node?.hitReactionRig?.zRotation == 0)
     }
 
     @Test func coneWigglesWithoutGrowingHumanoidLimbs() {
@@ -1659,7 +1948,7 @@ struct GameSimulationTests {
         GameNodeFactory.updateStatus(on: node, target: target, reducedMotion: false)
 
         let rig = node.childNode(withName: "motion-body")
-        let body = rig?.childNode(withName: "body-sprite") as? SKSpriteNode
+        let body = rig?.childNode(withName: "//body-sprite") as? SKSpriteNode
         #expect(rig?.position == .zero)
         #expect(rig?.zRotation == 0)
         #expect(body?.colorBlendFactor ?? 0 > 0.4)
@@ -2007,6 +2296,244 @@ struct GameSimulationTests {
         #expect(simulation.snapshot.temporaryAbilityRemaining == 0)
     }
 
+    @Test func voltBallIsASevenSecondRareUniversalPower() {
+        #expect(TemporaryAbilityRules.duration(for: .volt) == 7)
+        #expect(TemporaryAbilityRules.title(for: .volt) == "Volt Ball")
+        #expect(TemporaryAbilityRules.icon(for: .volt) == "bolt.horizontal.fill")
+        #expect(TemporaryAbilityRules.voltSpawnChance == 0.15)
+
+        for world in WorldID.allCases {
+            let powers = GameContent.world(world).temporaryPowers
+            #expect(TemporaryAbilityRules.spawnedAbility(
+                worldPowers: powers,
+                universalRoll: 0.149,
+                worldRoll: 0.9
+            ) == .volt)
+            #expect(TemporaryAbilityRules.spawnedAbility(
+                worldPowers: powers,
+                universalRoll: 0.15,
+                worldRoll: 0
+            ) == powers[0])
+            #expect(TemporaryAbilityRules.spawnedAbility(
+                worldPowers: powers,
+                universalRoll: 0.99,
+                worldRoll: 0.999
+            ) == powers[2])
+        }
+    }
+
+    @Test func voltChainOrdersEveryEnemyAndBuildsOneTwoFourBranches() throws {
+        let simulation = GameSimulation(
+            level: GameContent.level(10),
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 607
+        )
+        let origin = TargetState(
+            id: 10_000,
+            kind: .enemy(.dummyDefender),
+            position: .init(x: 0, y: 0.18),
+            hitPoints: 1_000,
+            maximumHitPoints: 1_000,
+            phase: 0
+        )
+        let enemyPositions: [Vector2] = [
+            .init(x: 0.10, y: 0.30),
+            .init(x: -0.20, y: 0.34),
+            .init(x: 0.26, y: 0.38),
+            .init(x: -0.34, y: 0.45),
+            .init(x: 0.42, y: 0.50),
+            .init(x: -0.50, y: 0.58),
+            .init(x: 0.60, y: 0.68)
+        ]
+        let enemies = enemyPositions.enumerated().map { offset, position in
+            TargetState(
+                id: 10_001 + offset,
+                kind: .enemy(offset == 6 ? .titanKeeper : .tackleBot),
+                position: position,
+                hitPoints: 1_000,
+                maximumHitPoints: 1_000,
+                phase: 0,
+                bossTier: offset == 6 ? .megaBoss : .standard,
+                waveRole: offset == 5 ? .reinforcement : .quota
+            )
+        }
+        let excluded = [
+            TargetState(
+                id: 10_100,
+                kind: .fieldObject(.ballCart),
+                position: .init(x: 0.04, y: 0.24),
+                hitPoints: 100,
+                maximumHitPoints: 100,
+                phase: 0
+            ),
+            TargetState(
+                id: 10_101,
+                kind: .powerUp(.fire),
+                position: .init(x: -0.05, y: 0.25),
+                hitPoints: 1,
+                maximumHitPoints: 1,
+                phase: 0
+            ),
+            TargetState(
+                id: 10_102,
+                kind: .volatileCore,
+                position: .init(x: 0.06, y: 0.26),
+                hitPoints: 1,
+                maximumHitPoints: 1,
+                phase: 0
+            )
+        ]
+        simulation.replaceTargetsForTesting([origin] + enemies + excluded)
+        simulation.spawnFriendlyProjectileForTesting(pierce: 3, temporaryAbility: .volt)
+
+        let events = simulation.update(delta: 0.01)
+        let chain = try #require(events.compactMap { event -> VoltChainEvent? in
+            if case .voltChain(let chain) = event { return chain }
+            return nil
+        }.first)
+        let directImpact = try #require(events.compactMap { event -> ImpactEvent? in
+            if case .impact(let impact) = event { return impact }
+            return nil
+        }.first)
+
+        #expect(directImpact.targetID == origin.id)
+        #expect(directImpact.flavor == .volt)
+        #expect(chain.originTargetID == origin.id)
+        #expect(Set(chain.arcs.map(\.targetID)) == Set(enemies.map(\.id)))
+        let distances = chain.arcs.map {
+            hypot(
+                $0.destination.x - chain.origin.x,
+                $0.destination.y - chain.origin.y
+            )
+        }
+        #expect(zip(distances, distances.dropFirst()).allSatisfy { $0 <= $1 })
+        #expect(chain.arcs.map(\.generation) == [1, 2, 2, 3, 3, 3, 3])
+        #expect(chain.arcs[0].source == chain.origin)
+        #expect(chain.arcs[1].source == chain.arcs[0].destination)
+        #expect(chain.arcs[2].source == chain.arcs[0].destination)
+        #expect(chain.arcs[3].source == chain.arcs[1].destination)
+        #expect(chain.arcs[4].source == chain.arcs[1].destination)
+        #expect(chain.arcs[5].source == chain.arcs[2].destination)
+        #expect(chain.arcs[6].source == chain.arcs[2].destination)
+        for (offset, arc) in chain.arcs.enumerated() {
+            let expectedDamage = 10 * (0.15 + Double(offset) * 0.05)
+            #expect(abs(arc.damage - expectedDamage) < 0.000_001)
+        }
+        #expect(Set(chain.arcs.map(\.targetID)).isDisjoint(with: excluded.map(\.id)))
+    }
+
+    @Test func onePiercingVoltBallTriggersOnlyOneChainButSeparateBallsEachTrigger() {
+        let makeSimulation = {
+            let simulation = GameSimulation(
+                level: GameContent.level(4),
+                progress: .newPlayer,
+                assistMode: false,
+                seed: 613
+            )
+            simulation.replaceTargetsForTesting([
+                TargetState(
+                    id: 11_000,
+                    kind: .enemy(.dummyDefender),
+                    position: .init(x: 0, y: 0.18),
+                    hitPoints: 1_000,
+                    maximumHitPoints: 1_000,
+                    phase: 0
+                ),
+                TargetState(
+                    id: 11_001,
+                    kind: .enemy(.tackleBot),
+                    position: .init(x: 0, y: 0.34),
+                    hitPoints: 1_000,
+                    maximumHitPoints: 1_000,
+                    phase: 0
+                ),
+                TargetState(
+                    id: 11_002,
+                    kind: .enemy(.keeperDrone),
+                    position: .init(x: 0, y: 0.52),
+                    hitPoints: 1_000,
+                    maximumHitPoints: 1_000,
+                    phase: 0
+                )
+            ])
+            return simulation
+        }
+
+        let piercing = makeSimulation()
+        piercing.spawnFriendlyProjectileForTesting(pierce: 3, temporaryAbility: .volt)
+        var piercingChainCount = 0
+        var directHitIDs: [Int] = []
+        for _ in 0..<60 {
+            for event in piercing.update(delta: 0.01) {
+                if case .voltChain = event {
+                    piercingChainCount += 1
+                } else if case .impact(let impact) = event, impact.delivery == .direct {
+                    directHitIDs.append(impact.targetID)
+                }
+            }
+        }
+        #expect(piercingChainCount == 1)
+        #expect(Set(directHitIDs).count >= 2)
+
+        let volley = makeSimulation()
+        volley.spawnFriendlyProjectileForTesting(pierce: 0, temporaryAbility: .volt)
+        volley.spawnFriendlyProjectileForTesting(pierce: 0, temporaryAbility: .volt)
+        let volleyChains = volley.update(delta: 0.01).count {
+            if case .voltChain = $0 { return true }
+            return false
+        }
+        #expect(volleyChains == 2)
+    }
+
+    @Test func voltChainDefeatsUseNormalComboQuotaRewardAndChargeBookkeeping() {
+        let simulation = GameSimulation(
+            level: GameContent.level(1),
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 619
+        )
+        simulation.replaceTargetsForTesting([
+            TargetState(
+                id: 12_000,
+                kind: .enemy(.coneRunner),
+                position: .init(x: 0, y: 0.18),
+                hitPoints: 1,
+                maximumHitPoints: 1,
+                phase: 0
+            ),
+            TargetState(
+                id: 12_001,
+                kind: .enemy(.coneRunner),
+                position: .init(x: 0.14, y: 0.30),
+                hitPoints: 1,
+                maximumHitPoints: 1,
+                phase: 0
+            ),
+            TargetState(
+                id: 12_002,
+                kind: .enemy(.coneRunner),
+                position: .init(x: -0.24, y: 0.36),
+                hitPoints: 1,
+                maximumHitPoints: 1,
+                phase: 0
+            )
+        ])
+        simulation.spawnFriendlyProjectileForTesting(pierce: 0, temporaryAbility: .volt)
+
+        let events = simulation.update(delta: 0.01)
+
+        #expect(simulation.snapshot.targets.isEmpty)
+        #expect(simulation.snapshot.waveDefeats == 3)
+        #expect(simulation.snapshot.targetsDefeated == 3)
+        #expect(simulation.snapshot.combo == 3)
+        #expect(simulation.snapshot.characterAbilityCharge > 0)
+        #expect(events.count {
+            if case .reward = $0 { return true }
+            return false
+        } == 3)
+    }
+
     @Test func iceAndSplitPowersProduceDistinctCombatEffects() {
         let ice = GameSimulation(level: GameContent.level(4), progress: .newPlayer, assistMode: true, seed: 21)
         ice.activateTemporaryAbility(.ice)
@@ -2018,7 +2545,7 @@ struct GameSimulationTests {
             }
             let events = ice.update(delta: 0.05)
             sawIceDamage = sawIceDamage || events.contains { event in
-                if case .impact(_, _, .ice, _) = event { true } else { false }
+                if case .impact(let impact) = event { impact.flavor == .ice } else { false }
             }
             sawFrozenEnemy = sawFrozenEnemy || ice.snapshot.targets.contains { $0.freezeRemaining > 0 }
         }
@@ -2065,8 +2592,8 @@ struct GameSimulationTests {
                 }
                 let events = simulation.update(delta: 0.05)
                 sawFlavor = sawFlavor || events.contains { event in
-                    if case .impact(_, _, let eventFlavor, _) = event {
-                        eventFlavor == flavor
+                    if case .impact(let impact) = event {
+                        impact.flavor == flavor
                     } else {
                         false
                     }
@@ -2083,6 +2610,38 @@ struct GameSimulationTests {
             #expect(sawFlavor)
             #expect(sawStatus)
         }
+    }
+
+    @Test func burningTicksPublishNonRecoilImpactMetadata() {
+        let simulation = GameSimulation(
+            level: GameContent.level(4),
+            progress: .newPlayer,
+            assistMode: true,
+            seed: 311
+        )
+        simulation.activateTemporaryAbility(.fire)
+        var directImpact: ImpactEvent?
+        var damageOverTimeImpact: ImpactEvent?
+
+        for _ in 0..<600 where directImpact == nil || damageOverTimeImpact == nil {
+            if let target = simulation.snapshot.targets.first {
+                simulation.setPlayerTarget(x: target.position.x)
+            }
+            for event in simulation.update(delta: 0.05) {
+                guard case .impact(let impact) = event, impact.flavor == .fire else { continue }
+                if impact.delivery == .direct {
+                    directImpact = directImpact ?? impact
+                } else if impact.delivery == .damageOverTime {
+                    damageOverTimeImpact = damageOverTimeImpact ?? impact
+                }
+            }
+        }
+
+        #expect(directImpact?.delivery == .direct)
+        #expect(damageOverTimeImpact?.delivery == .damageOverTime)
+        #expect(damageOverTimeImpact?.impulse == .init(x: 0, y: 0))
+        #expect(damageOverTimeImpact?.isCritical == false)
+        #expect(damageOverTimeImpact?.targetID == directImpact?.targetID)
     }
 
     @Test func fireAndIceReplaceEachOtherWithAReactionInsteadOfStacking() {

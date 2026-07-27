@@ -386,6 +386,38 @@ final class GoalRushUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testVoltBallChainsEnemySwarmInNormalAndReducedEffectsModes() {
+        for reducedEffects in [false, true] {
+            let app = XCUIApplication()
+            app.launchArguments = [
+                "--reset-save",
+                "--level", "1",
+                "--fixed-seed", "607",
+                "--temporary-ability", "volt",
+                "--enemy-swarm-preview",
+                "--auto-kick-off"
+            ]
+            if reducedEffects {
+                app.launchArguments.append("--reduced-effects")
+            }
+            app.launch()
+
+            let timer = app.otherElements["temporary-ability-timer"]
+            XCTAssertTrue(timer.waitForExistence(timeout: 3))
+            XCTAssertEqual(timer.label, "Volt Ball")
+            XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 3))
+            sleep(3)
+
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = reducedEffects
+                ? "Volt Ball Chain - Reduced Effects"
+                : "Volt Ball Chain - Animated"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            app.terminate()
+        }
+    }
+
     func testElementalStatusEffectsRenderOnLiveEnemyModels() {
         for ability in ["ice", "fire", "reverse"] {
             let app = XCUIApplication()
@@ -463,11 +495,19 @@ final class GoalRushUITests: XCTestCase {
         app.launch()
         app.buttons["Kick Off"].tap()
 
-        XCTAssertTrue(app.staticTexts["Upgrade for Wave 2 of 3"].waitForExistence(timeout: 3))
-        XCTAssertTrue(
-            app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "ability-"))
-                .firstMatch.exists
+        XCTAssertTrue(app.staticTexts["PICK A POWER"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["WAVE 2 OF 3"].exists)
+        let choices = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "ability-")
         )
+        XCTAssertEqual(choices.count, 3)
+        for index in 0..<choices.count {
+            XCTAssertTrue(choices.element(boundBy: index).isHittable)
+        }
+        let draftScreenshot = XCTAttachment(screenshot: app.screenshot())
+        draftScreenshot.name = "Ability Choice Card Deck"
+        draftScreenshot.lifetime = .keepAlways
+        add(draftScreenshot)
 
         app.terminate()
         app.launchArguments = [
@@ -783,14 +823,16 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(app.buttons["level-preview-play"].exists)
     }
 
-    func testEndlessCircuitStartsOnEarthAndAdvances() {
+    func testEndlessHubIsMinimalAndStartsOnEarth() {
         let app = XCUIApplication()
         app.launchArguments = ["--reset-save", "--screen", "endless", "--fixed-seed", "42"]
         app.launch()
 
-        XCTAssertTrue(app.scrollViews["endless-world-circuit"].waitForExistence(timeout: 3))
-        XCTAssertFalse(app.buttons["endless-world-earth"].exists)
-        XCTAssertFalse(app.buttons["endless-world-mars"].exists)
+        XCTAssertTrue(app.otherElements["endless-last-run"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.otherElements["endless-best"].exists)
+        XCTAssertFalse(app.staticTexts["World Circuit"].exists)
+        XCTAssertFalse(app.staticTexts["New power after every wave"].exists)
+        XCTAssertFalse(app.buttons["Rules"].exists)
         let start = app.buttons["start-endless"]
         XCTAssertEqual(start.label, "Start Endless")
         start.tap()
@@ -805,6 +847,27 @@ final class GoalRushUITests: XCTestCase {
 
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Unified Endless Earth Opening"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testEndlessHubShowsPreviousAndBestRunStats() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--screen", "endless", "--endless-records"
+        ]
+        app.launch()
+
+        let lastRun = app.otherElements["endless-last-run"]
+        let best = app.otherElements["endless-best"]
+        XCTAssertTrue(lastRun.waitForExistence(timeout: 3))
+        XCTAssertEqual(lastRun.value as? String, "Wave 17, score 216,750")
+        XCTAssertTrue(best.exists)
+        XCTAssertEqual(best.value as? String, "Wave 24, score 384,500")
+        XCTAssertEqual(app.buttons["start-endless"].label, "Start Endless")
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Minimal Endless Hub With Records"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
@@ -970,7 +1033,8 @@ final class GoalRushUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["result-more-map"].waitForExistence(timeout: 3))
         app.buttons["result-more-map"].tap()
-        XCTAssertTrue(app.scrollViews["endless-world-circuit"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.otherElements["endless-last-run"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["start-endless"].exists)
 
         app.terminate()
         app.launch()

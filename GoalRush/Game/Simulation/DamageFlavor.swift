@@ -5,4 +5,5 @@ enum DamageFlavor: Equatable, Sendable {
     case ice
     case reverse
     case split
+    case volt
 }

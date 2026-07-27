@@ -8,8 +8,8 @@ final class GameSessionModel {
         case playing
         case paused
         case briefing([CampaignDiscovery])
-        case draft([AbilityKind])
-        case worldTransition(from: WorldID, to: WorldID, draft: [AbilityKind])
+        case draft([RunUpgradeChoice])
+        case worldTransition(from: WorldID, to: WorldID, draft: [RunUpgradeChoice])
         case finished
     }
 
@@ -80,13 +80,17 @@ final class GameSessionModel {
         }
 #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--show-draft") {
-            phase = .draft(mode.isEndless ? [.oneTwo, .meteorStrike, .goldenGoal] : [.oneTwo, .quickRelease, .powerDrive])
+            phase = .draft(
+                mode.isEndless
+                    ? [.specialBall(.volt), .specialBall(.ice), .specialBall(.split)]
+                    : [.ability(.oneTwo), .ability(.quickRelease), .ability(.powerDrive)]
+            )
         }
         if ProcessInfo.processInfo.arguments.contains("--auto-kick-off") {
             if case .briefing = phase {
                 phase = .playing
-            } else if case .draft(let abilities) = phase, let ability = abilities.first {
-                simulation.apply(ability)
+            } else if case .draft(let choices) = phase, let choice = choices.first {
+                simulation.apply(choice)
                 snapshot = simulation.snapshot
                 hudState = HUDState(snapshot: simulation.snapshot)
                 phase = .playing
@@ -168,17 +172,17 @@ final class GameSessionModel {
         lastTime = nil
     }
 
-    func choose(_ ability: AbilityKind) {
+    func choose(_ choice: RunUpgradeChoice) {
         draftsChosen += 1
         let previousStamina = simulation.snapshot.stamina
-        simulation.apply(ability)
+        simulation.apply(choice)
         snapshot = simulation.snapshot
         hudState = HUDState(snapshot: snapshot)
-        recentEvents = [.abilityChosen(ability)]
+        recentEvents = [.upgradeChosen(choice)]
         if snapshot.stamina > previousStamina {
             recentEvents.append(.heal(snapshot.stamina - previousStamina, .init(x: snapshot.playerX, y: 0.16)))
         }
-        lastEvent = .abilityChosen(ability)
+        lastEvent = .upgradeChosen(choice)
         eventPulse += 1
         phase = .playing
         lastTime = nil
@@ -210,15 +214,16 @@ final class GameSessionModel {
         }
     }
 
-    private func makeDraft() -> [AbilityKind] {
-        var pool: [AbilityKind]
+    private func makeDraft() -> [RunUpgradeChoice] {
+        var pool: [RunUpgradeChoice]
         if mode.isEndless {
-            pool = AbilityKind.allCases
+            pool = RunUpgradeChoice.endlessPool
         } else {
             pool = [.powerDrive, .quickRelease, .throughBall, .curler, .oneTwo, .cleanSheet]
                 .filter { simulation.abilityRank($0) < 3 }
+                .map(RunUpgradeChoice.ability)
         }
-        var choices: [AbilityKind] = []
+        var choices: [RunUpgradeChoice] = []
         while choices.count < min(3, pool.count) {
             let index = Int(random.next() % UInt64(pool.count))
             choices.append(pool.remove(at: index))

@@ -104,7 +104,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
     var selectedCharacter: CharacterID
 
     static let newPlayer = PlayerProgress(
-        schemaVersion: 8,
+        schemaVersion: 9,
         trainingTokens: 0,
         highestUnlockedLevel: 1,
         upgradeRanks: [:],
@@ -172,7 +172,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
                 )
             }
         }
-        schemaVersion = 8
+        schemaVersion = 9
     }
 
     enum CodingKeys: String, CodingKey {
@@ -279,7 +279,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(8, forKey: .schemaVersion)
+        try container.encode(9, forKey: .schemaVersion)
         try container.encode(trainingTokens, forKey: .trainingTokens)
         try container.encode(highestUnlockedLevel, forKey: .highestUnlockedLevel)
         try container.encode(upgradeRanks, forKey: .upgradeRanks)
