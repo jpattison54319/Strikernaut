@@ -7,6 +7,7 @@ struct CampaignLandmarkNode: View {
     let symbol: String
     let record: LevelRecord?
     let maximumStamina: Double
+    let isCompleted: Bool
     let isUnlocked: Bool
     let onSelect: () -> Void
 
@@ -83,11 +84,11 @@ struct CampaignLandmarkNode: View {
     }
 
     private var isCurrent: Bool {
-        isUnlocked && record?.completed != true
+        isUnlocked && !isCompleted
     }
 
     private var stars: Int {
-        guard record?.completed == true, maximumStamina > 0 else { return 0 }
+        guard isCompleted, maximumStamina > 0 else { return 0 }
         return StarRating.stars(
             staminaFraction: min(1, (record?.bestStamina ?? 0) / maximumStamina)
         )
@@ -103,7 +104,7 @@ struct CampaignLandmarkNode: View {
         if !isUnlocked {
             return "Challenge \(level.worldLevel), \(level.name), locked"
         }
-        if record?.completed == true {
+        if isCompleted {
             return "Challenge \(level.worldLevel), \(level.name), completed, \(stars) of 3 stars"
         }
         return "Challenge \(level.worldLevel), \(level.name), ready"

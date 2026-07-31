@@ -120,6 +120,9 @@ struct PlayerProgress: Codable, Equatable, Sendable {
     var schemaVersion: Int
     var trainingTokens: Int
     var highestUnlockedLevel: Int
+    var campaignCycle: Int
+    var currentCampaignClears: Set<Int>
+    var highestCompletedCampaignCycle: Int
     var upgradeRanks: [UpgradeTrack: Int]
     var upgradePrestiges: [UpgradeTrack: Int]
     var levelRecords: [Int: LevelRecord]
@@ -136,9 +139,12 @@ struct PlayerProgress: Codable, Equatable, Sendable {
     var selectedCharacter: CharacterID
 
     static let newPlayer = PlayerProgress(
-        schemaVersion: 11,
+        schemaVersion: 12,
         trainingTokens: 0,
         highestUnlockedLevel: 1,
+        campaignCycle: 0,
+        currentCampaignClears: [],
+        highestCompletedCampaignCycle: 0,
         upgradeRanks: [:],
         upgradePrestiges: [:],
         levelRecords: [:],
@@ -165,11 +171,27 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         let isMoonCampaignMigration = schemaVersion < 5
         let isBriefingSeenMigration = schemaVersion < 6
         let isUpgradePrestigeMigration = schemaVersion < 7
+        let isCampaignCycleMigration = schemaVersion < 12
+        campaignCycle = max(0, campaignCycle)
+        highestCompletedCampaignCycle = min(
+            campaignCycle,
+            max(0, highestCompletedCampaignCycle)
+        )
+        currentCampaignClears = Set(currentCampaignClears.filter {
+            GameContent.levels.indices.contains($0 - 1)
+        })
+        if isCampaignCycleMigration {
+            currentCampaignClears.formUnion(
+                levelRecords.compactMap {
+                    $0.value.completed ? $0.key : nil
+                }
+            )
+        }
         highestUnlockedLevel = min(GameContent.levels.count, max(1, highestUnlockedLevel))
-        for world in GameContent.worlds where levelRecords[world.finalLevel]?.completed == true {
+        if let highestClear = currentCampaignClears.max() {
             highestUnlockedLevel = min(
                 GameContent.levels.count,
-                max(highestUnlockedLevel, world.finalLevel + 1)
+                max(highestUnlockedLevel, highestClear + 1)
             )
         }
         if isMoonCampaignMigration {
@@ -205,13 +227,24 @@ struct PlayerProgress: Codable, Equatable, Sendable {
             }
         }
         endlessRecord.reconcileRelics()
-        schemaVersion = 11
+        schemaVersion = 12
+    }
+
+    func hasClearedCurrentCampaignLevel(_ level: Int) -> Bool {
+        currentCampaignClears.contains(level)
+    }
+
+    var canBeginNextCampaignCycle: Bool {
+        currentCampaignClears.contains(GameContent.levels.count)
     }
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion
         case trainingTokens
         case highestUnlockedLevel
+        case campaignCycle
+        case currentCampaignClears
+        case highestCompletedCampaignCycle
         case upgradeRanks
         case upgradePrestiges
         case levelRecords
@@ -234,6 +267,9 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         schemaVersion: Int,
         trainingTokens: Int,
         highestUnlockedLevel: Int,
+        campaignCycle: Int = 0,
+        currentCampaignClears: Set<Int>? = nil,
+        highestCompletedCampaignCycle: Int = 0,
         upgradeRanks: [UpgradeTrack: Int],
         upgradePrestiges: [UpgradeTrack: Int] = [:],
         levelRecords: [Int: LevelRecord],
@@ -252,6 +288,11 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         self.schemaVersion = schemaVersion
         self.trainingTokens = trainingTokens
         self.highestUnlockedLevel = highestUnlockedLevel
+        self.campaignCycle = max(0, campaignCycle)
+        self.currentCampaignClears = currentCampaignClears ?? Set(
+            levelRecords.compactMap { $0.value.completed ? $0.key : nil }
+        )
+        self.highestCompletedCampaignCycle = max(0, highestCompletedCampaignCycle)
         self.upgradeRanks = upgradeRanks
         self.upgradePrestiges = upgradePrestiges
         self.levelRecords = levelRecords
@@ -278,6 +319,21 @@ struct PlayerProgress: Codable, Equatable, Sendable {
         upgradeRanks = container.decodeEnumKeyedMap(forKey: .upgradeRanks)
         upgradePrestiges = container.decodeEnumKeyedMap(forKey: .upgradePrestiges)
         levelRecords = try container.decodeIfPresent([Int: LevelRecord].self, forKey: .levelRecords) ?? [:]
+        campaignCycle = max(
+            0,
+            try container.decodeIfPresent(Int.self, forKey: .campaignCycle) ?? 0
+        )
+        currentCampaignClears = try container.decodeIfPresent(
+            Set<Int>.self,
+            forKey: .currentCampaignClears
+        ) ?? Set(levelRecords.compactMap { $0.value.completed ? $0.key : nil })
+        highestCompletedCampaignCycle = max(
+            0,
+            try container.decodeIfPresent(
+                Int.self,
+                forKey: .highestCompletedCampaignCycle
+            ) ?? 0
+        )
         hasMovedInTutorial = try container.decodeIfPresent(Bool.self, forKey: .hasMovedInTutorial) ?? false
         if let storedRecord = try container.decodeIfPresent(
             EndlessRecord.self,
@@ -312,9 +368,15 @@ struct PlayerProgress: Codable, Equatable, Sendable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(11, forKey: .schemaVersion)
+        try container.encode(12, forKey: .schemaVersion)
         try container.encode(trainingTokens, forKey: .trainingTokens)
         try container.encode(highestUnlockedLevel, forKey: .highestUnlockedLevel)
+        try container.encode(campaignCycle, forKey: .campaignCycle)
+        try container.encode(currentCampaignClears, forKey: .currentCampaignClears)
+        try container.encode(
+            highestCompletedCampaignCycle,
+            forKey: .highestCompletedCampaignCycle
+        )
         try container.encode(upgradeRanks, forKey: .upgradeRanks)
         try container.encode(upgradePrestiges, forKey: .upgradePrestiges)
         try container.encode(levelRecords, forKey: .levelRecords)

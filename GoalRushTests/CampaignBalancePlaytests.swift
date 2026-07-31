@@ -184,17 +184,49 @@ struct CampaignBalancePlaytests {
         let baselineEarthEndlessRun = EconomyBalance.expectedEndlessTokens(
             throughWave: 10
         )
-        #expect(Double(balancedRankThreeCost) - firstPassIncomeBeforeLevelNine
-                > baselineEarthEndlessRun)
+        let remainingGap = Double(balancedRankThreeCost)
+            - firstPassIncomeBeforeLevelNine
+        #expect(remainingGap > 0)
+        #expect(remainingGap < baselineEarthEndlessRun)
+    }
+
+    @Test func newGamePlusEarthRejectsFinaleBuildAndRetainsRecoverySeed() {
+        let seeds: [UInt64] = [11, 29, 47]
+        let baseFinaleBuild = seeds.map {
+            run(level: 1, permanentRank: 30, seed: $0, cycle: 1)
+        }
+        let recoveredBuild = seeds.map {
+            run(level: 1, permanentRank: 35, seed: $0, cycle: 1)
+        }
+
+        #expect(
+            baseFinaleBuild.allSatisfy { !$0.didWin },
+            """
+            A rank-30 finale build should usually fail NG+1 Earth 1. Wins: \
+            \(baseFinaleBuild.map(\.didWin)); progress: \
+            \(baseFinaleBuild.map(\.progress)); stamina: \
+            \(baseFinaleBuild.map(\.stamina)).
+            """
+        )
+        #expect(
+            recoveredBuild.contains { $0.didWin },
+            "A rank-35 build must retain at least one winning deterministic seed."
+        )
+        #expect(
+            recoveredBuild.reduce(0) { $0 + $1.progress }
+                > baseFinaleBuild.reduce(0) { $0 + $1.progress }
+        )
     }
 
     private func run(
         level: Int,
         permanentRank: Int,
         seed: UInt64,
-        character: CharacterID? = nil
+        character: CharacterID? = nil,
+        cycle: Int = 0
     ) -> Outcome {
         var progress = PlayerProgress.newPlayer
+        progress.campaignCycle = cycle
         for track in UpgradeTrack.allCases {
             progress.setRank(permanentRank, for: track)
         }

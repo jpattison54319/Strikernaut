@@ -12,6 +12,7 @@ struct GameContainerView: View {
     @State private var creditedRunTokens = 0
     @State private var lastCheckpoint: RunCheckpoint?
     @State private var checkpointWriteTask: Task<Void, Never>?
+    @State private var savedRunWasInvalidatedByDeath = false
     @State private var isRestarting = false
     @State private var isFinalizing = false
 
@@ -195,7 +196,10 @@ struct GameContainerView: View {
             if phase.isRunCheckpointBoundary {
                 checkpointRunTokens()
                 persistWaveCheckpoint()
-            } else if phase == .paused || phase == .deathSaveOffer {
+            } else if phase == .deathSaveOffer {
+                checkpointRunTokens()
+                invalidateSavedRunAfterDeath()
+            } else if phase == .paused {
                 checkpointRunTokens()
                 persistCheckpointMetadata()
             }
@@ -272,7 +276,7 @@ struct GameContainerView: View {
     private func continueAfterDeathSave() {
         guard session.continueAfterDeathSave() else { return }
         synchronizeScenePlayback()
-        persistCheckpointMetadata()
+        restoreSavedRunAfterRewardedContinue()
         store.uiAudio.play(.fanfare, volume: 0.7)
     }
 
@@ -402,8 +406,16 @@ struct GameContainerView: View {
         isFinalizing = true
         let bonus: Int
         if let level = session.level {
-            let wasCompleted = store.progress.levelRecords[level.number]?.completed == true
-            bonus = didWin ? (wasCompleted ? level.replayBonus : level.firstClearBonus) : 0
+            let wasCompleted = store.progress.hasClearedCurrentCampaignLevel(
+                level.number
+            )
+            let baseBonus = wasCompleted ? level.replayBonus : level.firstClearBonus
+            bonus = didWin
+                ? CampaignDifficulty.scaledCompletionBonus(
+                    baseBonus,
+                    cycle: session.campaignCycle
+                )
+                : 0
         } else {
             bonus = 0
         }
@@ -434,6 +446,7 @@ struct GameContainerView: View {
     }
 
     private func persistWaveCheckpoint() {
+        guard !savedRunWasInvalidatedByDeath else { return }
         guard lastCheckpoint?.wave != session.snapshot.wave,
               let checkpoint = session.makeRunCheckpoint(
                 creditedRunTokens: creditedRunTokens,
@@ -446,6 +459,7 @@ struct GameContainerView: View {
     }
 
     private func persistCheckpointMetadata() {
+        guard !savedRunWasInvalidatedByDeath else { return }
         guard let checkpoint = lastCheckpoint else { return }
         let updated = checkpoint.updatingRunMetadata(
             creditedRunTokens: creditedRunTokens,
@@ -457,6 +471,40 @@ struct GameContainerView: View {
         }
         lastCheckpoint = updated
         enqueueCheckpointWrite(updated)
+    }
+
+    private func invalidateSavedRunAfterDeath() {
+        savedRunWasInvalidatedByDeath = true
+        checkpointWriteTask?.cancel()
+        checkpointWriteTask = Task {
+            try? await store.runCheckpointStore.invalidateAfterDeath(
+                for: session.mode
+            )
+        }
+    }
+
+    private func restoreSavedRunAfterRewardedContinue() {
+        guard savedRunWasInvalidatedByDeath,
+              let checkpoint = lastCheckpoint else {
+            return
+        }
+        let restored = checkpoint.updatingRunMetadata(
+            creditedRunTokens: creditedRunTokens,
+            deathSaveWasUsed: true
+        )
+        savedRunWasInvalidatedByDeath = false
+        lastCheckpoint = restored
+        checkpointWriteTask?.cancel()
+        checkpointWriteTask = Task {
+            // Always finish the death invalidation before making the rewarded
+            // continuation resumable. Closing the app before the reward callback
+            // therefore leaves no live checkpoint to exploit.
+            try? await store.runCheckpointStore.invalidateAfterDeath(
+                for: session.mode
+            )
+            guard !Task.isCancelled else { return }
+            try? await store.runCheckpointStore.save(restored)
+        }
     }
 
     private func enqueueCheckpointWrite(_ checkpoint: RunCheckpoint) {

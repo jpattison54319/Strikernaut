@@ -174,6 +174,13 @@ final class GameStore {
         if arguments.contains("--unlock-worlds") {
             store.progress.highestUnlockedLevel = GameContent.levels.count
         }
+        if arguments.contains("--new-game-plus-ready") {
+            store.progress.highestUnlockedLevel = GameContent.levels.count
+            store.progress.currentCampaignClears = Set(
+                GameContent.levels.map(\.number)
+            )
+            store.selectedWorld = .neptune
+        }
         if arguments.contains("--endless-records") {
             store.progress.endlessRecord = .init(
                 bestWave: 24,
@@ -246,6 +253,21 @@ final class GameStore {
         route = .playing(.campaign(level: level))
     }
 
+    @discardableResult
+    func beginNextCampaignCycle() -> Bool {
+        guard progress.canBeginNextCampaignCycle else { return false }
+        pendingSaveTask?.cancel()
+        progress.campaignCycle += 1
+        progress.currentCampaignClears.removeAll()
+        progress.highestUnlockedLevel = 1
+        selectedLevel = 1
+        selectedWorld = .earth
+        evaluateAchievements()
+        saveProgress()
+        route = .campaign(.worldMap(world: .earth, focusLevel: 1))
+        return true
+    }
+
     func openPlanetJourney(focusing world: WorldID? = nil) {
         let focusedDestinationIndex = world.flatMap { focusedWorld in
             WorldJourneyCatalog.destinations.firstIndex {
@@ -256,6 +278,15 @@ final class GameStore {
             $0.world == selectedWorld
         } ?? 0
         route = .campaign(.planets(page: destinationIndex / WorldJourneyCatalog.pageSize))
+    }
+
+    func openNewGamePlusGateway() {
+        let destinationIndex = WorldJourneyCatalog.destinations.firstIndex {
+            $0.action == .newGamePlus
+        } ?? max(0, WorldJourneyCatalog.destinations.count - 1)
+        route = .campaign(
+            .planets(page: destinationIndex / WorldJourneyCatalog.pageSize)
+        )
     }
 
     func openWorldMap(_ world: WorldID, focusLevel: Int? = nil) {
@@ -295,7 +326,15 @@ final class GameStore {
                 bestStamina: max(previous.bestStamina, result.remainingStamina)
             )
             if result.didWin {
+                progress.currentCampaignClears.insert(levelNumber)
                 progress.highestUnlockedLevel = min(GameContent.levels.count, max(progress.highestUnlockedLevel, levelNumber + 1))
+                if levelNumber == GameContent.levels.count,
+                   progress.campaignCycle > 0 {
+                    progress.highestCompletedCampaignCycle = max(
+                        progress.highestCompletedCampaignCycle,
+                        progress.campaignCycle
+                    )
+                }
                 let world = GameContent.level(levelNumber).world
                 if levelNumber == GameContent.world(world).finalLevel,
                    let character = CharacterCatalog.reward(for: world),
@@ -316,7 +355,8 @@ final class GameStore {
                !record.relics.contains(where: { $0.id == result.runID }),
                let relic = EndlessRelicRules.runReward(
                    runID: result.runID,
-                   waveReached: result.wave
+                   waveReached: result.wave,
+                   newGamePlusCycle: progress.campaignCycle
                ) {
                 record.relics.append(relic)
                 record.lastRewardedRunID = result.runID
@@ -348,7 +388,11 @@ final class GameStore {
             if result.didWin {
                 resetRewardedTokenBonusEligibility()
             }
-            start(level: result.didWin ? min(level + 1, GameContent.levels.count) : level)
+            if result.didWin, level == GameContent.levels.count {
+                openNewGamePlusGateway()
+            } else {
+                start(level: result.didWin ? level + 1 : level)
+            }
         }
     }
 

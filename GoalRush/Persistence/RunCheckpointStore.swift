@@ -22,7 +22,10 @@ actor RunCheckpointStore {
         }
     }
 
-    func load(for mode: RunMode) -> RunCheckpoint? {
+    func load(
+        for mode: RunMode,
+        campaignCycle expectedCampaignCycle: Int? = nil
+    ) -> RunCheckpoint? {
         let fileURL = fileURL(for: mode)
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return nil
@@ -34,6 +37,7 @@ actor RunCheckpointStore {
             guard checkpoint.schemaVersion == RunCheckpoint.currentSchemaVersion,
                   checkpoint.mode == mode,
                   checkpoint.simulation.mode == mode,
+                  expectedCampaignCycle.map({ checkpoint.campaignCycle == $0 }) != false,
                   checkpoint.wave > 1 else {
                 try? FileManager.default.removeItem(at: fileURL)
                 return nil
@@ -80,6 +84,10 @@ actor RunCheckpointStore {
             return
         }
         try FileManager.default.removeItem(at: fileURL)
+    }
+
+    func invalidateAfterDeath(for mode: RunMode) throws {
+        try delete(for: mode)
     }
 
     func reset() throws {

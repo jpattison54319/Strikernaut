@@ -18,7 +18,7 @@ struct WorldLandmarkMapView: View {
         VStack(spacing: 0) {
             CampaignNavigationBar(
                 title: GameContent.world(world).name,
-                subtitle: "\(completedCount)/\(definition.placements.count) CHALLENGES CLEARED",
+                subtitle: navigationSubtitle,
                 backTitle: "Planets",
                 onBack: showPlanets,
                 onHome: goHome
@@ -65,6 +65,9 @@ struct WorldLandmarkMapView: View {
                             symbol: definition.landmarkSymbol,
                             record: store.progress.levelRecords[level.number],
                             maximumStamina: PlayerStats(progress: store.progress).maxStamina,
+                            isCompleted: store.progress.hasClearedCurrentCampaignLevel(
+                                level.number
+                            ),
                             isUnlocked: level.number <= store.progress.highestUnlockedLevel,
                             onSelect: { select(level) }
                         )
@@ -91,6 +94,9 @@ struct WorldLandmarkMapView: View {
                             symbol: definition.landmarkSymbol,
                             record: store.progress.levelRecords[level.number],
                             maximumStamina: PlayerStats(progress: store.progress).maxStamina,
+                            isCompleted: store.progress.hasClearedCurrentCampaignLevel(
+                                level.number
+                            ),
                             isUnlocked: level.number <= store.progress.highestUnlockedLevel,
                             onSelect: { select(level) }
                         )
@@ -108,8 +114,14 @@ struct WorldLandmarkMapView: View {
 
     private var completedCount: Int {
         GameContent.levels(in: world).filter {
-            store.progress.levelRecords[$0.number]?.completed == true
+            store.progress.hasClearedCurrentCampaignLevel($0.number)
         }.count
+    }
+
+    private var navigationSubtitle: String {
+        let progress = "\(completedCount)/\(definition.placements.count) CHALLENGES CLEARED"
+        guard store.progress.campaignCycle > 0 else { return progress }
+        return "NG+\(store.progress.campaignCycle) · \(progress)"
     }
 
     private var focusTarget: Int {
@@ -118,7 +130,7 @@ struct WorldLandmarkMapView: View {
         }
         return GameContent.levels(in: world).first {
             $0.number <= store.progress.highestUnlockedLevel
-                && store.progress.levelRecords[$0.number]?.completed != true
+                && !store.progress.hasClearedCurrentCampaignLevel($0.number)
         }?.number ?? GameContent.world(world).finalLevel
     }
 

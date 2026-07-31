@@ -80,7 +80,7 @@ struct ProgressStoreTests {
 
         progress.reconcileUnlockedContent()
 
-        #expect(progress.schemaVersion == 11)
+        #expect(progress.schemaVersion == 12)
         #expect(progress.highestUnlockedLevel == 31)
         #expect(progress.trainingTokens == 9_999)
         #expect(progress.levelRecords[30]?.bestTokens == 800)
@@ -229,7 +229,7 @@ struct ProgressStoreTests {
 
         progress.reconcileUnlockedContent()
 
-        #expect(progress.schemaVersion == 11)
+        #expect(progress.schemaVersion == 12)
         #expect(progress.prestigeCount(for: .impact) == 2)
         #expect(progress.rank(for: .impact) == 21)
     }
@@ -271,6 +271,7 @@ struct ProgressStoreTests {
     @Test func existingEarthCompletionRetroactivelyUnlocksMoonAndVolt() {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         var progress = PlayerProgress.newPlayer
+        progress.schemaVersion = 11
         progress.highestUnlockedLevel = 10
         progress.levelRecords[10] = .init(completed: true, bestTokens: 100, bestStamina: 20)
         let gameStore = GameStore(
@@ -297,7 +298,7 @@ struct ProgressStoreTests {
             persistence: FileProgressStore(fileURL: directory.appending(path: "save.json"))
         )
 
-        #expect(gameStore.progress.schemaVersion == 11)
+        #expect(gameStore.progress.schemaVersion == 12)
         #expect(gameStore.progress.highestUnlockedLevel == 21)
         #expect(gameStore.progress.unlockedCharacters == [.ace, .volt, .nova])
         #expect(GameContent.isWorldUnlocked(.mars, progress: gameStore.progress))
@@ -446,7 +447,7 @@ struct ProgressStoreTests {
 
         #expect(progress.endlessRecord == .init(bestWave: 24, bestScore: 61_000))
         progress.reconcileUnlockedContent()
-        #expect(progress.schemaVersion == 11)
+        #expect(progress.schemaVersion == 12)
 
         let encoded = try JSONEncoder().encode(progress)
         let object = try #require(
@@ -480,7 +481,7 @@ struct ProgressStoreTests {
         """
         var progress = try JSONDecoder().decode(PlayerProgress.self, from: Data(json.utf8))
         progress.reconcileUnlockedContent()
-        #expect(progress.schemaVersion == 11)
+        #expect(progress.schemaVersion == 12)
         #expect(progress.trainingTokens == 321)
         #expect(progress.lifetimeStats == LifetimeStats())
         #expect(progress.dailyReward == DailyRewardState())

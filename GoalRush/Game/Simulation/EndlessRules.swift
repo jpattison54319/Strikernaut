@@ -2,6 +2,7 @@ import Foundation
 
 enum EndlessRules {
     static let wavesPerWorld = 10
+    static let worldClearTokenBonus = 325
     private static let baselineBallDamage = 10.0
     private static let baselineCriticalPower = 0.05
     private static let baselineKickCooldown = 1.12
@@ -72,17 +73,36 @@ enum EndlessRules {
         startingOffenseFactor: Double = 1
     ) -> Double {
         let index = Double(max(0, wave - 1))
+        let marsFinaleIndex = Double(wavesPerWorld * 3 - 1)
+        let curve: Double
+        if index <= marsFinaleIndex {
+            curve = pow(1.075, index) * (1 + 0.0375 * index)
+        } else {
+            let marsFinaleHealth = pow(1.075, marsFinaleIndex)
+                * (1 + 0.0375 * marsFinaleIndex)
+            curve = marsFinaleHealth
+                * pow(1.085, index - marsFinaleIndex)
+                * (1 + 0.04 * index)
+                / (1 + 0.04 * marsFinaleIndex)
+        }
         return max(1, startingOffenseFactor)
-            * pow(1.085, index)
-            * (1 + 0.04 * index)
+            * curve
     }
 
     static func damageMultiplier(
         wave: Int,
         startingSurvivalFactor: Double = 1
     ) -> Double {
-        max(1, startingSurvivalFactor)
-            * pow(1.05, Double(max(0, wave - 1)))
+        let index = Double(max(0, wave - 1))
+        let marsFinaleIndex = Double(wavesPerWorld * 3 - 1)
+        let curve = if index <= marsFinaleIndex {
+            pow(1.0425, index)
+        } else {
+            pow(1.0425, marsFinaleIndex)
+                * pow(1.05, index - marsFinaleIndex)
+        }
+        return max(1, startingSurvivalFactor)
+            * curve
     }
 
     static func speedMultiplier(wave: Int) -> Double {
@@ -156,6 +176,14 @@ enum EndlessRules {
     }
 
     static func waveClearTokenBase(wave: Int) -> Int {
-        max(4, max(1, wave) * 2)
+        let safeWave = max(1, wave)
+        let worldClearBonus = safeWave.isMultiple(of: wavesPerWorld)
+            ? worldClearTokenBonus
+            : 0
+        return max(4, safeWave * 2) + worldClearBonus
+    }
+
+    static func enemyTokenBaseFloor(baseValue: Int, wave: Int) -> Int {
+        max(0, baseValue) + min(2, chapterIndex(for: wave))
     }
 }

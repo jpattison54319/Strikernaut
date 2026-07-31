@@ -6,6 +6,7 @@ nonisolated struct RunCheckpoint: Codable, Equatable, Sendable {
     let schemaVersion: Int
     let runID: UUID
     let mode: RunMode
+    let campaignCycle: Int
     let activeRelic: EndlessRelic?
     let savedAt: Date
     let revision: Int
@@ -18,6 +19,36 @@ nonisolated struct RunCheckpoint: Codable, Equatable, Sendable {
 
     var wave: Int { simulation.snapshot.wave }
 
+    init(
+        schemaVersion: Int,
+        runID: UUID,
+        mode: RunMode,
+        campaignCycle: Int = 0,
+        activeRelic: EndlessRelic?,
+        savedAt: Date,
+        revision: Int,
+        simulation: RunSimulationCheckpoint,
+        intermission: RunCheckpointIntermission,
+        sessionRandom: SeededGenerator,
+        draftsChosen: Int,
+        deathSaveWasUsed: Bool,
+        creditedRunTokens: Int
+    ) {
+        self.schemaVersion = schemaVersion
+        self.runID = runID
+        self.mode = mode
+        self.campaignCycle = max(0, campaignCycle)
+        self.activeRelic = activeRelic
+        self.savedAt = savedAt
+        self.revision = revision
+        self.simulation = simulation
+        self.intermission = intermission
+        self.sessionRandom = sessionRandom
+        self.draftsChosen = draftsChosen
+        self.deathSaveWasUsed = deathSaveWasUsed
+        self.creditedRunTokens = max(0, creditedRunTokens)
+    }
+
     func updatingRunMetadata(
         creditedRunTokens: Int,
         deathSaveWasUsed: Bool,
@@ -27,6 +58,7 @@ nonisolated struct RunCheckpoint: Codable, Equatable, Sendable {
             schemaVersion: schemaVersion,
             runID: runID,
             mode: mode,
+            campaignCycle: campaignCycle,
             activeRelic: activeRelic,
             savedAt: savedAt,
             revision: revision + 1,
@@ -36,6 +68,62 @@ nonisolated struct RunCheckpoint: Codable, Equatable, Sendable {
             draftsChosen: draftsChosen,
             deathSaveWasUsed: deathSaveWasUsed,
             creditedRunTokens: max(self.creditedRunTokens, creditedRunTokens)
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case runID
+        case mode
+        case campaignCycle
+        case activeRelic
+        case savedAt
+        case revision
+        case simulation
+        case intermission
+        case sessionRandom
+        case draftsChosen
+        case deathSaveWasUsed
+        case creditedRunTokens
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            schemaVersion: try container.decode(Int.self, forKey: .schemaVersion),
+            runID: try container.decode(UUID.self, forKey: .runID),
+            mode: try container.decode(RunMode.self, forKey: .mode),
+            campaignCycle: try container.decodeIfPresent(
+                Int.self,
+                forKey: .campaignCycle
+            ) ?? 0,
+            activeRelic: try container.decodeIfPresent(
+                EndlessRelic.self,
+                forKey: .activeRelic
+            ),
+            savedAt: try container.decode(Date.self, forKey: .savedAt),
+            revision: try container.decode(Int.self, forKey: .revision),
+            simulation: try container.decode(
+                RunSimulationCheckpoint.self,
+                forKey: .simulation
+            ),
+            intermission: try container.decode(
+                RunCheckpointIntermission.self,
+                forKey: .intermission
+            ),
+            sessionRandom: try container.decode(
+                SeededGenerator.self,
+                forKey: .sessionRandom
+            ),
+            draftsChosen: try container.decode(Int.self, forKey: .draftsChosen),
+            deathSaveWasUsed: try container.decode(
+                Bool.self,
+                forKey: .deathSaveWasUsed
+            ),
+            creditedRunTokens: try container.decode(
+                Int.self,
+                forKey: .creditedRunTokens
+            )
         )
     }
 }

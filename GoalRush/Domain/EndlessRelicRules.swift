@@ -59,6 +59,7 @@ nonisolated enum EndlessRelicRules {
     static func runReward(
         runID: UUID,
         waveReached: Int,
+        newGamePlusCycle: Int = 0,
         acquiredAt: Date = .now
     ) -> EndlessRelic? {
         guard let milestone = rewardMilestone(forWaveReached: waveReached) else {
@@ -68,8 +69,14 @@ nonisolated enum EndlessRelicRules {
             id: runID,
             acquiredAt: acquiredAt,
             sourceWaveMilestone: milestone,
+            newGamePlusCycle: newGamePlusCycle,
             guaranteedPrimary: nil,
-            seed: stableSeed(for: runID, namespace: "run-\(milestone)")
+            seed: stableSeed(
+                for: runID,
+                namespace: newGamePlusCycle > 0
+                    ? "run-\(milestone)-ng-plus-\(newGamePlusCycle)"
+                    : "run-\(milestone)"
+            )
         )
     }
 
@@ -95,12 +102,15 @@ nonisolated enum EndlessRelicRules {
         id: UUID,
         acquiredAt: Date,
         sourceWaveMilestone: Int,
+        newGamePlusCycle: Int = 0,
         guaranteedPrimary: EndlessRelicStat?,
         seed: UInt64
     ) -> EndlessRelic {
         let milestone = max(5, (sourceWaveMilestone / 5) * 5)
+        let safeCycle = max(0, newGamePlusCycle)
+        let rarityMilestone = milestone + 20 * safeCycle
         var random = SeededGenerator(seed: seed)
-        let rarity = rollRarity(at: milestone, using: &random)
+        let rarity = rollRarity(at: rarityMilestone, using: &random)
         var availableStats = EndlessRelicStat.allCases
         let primary: EndlessRelicStat
         if let guaranteedPrimary {
@@ -116,6 +126,7 @@ nonisolated enum EndlessRelicRules {
                 stat: primary,
                 rarity: rarity,
                 milestone: milestone,
+                newGamePlusCycle: safeCycle,
                 factorRange: 0.90...1.10,
                 using: &random
             ),
@@ -128,6 +139,7 @@ nonisolated enum EndlessRelicRules {
                     stat: stat,
                     rarity: rarity,
                     milestone: milestone,
+                    newGamePlusCycle: safeCycle,
                     factorRange: 0.65...0.85,
                     using: &random
                 )
@@ -138,6 +150,7 @@ nonisolated enum EndlessRelicRules {
             id: id,
             acquiredAt: acquiredAt,
             sourceWaveMilestone: milestone,
+            newGamePlusCycle: safeCycle,
             rarity: rarity,
             primaryStat: primary,
             affixes: affixes
@@ -171,6 +184,7 @@ nonisolated enum EndlessRelicRules {
         stat: EndlessRelicStat,
         rarity: EndlessRelicRarity,
         milestone: Int,
+        newGamePlusCycle: Int,
         factorRange: ClosedRange<Double>,
         using random: inout SeededGenerator
     ) -> EndlessRelicAffix {
@@ -179,6 +193,7 @@ nonisolated enum EndlessRelicRules {
         let percent = stat.basePercent
             * rarity.valueMultiplier
             * waveScale(at: milestone)
+            * (1 + 0.25 * Double(max(0, newGamePlusCycle)))
             * factor
         let basisPoints = Int((percent * 10).rounded()) * 10
         return EndlessRelicAffix(stat: stat, basisPoints: basisPoints)

@@ -39,10 +39,23 @@ struct RelicInventoryTile: View {
             statusAccessory
                 .offset(y: -10)
         }
+        .overlay(alignment: .bottomLeading) {
+            if relic.newGamePlusCycle > 0 {
+                GameStatusBadge(
+                    text: "NG+\(relic.newGamePlusCycle)",
+                    tone: .info
+                )
+                .scaleEffect(0.82, anchor: .bottomLeading)
+                .accessibilityHidden(true)
+            }
+        }
         .contentShape(.rect)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             "\(relic.rarity.title) \(relic.name) relic. "
+                + (relic.newGamePlusCycle > 0
+                    ? "New Game Plus \(relic.newGamePlusCycle) boosted. "
+                    : "")
                 + relic.affixes.map(\.accessibilityText).joined(separator: ", ")
         )
         .accessibilityValue(

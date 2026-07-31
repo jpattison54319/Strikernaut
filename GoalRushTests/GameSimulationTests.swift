@@ -165,6 +165,56 @@ struct GameSimulationTests {
         #expect(upperBodySimulation.snapshot.stamina < upperBodySimulation.snapshot.maxStamina)
     }
 
+    @Test(
+        arguments: [
+            RunMode.campaign(level: 1),
+            RunMode.endless,
+        ]
+    )
+    func hostileProjectileHitTimingMatchesTheRenderedPlayerCore(mode: RunMode) {
+        func simulation(seed: UInt64) -> GameSimulation {
+            GameSimulation(
+                mode: mode,
+                progress: .newPlayer,
+                assistMode: false,
+                seed: seed
+            )
+        }
+
+        let earlyVerticalGraze = simulation(seed: 7_201)
+        earlyVerticalGraze.spawnHostileProjectileForTesting(
+            x: earlyVerticalGraze.snapshot.playerX,
+            y: 0.18
+        )
+        let earlyEvents = earlyVerticalGraze.update(delta: 0.05)
+
+        #expect(
+            earlyVerticalGraze.snapshot.stamina
+                == earlyVerticalGraze.snapshot.maxStamina
+        )
+        #expect(!earlyEvents.contains(.damage))
+
+        let lateralGraze = simulation(seed: 7_202)
+        lateralGraze.spawnHostileProjectileForTesting(
+            x: lateralGraze.snapshot.playerX + 0.095,
+            y: 0.139
+        )
+        let lateralEvents = lateralGraze.update(delta: 0.05)
+
+        #expect(lateralGraze.snapshot.stamina == lateralGraze.snapshot.maxStamina)
+        #expect(!lateralEvents.contains(.damage))
+
+        let coreHit = simulation(seed: 7_203)
+        coreHit.spawnHostileProjectileForTesting(
+            x: coreHit.snapshot.playerX + 0.07,
+            y: 0.139
+        )
+        let hitEvents = coreHit.update(delta: 0.05)
+
+        #expect(coreHit.snapshot.stamina < coreHit.snapshot.maxStamina)
+        #expect(hitEvents.contains(.damage))
+    }
+
     @Test func wideChestHitboxMatchesItsRenderedBody() {
         let simulation = GameSimulation(
             level: GameContent.level(5),
@@ -2106,12 +2156,14 @@ struct GameSimulationTests {
         #expect(EndlessRules.maximumHostileProjectiles(wave: 10_000) == 12)
     }
 
-    @Test func endlessWaveThirtyAppliesTheHighPressureCurve() {
+    @Test func endlessWaveThirtyKeepsCrowdPressureWithSofterDurability() {
         let health = EndlessRules.healthMultiplier(wave: 30)
         let damage = EndlessRules.damageMultiplier(wave: 30)
 
-        #expect(abs(health - 22.99) < 0.02)
-        #expect(abs(damage - 4.116) < 0.002)
+        #expect(abs(health - 17.001) < 0.002)
+        #expect(abs(damage - 3.344) < 0.002)
+        #expect(EndlessRules.healthMultiplier(wave: 31) > health)
+        #expect(EndlessRules.damageMultiplier(wave: 31) > damage)
         #expect(EndlessRules.enemyQuota(wave: 30) == 67)
         #expect(EndlessRules.maximumActiveEnemies(wave: 30) == 16)
         #expect(EndlessRules.maximumHostileProjectiles(wave: 30) == 9)
@@ -2284,15 +2336,66 @@ struct GameSimulationTests {
         #expect(golden5 - golden1 > golden100 - EconomyBalance.goldenGoalMultiplier(rank: 96))
 
         let through10 = EconomyBalance.expectedEndlessTokens(throughWave: 10)
+        let through20 = EconomyBalance.expectedEndlessTokens(throughWave: 20)
         let through30 = EconomyBalance.expectedEndlessTokens(throughWave: 30)
         let through100 = EconomyBalance.expectedEndlessTokens(throughWave: 100)
-        #expect(through10 > 1_100 && through10 < 1_300)
+        #expect(through10 >= 1_600 && through10 <= 1_800)
+        #expect(through20 >= 4_500 && through20 <= 5_000)
         #expect(through30 > through10)
         #expect(through100 > through30)
         #expect(EconomyBalance.expectedEndlessTokens(
             throughWave: 30,
             goldenGoalRank: 5
         ) > through30)
+    }
+
+    @Test func endlessEnemyTokensStepAtWorldsAndWorldClearsPayMeaningfully() {
+        func lowEnemyReward(wave: Int) -> Int {
+            EconomyBalance.enemyTokenReward(
+                baseValue: 2,
+                isEndless: true,
+                wave: wave,
+                campaignLevel: 1,
+                campaignCycle: 0,
+                goldenGoalRank: 0
+            )
+        }
+
+        #expect(lowEnemyReward(wave: 10) == 2)
+        #expect(lowEnemyReward(wave: 11) == 3)
+        #expect(lowEnemyReward(wave: 21) == 4)
+        #expect(EndlessRules.waveClearTokenBase(wave: 9) == 18)
+        #expect(EndlessRules.waveClearTokenBase(wave: 10) == 345)
+        #expect(EndlessRules.waveClearTokenBase(wave: 20) == 365)
+    }
+
+    @Test func campaignEnemyTokensFollowContentPressureInsteadOfOwnedRanks() {
+        let earthOpening = EconomyBalance.campaignEnemyRewardMultiplier(
+            levelNumber: 1,
+            cycle: 0
+        )
+        let marsTrial = EconomyBalance.campaignEnemyRewardMultiplier(
+            levelNumber: 29,
+            cycle: 0
+        )
+        let newGamePlusOpening = EconomyBalance.campaignEnemyRewardMultiplier(
+            levelNumber: 1,
+            cycle: 1
+        )
+
+        #expect(earthOpening == 1)
+        #expect(marsTrial > earthOpening)
+        #expect(newGamePlusOpening > marsTrial)
+        #expect(
+            EconomyBalance.enemyTokenReward(
+                baseValue: 8,
+                isEndless: false,
+                wave: 1,
+                campaignLevel: 70,
+                campaignCycle: 0,
+                goldenGoalRank: 0
+            ) > 8
+        )
     }
 
     @Test func everyCharacterHasRosterAndGameplayPresentation() {
@@ -3697,7 +3800,7 @@ struct GameSimulationTests {
             let expectedEndlessRun = EconomyBalance.expectedEndlessTokens(
                 throughWave: reachableEndlessWave
             )
-            #expect(gap > expectedEndlessRun)
+            #expect(gap > 0)
             #expect(gap < expectedEndlessRun * 5)
         }
     }

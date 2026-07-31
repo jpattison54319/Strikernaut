@@ -8,6 +8,7 @@ struct PlanetJourneyView: View {
     @State private var selectedPage: Int?
     @State private var lockedMessage = ""
     @State private var showingLockedAlert = false
+    @State private var newGamePlusProposal: NewGamePlusProposal?
 
     private let initialPage: Int
 
@@ -33,7 +34,9 @@ struct PlanetJourneyView: View {
             VStack(spacing: 0) {
                 CampaignNavigationBar(
                     title: "Planet Journey",
-                    subtitle: "KICK THROUGH WORLDS",
+                    subtitle: store.progress.campaignCycle > 0
+                        ? "NG+\(store.progress.campaignCycle) · KICK THROUGH WORLDS"
+                        : "KICK THROUGH WORLDS",
                     backTitle: nil,
                     onBack: nil,
                     onHome: goHome
@@ -49,6 +52,9 @@ struct PlanetJourneyView: View {
         .alert("Destination Locked", isPresented: $showingLockedAlert) {
         } message: {
             Text(lockedMessage)
+        }
+        .sheet(item: $newGamePlusProposal) { proposal in
+            NewGamePlusConfirmationView(cycle: proposal.cycle)
         }
     }
 
@@ -155,16 +161,27 @@ struct PlanetJourneyView: View {
     }
 
     private func select(_ destination: WorldJourneyDestination) {
-        guard let world = destination.world else {
-            showLocked(destination.futureRequirement ?? "This destination is not available yet.")
-            return
+        switch destination.action {
+        case .world(let world):
+            guard GameContent.isWorldUnlocked(world, progress: store.progress) else {
+                showLocked(unlockRequirement(for: world))
+                return
+            }
+            store.uiAudio.play(.tap)
+            store.openWorldMap(world)
+        case .newGamePlus:
+            guard store.progress.canBeginNextCampaignCycle else {
+                let requirement = store.progress.campaignCycle == 0
+                    ? "Clear Neptune challenge 10 to unlock New Game+."
+                    : "Clear Neptune challenge 10 in NG+\(store.progress.campaignCycle) to continue."
+                showLocked(requirement)
+                return
+            }
+            store.uiAudio.play(.tap)
+            newGamePlusProposal = NewGamePlusProposal(
+                cycle: store.progress.campaignCycle + 1
+            )
         }
-        guard GameContent.isWorldUnlocked(world, progress: store.progress) else {
-            showLocked(unlockRequirement(for: world))
-            return
-        }
-        store.uiAudio.play(.tap)
-        store.openWorldMap(world)
     }
 
     private func showLocked(_ message: String) {
@@ -196,4 +213,9 @@ struct PlanetJourneyView: View {
         store.uiAudio.play(.tap)
         store.route = .home
     }
+}
+
+private struct NewGamePlusProposal: Identifiable {
+    let cycle: Int
+    var id: Int { cycle }
 }

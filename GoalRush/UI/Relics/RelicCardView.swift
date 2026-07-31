@@ -30,6 +30,12 @@ struct RelicCardView: View {
 
                 VStack(alignment: .leading, spacing: 5) {
                     RelicRarityBadge(rarity: relic.rarity)
+                    if relic.newGamePlusCycle > 0 {
+                        GameStatusBadge(
+                            text: "NG+\(relic.newGamePlusCycle)",
+                            tone: .info
+                        )
+                    }
                     Text(relic.name)
                         .font(GoalRushTheme.Typography.title3)
                         .foregroundStyle(.white)
@@ -56,6 +62,9 @@ struct RelicCardView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(
             "\(relic.name), from cleared wave \(relic.sourceWaveMilestone)"
+                + (relic.newGamePlusCycle > 0
+                    ? ", New Game Plus \(relic.newGamePlusCycle) boosted"
+                    : "")
         )
         .accessibilityValue(isEquipped ? "Equipped" : "")
     }

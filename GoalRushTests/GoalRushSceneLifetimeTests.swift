@@ -89,4 +89,31 @@ struct GoalRushSceneLifetimeTests {
         #expect(scene.isPaused)
         #expect(scene.eventHandler == nil)
     }
+
+    @Test func takingDamageShowsAHighContrastFullScreenBorder() throws {
+        let session = GameSessionModel(
+            mode: .campaign(level: 1),
+            progress: .newPlayer,
+            settings: GameSettings()
+        )
+        session.startCampaignLevel()
+        let scene = GoalRushScene(
+            session: session,
+            reducedEffects: false
+        )
+        session.simulation.spawnHostileProjectileForTesting(
+            x: session.snapshot.playerX,
+            y: 0.139
+        )
+
+        scene.update(0)
+
+        let feedback = try #require(
+            scene.childNode(withName: "player-damage-feedback")
+        )
+        #expect(feedback.childNode(withName: "damage-border-contrast") != nil)
+        #expect(feedback.childNode(withName: "damage-border-red") != nil)
+        #expect(feedback.childNode(withName: "damage-border-highlight") != nil)
+        #expect(feedback.action(forKey: "damage-pulse") != nil)
+    }
 }

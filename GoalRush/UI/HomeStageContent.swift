@@ -11,7 +11,7 @@ struct HomeStageContent {
     init(store: GameStore) {
         let action = HomePresentation.primaryAction(progress: store.progress)
         let completedMissions = HomePresentation.completedMissionCount(store.progress.missions)
-        let completedLevels = store.progress.levelRecords.values.filter(\.completed).count
+        let completedLevels = store.progress.currentCampaignClears.count
         let endlessRecord = store.progress.endlessRecord
 
         switch action {
@@ -23,7 +23,9 @@ struct HomeStageContent {
                 primaryTitle = "Continue Campaign"
             }
         case .endless:
-            primaryEyebrow = "CAMPAIGN COMPLETE"
+            primaryEyebrow = store.progress.campaignCycle > 0
+                ? "NG+\(store.progress.campaignCycle) COMPLETE"
+                : "CAMPAIGN COMPLETE"
             primaryTitle = "Chase Your Endless Best"
         }
 
@@ -31,7 +33,10 @@ struct HomeStageContent {
         dailyBadge = store.isDailyRewardClaimable ? "+\(store.nextDailyReward)" : nil
         missionsSubtitle = completedMissions > 0 ? "\(completedMissions) ready to claim" : "View objectives"
         missionBadge = completedMissions > 0 ? "\(completedMissions)" : nil
-        campaignStatus = "\(completedLevels)/\(GameContent.levels.count) cleared"
+        let cycleLabel = store.progress.campaignCycle > 0
+            ? "NG+\(store.progress.campaignCycle) · "
+            : ""
+        campaignStatus = "\(cycleLabel)\(completedLevels)/\(GameContent.levels.count) cleared"
         endlessStatus = endlessRecord.bestWave > 0
             ? "Best wave \(GameNumberFormatter.exact(endlessRecord.bestWave))"
             : "New run ready"

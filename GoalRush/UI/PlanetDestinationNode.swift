@@ -42,23 +42,33 @@ struct PlanetDestinationNode: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("planet-\(destination.id)")
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint(isUnlocked ? "Opens the \(destination.name) landmark map" : statusText)
+        .accessibilityHint(accessibilityHint)
     }
 
     private var isUnlocked: Bool {
-        guard let world = destination.world else { return false }
-        return GameContent.isWorldUnlocked(world, progress: progress)
+        switch destination.action {
+        case .world(let world):
+            GameContent.isWorldUnlocked(world, progress: progress)
+        case .newGamePlus:
+            progress.canBeginNextCampaignCycle
+        }
     }
 
     private var artworkSize: CGFloat {
         switch destination.id {
-        case "jupiter", "saturn", "uranus", "neptune": 126
+        case "jupiter", "saturn", "uranus", "neptune", "new-game-plus": 126
         default: 104
         }
     }
 
     private var statusText: String {
-        guard let world = destination.world else { return "COMING SOON" }
+        guard case .world(let world) = destination.action else {
+            return progress.canBeginNextCampaignCycle
+                ? "START NG+\(progress.campaignCycle + 1)"
+                : progress.campaignCycle == 0
+                    ? "CLEAR NEPTUNE"
+                    : "CLEAR NG+\(progress.campaignCycle)"
+        }
         guard isUnlocked else {
             return switch world {
             case .earth: "AVAILABLE"
@@ -71,12 +81,24 @@ struct PlanetDestinationNode: View {
             }
         }
         let levels = GameContent.levels(in: world)
-        let completed = levels.filter { progress.levelRecords[$0.number]?.completed == true }.count
+        let completed = levels.count {
+            progress.hasClearedCurrentCampaignLevel($0.number)
+        }
         return "\(completed)/\(levels.count) CLEARED"
     }
 
     private var accessibilityLabel: String {
         "\(destination.name), \(isUnlocked ? "unlocked" : "locked"), \(statusText)"
+    }
+
+    private var accessibilityHint: String {
+        guard isUnlocked else { return statusText }
+        return switch destination.action {
+        case .world:
+            "Opens the \(destination.name) landmark map"
+        case .newGamePlus:
+            "Explains the permanent New Game Plus reset before asking for confirmation"
+        }
     }
 }
 
@@ -97,6 +119,11 @@ struct PlanetDestinationRow: View {
                     Text(destination.subtitle)
                         .font(GoalRushTheme.Typography.subheadline)
                         .foregroundStyle(.secondary)
+                    Text(statusText)
+                        .font(GoalRushTheme.Typography.captionEmphasized)
+                        .foregroundStyle(
+                            isUnlocked ? GoalRushTheme.gold : .secondary
+                        )
                 }
                 Spacer()
                 Image(systemName: isUnlocked ? "chevron.right" : "lock.fill")
@@ -106,11 +133,48 @@ struct PlanetDestinationRow: View {
             .gameSurface(.hud)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(destination.name), \(isUnlocked ? "unlocked" : "locked")")
+        .accessibilityLabel(
+            "\(destination.name), \(isUnlocked ? "unlocked" : "locked"), \(statusText)"
+        )
+        .accessibilityHint(accessibilityHint)
     }
 
     private var isUnlocked: Bool {
-        destination.world.map { GameContent.isWorldUnlocked($0, progress: progress) } ?? false
+        switch destination.action {
+        case .world(let world):
+            GameContent.isWorldUnlocked(world, progress: progress)
+        case .newGamePlus:
+            progress.canBeginNextCampaignCycle
+        }
+    }
+
+    private var statusText: String {
+        switch destination.action {
+        case .world(let world):
+            guard isUnlocked else { return "Complete the previous world" }
+            let levels = GameContent.levels(in: world)
+            let completed = levels.count {
+                progress.hasClearedCurrentCampaignLevel($0.number)
+            }
+            return "\(completed) of \(levels.count) cleared"
+        case .newGamePlus:
+            if progress.canBeginNextCampaignCycle {
+                return "Start NG+\(progress.campaignCycle + 1)"
+            }
+            return progress.campaignCycle == 0
+                ? "Clear Neptune"
+                : "Clear NG+\(progress.campaignCycle)"
+        }
+    }
+
+    private var accessibilityHint: String {
+        guard isUnlocked else { return statusText }
+        return switch destination.action {
+        case .world:
+            "Opens the landmark map"
+        case .newGamePlus:
+            "Explains the permanent New Game Plus reset before asking for confirmation"
+        }
     }
 }
 
@@ -119,8 +183,8 @@ private struct PlanetArtwork: View {
 
     @ViewBuilder
     var body: some View {
-        if destinationID == "andromeda" {
-            AndromedaGlyph()
+        if destinationID == "new-game-plus" {
+            NewGamePlusGlyph()
                 .shadow(color: glowColor.opacity(0.65), radius: 16)
                 .accessibilityHidden(true)
         } else {
@@ -153,13 +217,13 @@ private struct PlanetArtwork: View {
         case "saturn": Color(red: 1, green: 0.82, blue: 0.40)
         case "uranus": Color(red: 0.30, green: 0.94, blue: 1)
         case "neptune": Color(red: 0.18, green: 0.46, blue: 1)
-        case "andromeda": Color(red: 0.76, green: 0.42, blue: 1)
+        case "new-game-plus": Color(red: 0.76, green: 0.42, blue: 1)
         default: GoalRushTheme.gold
         }
     }
 }
 
-private struct AndromedaGlyph: View {
+private struct NewGamePlusGlyph: View {
     var body: some View {
         ZStack {
             ForEach(0..<3, id: \.self) { index in
@@ -178,6 +242,11 @@ private struct AndromedaGlyph: View {
                 .fill(.white)
                 .frame(width: 16, height: 16)
                 .shadow(color: .purple, radius: 12)
+
+            Image(systemName: "plus")
+                .font(GoalRushTheme.Typography.title2)
+                .foregroundStyle(GoalRushTheme.navy)
+                .accessibilityHidden(true)
         }
     }
 }

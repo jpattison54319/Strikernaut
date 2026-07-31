@@ -160,6 +160,29 @@ struct RunCheckpointTests {
         #expect(await store.load(for: .endless) == newer)
     }
 
+    @Test func deathInvalidatesResumeUntilRewardedContinueIsPersisted() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = RunCheckpointStore(directoryURL: directory)
+        let checkpoint = try makeCheckpoint(mode: .endless)
+
+        try await store.save(checkpoint)
+        try await store.invalidateAfterDeath(for: .endless)
+
+        #expect(await store.load(for: .endless) == nil)
+
+        let rewardedContinue = checkpoint.updatingRunMetadata(
+            creditedRunTokens: checkpoint.creditedRunTokens,
+            deathSaveWasUsed: true
+        )
+        try await store.save(rewardedContinue)
+
+        let restored = await store.load(for: .endless)
+        #expect(restored == rewardedContinue)
+        #expect(restored?.deathSaveWasUsed == true)
+    }
+
     private func makeCheckpoint(mode: RunMode) throws -> RunCheckpoint {
         let session: GameSessionModel
         switch mode {

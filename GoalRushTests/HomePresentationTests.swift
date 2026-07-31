@@ -12,6 +12,7 @@ struct HomePresentationTests {
         progress.highestUnlockedLevel = 4
         progress.levelRecords[1] = .init(completed: true, bestTokens: 1, bestStamina: 1)
         progress.levelRecords[2] = .init(completed: true, bestTokens: 1, bestStamina: 1)
+        progress.currentCampaignClears = [1, 2]
 
         #expect(HomePresentation.primaryAction(progress: progress) == .campaign(level: 3))
     }
@@ -22,6 +23,7 @@ struct HomePresentationTests {
         for level in GameContent.levels {
             progress.levelRecords[level.number] = .init(completed: true, bestTokens: 1, bestStamina: 1)
         }
+        progress.currentCampaignClears = Set(GameContent.levels.map(\.number))
 
         #expect(HomePresentation.primaryAction(progress: progress) == .endless)
     }

@@ -262,6 +262,47 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(earth.isHittable)
     }
 
+    func testNewGamePlusGatewayExplainsAndConfirmsTheReset() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save",
+            "--screen", "planets",
+            "--new-game-plus-ready",
+        ]
+        app.launch()
+
+        let next = app.buttons["planet-page-next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 3))
+        next.tap()
+        next.tap()
+
+        let gateway = app.buttons["planet-new-game-plus"]
+        XCTAssertTrue(gateway.waitForExistence(timeout: 2))
+        XCTAssertTrue(gateway.isHittable)
+        XCTAssertTrue(gateway.label.contains("START NG+1"))
+        gateway.tap()
+
+        XCTAssertTrue(
+            app.otherElements["new-game-plus-confirmation"]
+                .waitForExistence(timeout: 2)
+        )
+        XCTAssertTrue(app.staticTexts["YOU KEEP"].exists)
+        XCTAssertTrue(app.staticTexts["CAMPAIGN RESETS"].exists)
+        XCTAssertTrue(app.staticTexts["THE NEW RULES"].exists)
+
+        let start = app.buttons["new-game-plus-start"]
+        XCTAssertTrue(start.exists)
+        start.tap()
+
+        let earthOne = app.buttons["level-1"]
+        XCTAssertTrue(earthOne.waitForExistence(timeout: 3))
+        XCTAssertTrue(earthOne.label.localizedCaseInsensitiveContains("ready"))
+        XCTAssertTrue(
+            app.buttons["level-2"].label
+                .localizedCaseInsensitiveContains("locked")
+        )
+    }
+
     func testUpgradesPurchaseDirectlyFromMainScreen() {
         let app = XCUIApplication()
         app.launchArguments = ["--reset-save", "--currency", "500", "--screen", "upgrades"]

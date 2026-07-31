@@ -16,6 +16,7 @@ final class GameSessionModel {
     }
 
     let mode: RunMode
+    let campaignCycle: Int
     let runID: UUID
     let activeRelic: EndlessRelic?
     let level: LevelDefinition?
@@ -53,6 +54,9 @@ final class GameSessionModel {
         checkpoint: RunCheckpoint? = nil
     ) {
         self.mode = mode
+        self.campaignCycle = mode.isEndless
+            ? 0
+            : max(0, checkpoint?.campaignCycle ?? progress.campaignCycle)
         self.runID = checkpoint?.runID ?? UUID()
         self.activeRelic = checkpoint?.activeRelic
             ?? (mode.isEndless ? progress.endlessRecord.equippedRelic : nil)
@@ -62,13 +66,19 @@ final class GameSessionModel {
         )
         let argumentSeed = ProcessInfo.processInfo.arguments.value(after: "--fixed-seed").flatMap(UInt64.init)
         let modeSeed: UInt64 = switch mode {
-        case .campaign(let level): UInt64(level * 10_007 + progress.trainingTokens)
+        case .campaign(let level):
+            UInt64(
+                level * 10_007
+                    + progress.trainingTokens
+                    + campaignCycle * 1_000_003
+            )
         case .endless: UInt64(progress.trainingTokens + 77)
         }
         let seed = argumentSeed ?? modeSeed
         self.simulation = GameSimulation(
             mode: mode,
             progress: progress,
+            campaignCycle: campaignCycle,
             assistMode: settings.assistMode,
             seed: seed,
             checkpoint: checkpoint?.simulation
@@ -189,6 +199,7 @@ final class GameSessionModel {
             schemaVersion: RunCheckpoint.currentSchemaVersion,
             runID: runID,
             mode: mode,
+            campaignCycle: campaignCycle,
             activeRelic: activeRelic,
             savedAt: savedAt,
             revision: (previous?.revision ?? 0) + 1,

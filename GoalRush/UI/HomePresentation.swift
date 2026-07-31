@@ -7,7 +7,7 @@ enum HomePresentation {
     static func primaryAction(progress: PlayerProgress) -> HomePrimaryAction {
         guard let level = GameContent.levels.first(where: {
             $0.number <= progress.highestUnlockedLevel
-                && progress.levelRecords[$0.number]?.completed != true
+                && !progress.hasClearedCurrentCampaignLevel($0.number)
         }) else {
             return .endless
         }

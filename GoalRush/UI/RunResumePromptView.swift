@@ -108,7 +108,9 @@ struct RunResumePromptView: View {
     private var runName: String {
         switch checkpoint.mode {
         case .campaign(let level):
-            "Level \(level) · \(GameContent.world(world).name)"
+            checkpoint.campaignCycle > 0
+                ? "NG+\(checkpoint.campaignCycle) · Level \(level) · \(GameContent.world(world).name)"
+                : "Level \(level) · \(GameContent.world(world).name)"
         case .endless:
             "Endless · \(GameContent.world(world).name)"
         }

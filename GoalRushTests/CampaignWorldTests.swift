@@ -26,8 +26,8 @@ struct CampaignWorldTests {
         #expect(WorldJourneyCatalog.pages.count == 3)
         #expect(WorldJourneyCatalog.pages[0].compactMap(\.world) == [.earth, .moon, .mars])
         #expect(WorldJourneyCatalog.pages[1].compactMap(\.world) == [.jupiter, .saturn, .uranus])
-        #expect(WorldJourneyCatalog.pages[2].map(\.id) == ["neptune", "andromeda"])
-        #expect(WorldJourneyCatalog.pages[2][1].isFuture)
+        #expect(WorldJourneyCatalog.pages[2].map(\.id) == ["neptune", "new-game-plus"])
+        #expect(WorldJourneyCatalog.pages[2][1].action == .newGamePlus)
         #expect(WorldJourneyCatalog.pageIndicesTopToBottom == [2, 1, 0])
     }
 

@@ -4,6 +4,7 @@ enum AchievementID: String, Codable, CaseIterable, Sendable {
     case firstClear
     case earthWorldClear, moonWorldClear, marsWorldClear
     case jupiterWorldClear, saturnWorldClear, uranusWorldClear, neptuneWorldClear
+    case newGamePlusStarted, newGamePlusCleared
     case wave5, wave10, wave20, wave50, wave100
     case tokens1k, tokens10k
     case combo10, combo25
@@ -28,7 +29,8 @@ enum AchievementCatalog {
         .jupiterWorldClear, .galeAbilityDefeats, .silverPrestige,
         .saturnWorldClear, .haloAbilityDefeats, .wave50,
         .uranusWorldClear, .fluxAbilityDefeats, .goldPrestige,
-        .neptuneWorldClear, .surgeAbilityDefeats, .wave100, .fullRoster,
+        .neptuneWorldClear, .newGamePlusStarted, .surgeAbilityDefeats,
+        .wave100, .fullRoster, .newGamePlusCleared,
         .platinumPrestige, .diamondPrestige
     ]
 
@@ -43,6 +45,10 @@ enum AchievementCatalog {
         if progress.levelRecords[GameContent.world(.saturn).finalLevel]?.completed == true { unlocked.insert(.saturnWorldClear) }
         if progress.levelRecords[GameContent.world(.uranus).finalLevel]?.completed == true { unlocked.insert(.uranusWorldClear) }
         if progress.levelRecords[GameContent.world(.neptune).finalLevel]?.completed == true { unlocked.insert(.neptuneWorldClear) }
+        if progress.campaignCycle >= 1 { unlocked.insert(.newGamePlusStarted) }
+        if progress.highestCompletedCampaignCycle >= 1 {
+            unlocked.insert(.newGamePlusCleared)
+        }
         let bestWave = progress.endlessRecord.bestWave
         if bestWave >= 5 { unlocked.insert(.wave5) }
         if bestWave >= 10 { unlocked.insert(.wave10) }
@@ -134,9 +140,16 @@ enum AchievementCatalog {
             AchievementProgress(current: playerProgress.dailyReward.streak, goal: 3)
         case .streak7:
             AchievementProgress(current: playerProgress.dailyReward.streak, goal: 7)
+        case .newGamePlusCleared:
+            AchievementProgress(
+                current: playerProgress.highestCompletedCampaignCycle >= 1
+                    ? GameContent.levels.count
+                    : playerProgress.currentCampaignClears.count,
+                goal: GameContent.levels.count
+            )
         case .firstClear, .earthWorldClear, .moonWorldClear, .marsWorldClear,
              .jupiterWorldClear, .saturnWorldClear, .uranusWorldClear, .neptuneWorldClear,
-             .fullEarthSet, .fullMoonSet, .fullMarsSet:
+             .newGamePlusStarted, .fullEarthSet, .fullMoonSet, .fullMarsSet:
             nil
         }
     }
@@ -198,6 +211,8 @@ enum AchievementCatalog {
         case .saturnWorldClear: "Ringmaster"
         case .uranusWorldClear: "Axis Victor"
         case .neptuneWorldClear: "Depths Conquered"
+        case .newGamePlusStarted: "Back to Earth"
+        case .newGamePlusCleared: "Ascendant Champion"
         case .wave5: "Warming Up"
         case .wave10: "Double Digits"
         case .wave20: "Unstoppable"
@@ -242,6 +257,8 @@ enum AchievementCatalog {
         case .saturnWorldClear: "Clear the Saturn world"
         case .uranusWorldClear: "Clear the Uranus world"
         case .neptuneWorldClear: "Clear the Neptune world"
+        case .newGamePlusStarted: "Begin New Game+"
+        case .newGamePlusCleared: "Clear every world in New Game+"
         case .wave5: "Reach wave 5 in Endless"
         case .wave10: "Reach wave 10 in Endless"
         case .wave20: "Reach wave 20 in Endless"
@@ -286,6 +303,8 @@ enum AchievementCatalog {
         case .saturnWorldClear: "circle.dashed"
         case .uranusWorldClear: "snowflake"
         case .neptuneWorldClear: "water.waves"
+        case .newGamePlusStarted: "arrow.clockwise.circle.fill"
+        case .newGamePlusCleared: "trophy.fill"
         case .wave5, .wave10, .wave20, .wave50, .wave100: "infinity"
         case .tokens1k, .tokens10k: "hexagon.fill"
         case .combo10, .combo25: "bolt.fill"

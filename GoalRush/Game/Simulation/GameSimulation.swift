@@ -13,6 +13,7 @@ final class GameSimulation {
 
     private(set) var snapshot: SimulationSnapshot
     private let mode: RunMode
+    private let campaignCycle: Int
     private let level: LevelDefinition?
     private let stats: PlayerStats
     private let character: CharacterDefinition
@@ -70,17 +71,28 @@ final class GameSimulation {
     private var world: WorldID { snapshot.world }
 
     convenience init(level: LevelDefinition, progress: PlayerProgress, assistMode: Bool, seed: UInt64) {
-        self.init(mode: .campaign(level: level.number), progress: progress, assistMode: assistMode, seed: seed)
+        self.init(
+            mode: .campaign(level: level.number),
+            progress: progress,
+            campaignCycle: progress.campaignCycle,
+            assistMode: assistMode,
+            seed: seed
+        )
     }
 
     init(
         mode: RunMode,
         progress: PlayerProgress,
+        campaignCycle: Int? = nil,
         assistMode: Bool,
         seed: UInt64,
         checkpoint: RunSimulationCheckpoint? = nil
     ) {
         self.mode = mode
+        let resolvedCampaignCycle = mode.isEndless
+            ? 0
+            : max(0, campaignCycle ?? progress.campaignCycle)
+        self.campaignCycle = resolvedCampaignCycle
         self.level = mode.campaignLevel.map(GameContent.level)
         if let checkpoint, checkpoint.mode == mode {
             self.stats = checkpoint.stats
@@ -112,10 +124,10 @@ final class GameSimulation {
         let openingWorld = level?.world ?? EndlessRules.world(for: 1)
         let waveCount = level?.waveCount ?? Int.max
         let openingBossWave = level.map {
-            CampaignBalance.wave(1, for: $0).isBossWave
+            CampaignBalance.wave(1, for: $0, cycle: resolvedCampaignCycle).isBossWave
         } ?? EndlessRules.isBossWave(1)
         let openingQuota = level.map {
-            CampaignBalance.wave(1, for: $0).enemyQuota
+            CampaignBalance.wave(1, for: $0, cycle: resolvedCampaignCycle).enemyQuota
         } ?? EndlessRules.enemyQuota(wave: 1)
         self.snapshot = SimulationSnapshot(
             world: openingWorld,
@@ -984,14 +996,19 @@ final class GameSimulation {
 
     private func updateCampaignQuotaSpawning(delta: Double) {
         guard let level else { return }
-        let wave = CampaignBalance.wave(snapshot.wave, for: level)
+        let wave = CampaignBalance.wave(
+            snapshot.wave,
+            for: level,
+            cycle: campaignCycle
+        )
         let activeQuotaEnemies = snapshot.targets.count {
             if case .enemy = $0.kind { $0.waveRole == .quota } else { false }
         }
         guard snapshot.waveDefeats + activeQuotaEnemies < snapshot.waveEnemyQuota,
               activeQuotaEnemies < CampaignBalance.maximumActiveEnemies(
                 wave: snapshot.wave,
-                for: level
+                for: level,
+                cycle: campaignCycle
               ) else { return }
         if pendingCampaignEnemySpawns > 0 {
             spawnClock += delta
@@ -1019,13 +1036,18 @@ final class GameSimulation {
         spawnClock -= wave.spawnInterval
         let remainingSlots = CampaignBalance.maximumActiveEnemies(
             wave: snapshot.wave,
-            for: level
+            for: level,
+            cycle: campaignCycle
         ) - activeQuotaEnemies
         let remainingQuota = snapshot.waveEnemyQuota
             - snapshot.waveDefeats
             - activeQuotaEnemies
         pendingCampaignEnemySpawns = min(
-            CampaignBalance.enemyPackSize(wave: snapshot.wave, for: level),
+            CampaignBalance.enemyPackSize(
+                wave: snapshot.wave,
+                for: level,
+                cycle: campaignCycle
+            ),
             min(remainingSlots, remainingQuota)
         )
         campaignEnemyStaggerClock = 0
@@ -1088,7 +1110,11 @@ final class GameSimulation {
     private func spawnBossIfNeeded() {
         guard !bossSpawned else { return }
         if let level {
-            let wave = CampaignBalance.wave(snapshot.wave, for: level)
+            let wave = CampaignBalance.wave(
+                snapshot.wave,
+                for: level,
+                cycle: campaignCycle
+            )
             guard let boss = wave.boss, let tier = wave.bossTier else { return }
             bossSpawned = true
             spawnEnemy(
@@ -1178,7 +1204,8 @@ final class GameSimulation {
         let packCount = min(
             3,
             CampaignBalance.reinforcementPulseSize(
-                levelNumber: level?.number ?? 1
+                levelNumber: level?.number ?? 1,
+                cycle: campaignCycle
             )
         )
         spawnBossReinforcements(
@@ -1255,7 +1282,8 @@ final class GameSimulation {
         if let level {
             CampaignBalance.bossSupportSpawnInterval(
                 level: level,
-                wave: snapshot.wave
+                wave: snapshot.wave,
+                cycle: campaignCycle
             )
         } else {
             3
@@ -2357,7 +2385,8 @@ final class GameSimulation {
                         let crossedPhases = (bossPhase + 1)...newPhase
                         bossPhase = newPhase
                         for crossedPhase in crossedPhases {
-                            if target.maximumShieldHitPoints > 0 {
+                            if target.bossTier == .megaBoss,
+                               target.maximumShieldHitPoints > 0 {
                                 target.shieldHitPoints = target.maximumShieldHitPoints
                                 clearEnemyEffects(on: &target)
                                 snapshot.magneticTraps.removeAll {
@@ -2705,9 +2734,7 @@ final class GameSimulation {
                 removedProjectileIDs.insert(projectile.id)
             }
             if projectile.hostile {
-                let width = assistMode ? 0.08 : 0.11
-                let isInUpperBodyBand = projectile.position.y >= 0.095 && projectile.position.y <= 0.17
-                if isInUpperBodyBand && abs(projectile.position.x - snapshot.playerX) < width {
+                if hostileProjectileHitsPlayer(at: projectile.position) {
                     removedProjectileIDs.insert(projectile.id)
                     applyDamage(projectile.damage, events: &events)
                 } else if projectile.position.y < 0.095 {
@@ -3388,7 +3415,8 @@ final class GameSimulation {
         let referenceWave = min(max(1, snapshot.wave), finalRegularWave)
         return CampaignBalance.regularEnemyQuota(
             wave: referenceWave,
-            for: level
+            for: level,
+            cycle: campaignCycle
         )
     }
 
@@ -3494,7 +3522,8 @@ final class GameSimulation {
             hitPoints = CampaignBalance.bossHitPoints(
                 tier: tier,
                 wave: snapshot.wave,
-                for: level
+                for: level,
+                cycle: campaignCycle
             )
         } else {
             let multiplier = mode.isEndless
@@ -3504,7 +3533,11 @@ final class GameSimulation {
                         .startingOffenseFactor(stats: stats)
                 )
                 : level.map {
-                    CampaignBalance.wave(snapshot.wave, for: $0).healthMultiplier
+                    CampaignBalance.wave(
+                        snapshot.wave,
+                        for: $0,
+                        cycle: campaignCycle
+                    ).healthMultiplier
                 } ?? 1
             let tierMultiplier = if mode.isEndless, tier == .megaBoss {
                 EndlessRules.bossHealthMultiplier(wave: snapshot.wave)
@@ -3529,15 +3562,25 @@ final class GameSimulation {
             bossTier: tier,
             waveRole: role
         )
-        if mode.isEndless {
+        let shieldWave: Int? = if mode.isEndless {
+            snapshot.wave
+        } else if let level {
+            CampaignDifficulty.equivalentShieldWave(
+                cycle: campaignCycle,
+                levelNumber: level.number
+            )
+        } else {
+            nil
+        }
+        if let shieldWave {
             let isBoss = tier != .standard || role == .boss
             let chance = isBoss
-                ? EndlessRules.bossShieldSpawnChance(wave: snapshot.wave)
-                : EndlessRules.regularShieldSpawnChance(wave: snapshot.wave)
+                ? EndlessRules.bossShieldSpawnChance(wave: shieldWave)
+                : EndlessRules.regularShieldSpawnChance(wave: shieldWave)
             if chance > 0, random.unit() < chance {
                 let fraction = isBoss
-                    ? EndlessRules.bossShieldHealthFraction(wave: snapshot.wave)
-                    : EndlessRules.regularShieldHealthFraction(wave: snapshot.wave)
+                    ? EndlessRules.bossShieldHealthFraction(wave: shieldWave)
+                    : EndlessRules.regularShieldHealthFraction(wave: shieldWave)
                 target.maximumShieldHitPoints = hitPoints * fraction
                 target.shieldHitPoints = target.maximumShieldHitPoints
             }
@@ -3724,6 +3767,18 @@ final class GameSimulation {
         return [0, 3.5, 6.5, 9][min(max(rank, 0), 3)]
     }
 
+    private func hostileProjectileHitsPlayer(at position: Vector2) -> Bool {
+        // Keep the vulnerable area inside the rendered torso. The previous wide
+        // rectangle included its upper corners, so a projectile could register
+        // while the ball was still visibly beside or above the player.
+        let halfWidth = assistMode ? 0.06 : 0.085
+        let halfHeight = 0.0275
+        let horizontalDistance = (position.x - snapshot.playerX) / halfWidth
+        let verticalDistance = (position.y - 0.12) / halfHeight
+        return horizontalDistance * horizontalDistance
+            + verticalDistance * verticalDistance <= 1
+    }
+
     private func targetHitbox(for target: TargetState) -> (halfWidth: Double, halfHeight: Double) {
         let dimensions: (width: Double, height: Double) = switch target.kind {
         case .enemy(let enemy):
@@ -3785,7 +3840,8 @@ final class GameSimulation {
             } else if let level {
                 CampaignBalance.maximumHostileProjectiles(
                     wave: snapshot.wave,
-                    for: level
+                    for: level,
+                    cycle: campaignCycle
                 )
             } else {
                 Int.max
@@ -3849,7 +3905,12 @@ final class GameSimulation {
             if target.waveRole == .reinforcement {
                 awardScore(baseValue: baseValue)
             } else {
-                awardTokens(baseValue, at: target.position, events: &events)
+                awardTokens(
+                    baseValue,
+                    at: target.position,
+                    isEnemyReward: true,
+                    events: &events
+                )
             }
         case .fieldObject(.waterCooler), .fieldObject(.oxygenPod), .fieldObject(.gravityCell),
              .fieldObject(.cloudCondenser), .fieldObject(.thermalPod),
@@ -3883,15 +3944,28 @@ final class GameSimulation {
         _ baseValue: Int,
         at position: Vector2,
         awardsScore: Bool = true,
+        isEnemyReward: Bool = false,
         events: inout [SimulationEvent]
     ) {
-        let value = EconomyBalance.tokenReward(
-            baseValue: baseValue,
-            isEndless: mode.isEndless,
-            wave: snapshot.wave,
-            goldenGoalRank: abilities[.goldenGoal, default: 0],
-            playerMultiplier: stats.tokenMultiplier
-        )
+        let value = if isEnemyReward {
+            EconomyBalance.enemyTokenReward(
+                baseValue: baseValue,
+                isEndless: mode.isEndless,
+                wave: snapshot.wave,
+                campaignLevel: level?.number ?? 1,
+                campaignCycle: campaignCycle,
+                goldenGoalRank: abilities[.goldenGoal, default: 0],
+                playerMultiplier: stats.tokenMultiplier
+            )
+        } else {
+            EconomyBalance.tokenReward(
+                baseValue: baseValue,
+                isEndless: mode.isEndless,
+                wave: snapshot.wave,
+                goldenGoalRank: abilities[.goldenGoal, default: 0],
+                playerMultiplier: stats.tokenMultiplier
+            )
+        }
         snapshot.tokens += value
         if awardsScore {
             awardScore(baseValue: baseValue)
@@ -3913,13 +3987,21 @@ final class GameSimulation {
             )
         }
         guard let level else { return 1 }
-        return CampaignBalance.wave(snapshot.wave, for: level).damageMultiplier
+        return CampaignBalance.wave(
+            snapshot.wave,
+            for: level,
+            cycle: campaignCycle
+        ).damageMultiplier
     }
 
     private var activeSpeedMultiplier: Double {
         if mode.isEndless { return EndlessRules.speedMultiplier(wave: snapshot.wave) }
         guard let level else { return 1 }
-        return CampaignBalance.wave(snapshot.wave, for: level).speedMultiplier
+        return CampaignBalance.wave(
+            snapshot.wave,
+            for: level,
+            cycle: campaignCycle
+        ).speedMultiplier
     }
 
     private var activeAttackCadenceMultiplier: Double {
@@ -3929,7 +4011,8 @@ final class GameSimulation {
         guard let level else { return 1 }
         return CampaignBalance.attackCadenceMultiplier(
             level: level,
-            wave: snapshot.wave
+            wave: snapshot.wave,
+            cycle: campaignCycle
         )
     }
 
@@ -3942,7 +4025,8 @@ final class GameSimulation {
         guard let level else { return 1 }
         return CampaignBalance.hostileProjectileSpeedMultiplier(
             level: level,
-            wave: snapshot.wave
+            wave: snapshot.wave,
+            cycle: campaignCycle
         )
     }
 
@@ -3955,7 +4039,11 @@ final class GameSimulation {
             )
         }
         guard let level else { return 1 }
-        return CampaignBalance.wave(snapshot.wave, for: level).healthMultiplier
+        return CampaignBalance.wave(
+            snapshot.wave,
+            for: level,
+            cycle: campaignCycle
+        ).healthMultiplier
     }
 
     private var endlessEnemyPool: [EnemyKind] {
@@ -3968,7 +4056,10 @@ final class GameSimulation {
 
     private func reinforcements(for phase: Int) -> [EnemyKind] {
         if let level {
-            let count = CampaignBalance.reinforcementPulseSize(levelNumber: level.number)
+            let count = CampaignBalance.reinforcementPulseSize(
+                levelNumber: level.number,
+                cycle: campaignCycle
+            )
             return (0..<count).map { _ in
                 level.enemies[Int(random.next() % UInt64(level.enemies.count))]
             }
@@ -3983,7 +4074,11 @@ final class GameSimulation {
 
     private func configureWaveObjective() {
         if let level {
-            let wave = CampaignBalance.wave(snapshot.wave, for: level)
+            let wave = CampaignBalance.wave(
+                snapshot.wave,
+                for: level,
+                cycle: campaignCycle
+            )
             snapshot.isBossWave = wave.isBossWave
             snapshot.waveEnemyQuota = wave.enemyQuota
         } else {

@@ -49,7 +49,10 @@ struct RunLaunchView: View {
                 return
             }
 #endif
-            let checkpoint = await store.runCheckpointStore.load(for: mode)
+            let checkpoint = await store.runCheckpointStore.load(
+                for: mode,
+                campaignCycle: mode.isEndless ? nil : progress.campaignCycle
+            )
             guard !Task.isCancelled else { return }
             launchState = checkpoint.map(LaunchState.offer) ?? .playing(nil)
         }

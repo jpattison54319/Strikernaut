@@ -55,6 +55,7 @@ final class GoalRushScene: SKScene {
     private var targetHealthRatios: [Int: Double] = [:]
     private var targetShieldRatios: [Int: Double] = [:]
     private var fragmentedTargetIDs = Set<Int>()
+    private var damageFeedbackNode: SKNode?
     private var configuredSize = CGSize.zero
     private var renderedWorldID: WorldID
     private var lastHandledEventPulse = 0
@@ -2227,8 +2228,127 @@ final class GoalRushScene: SKScene {
     }
 
     private func showDamageFeedback() {
-        showScreenPulse(color: .red, strength: 0.34)
-        shake(intensity: 7)
+        showDamageBorderPulse()
+        showPlayerDamageImpact()
+        shake(intensity: 9)
+    }
+
+    private func showDamageBorderPulse() {
+        damageFeedbackNode?.removeAllActions()
+        damageFeedbackNode?.removeFromParent()
+
+        let feedback = SKNode()
+        feedback.name = "player-damage-feedback"
+        feedback.zPosition = 5_100
+        feedback.alpha = 0
+
+        let cornerRadius = max(22, size.width * 0.075)
+        let darkEdge = damageBorder(
+            inset: 22,
+            cornerRadius: cornerRadius,
+            lineWidth: 44,
+            strokeColor: .black.withAlphaComponent(0.82),
+            fillColor: .black.withAlphaComponent(0.10),
+            glowWidth: 0
+        )
+        darkEdge.name = "damage-border-contrast"
+        feedback.addChild(darkEdge)
+
+        let redEdge = damageBorder(
+            inset: 18,
+            cornerRadius: cornerRadius,
+            lineWidth: 26,
+            strokeColor: SKColor(red: 1, green: 0.035, blue: 0.02, alpha: 0.98),
+            fillColor: SKColor(red: 0.55, green: 0, blue: 0, alpha: 0.10),
+            glowWidth: reducesMotion ? 2 : 12
+        )
+        redEdge.name = "damage-border-red"
+        feedback.addChild(redEdge)
+
+        let hotEdge = damageBorder(
+            inset: 33,
+            cornerRadius: max(12, cornerRadius - 11),
+            lineWidth: 4,
+            strokeColor: SKColor(red: 1, green: 0.88, blue: 0.82, alpha: 0.96),
+            fillColor: .clear,
+            glowWidth: reducesMotion ? 0 : 5
+        )
+        hotEdge.name = "damage-border-highlight"
+        feedback.addChild(hotEdge)
+
+        damageFeedbackNode = feedback
+        addChild(feedback)
+
+        let pulse: SKAction = if reducesMotion {
+            .sequence([
+                .fadeAlpha(to: 1, duration: 0.04),
+                .wait(forDuration: 0.28),
+                .fadeOut(withDuration: 0.34),
+            ])
+        } else {
+            .sequence([
+                .fadeAlpha(to: 1, duration: 0.04),
+                .fadeAlpha(to: 0.48, duration: 0.09),
+                .fadeAlpha(to: 1, duration: 0.07),
+                .wait(forDuration: 0.08),
+                .fadeAlpha(to: 0.62, duration: 0.08),
+                .fadeAlpha(to: 1, duration: 0.07),
+                .wait(forDuration: 0.06),
+                .fadeOut(withDuration: 0.30),
+            ])
+        }
+        feedback.run(.sequence([
+            pulse,
+            .run { [weak self, weak feedback] in
+                guard let self, let feedback else { return }
+                feedback.removeFromParent()
+                if self.damageFeedbackNode === feedback {
+                    self.damageFeedbackNode = nil
+                }
+            },
+        ]), withKey: "damage-pulse")
+    }
+
+    private func damageBorder(
+        inset: CGFloat,
+        cornerRadius: CGFloat,
+        lineWidth: CGFloat,
+        strokeColor: SKColor,
+        fillColor: SKColor,
+        glowWidth: CGFloat
+    ) -> SKShapeNode {
+        let rect = CGRect(
+            x: inset,
+            y: inset,
+            width: max(1, size.width - inset * 2),
+            height: max(1, size.height - inset * 2)
+        )
+        let border = SKShapeNode(rect: rect, cornerRadius: cornerRadius)
+        border.lineWidth = lineWidth
+        border.strokeColor = strokeColor
+        border.fillColor = fillColor
+        border.glowWidth = glowWidth
+        return border
+    }
+
+    private func showPlayerDamageImpact() {
+        let impact = SKShapeNode(ellipseOf: .init(width: 82, height: 92))
+        impact.name = "player-damage-impact"
+        impact.position = playerNode.position + CGPoint(x: 0, y: 12)
+        impact.zPosition = 3_250
+        impact.fillColor = SKColor(red: 0.72, green: 0, blue: 0, alpha: 0.20)
+        impact.strokeColor = SKColor(red: 1, green: 0.86, blue: 0.80, alpha: 0.96)
+        impact.lineWidth = 5
+        impact.glowWidth = reducesMotion ? 0 : 10
+        impact.setScale(reducesMotion ? 1 : 0.72)
+        effectsLayer.addChild(impact)
+        impact.run(.sequence([
+            .group([
+                .scale(to: reducesMotion ? 1.08 : 1.42, duration: reducesMotion ? 0.18 : 0.30),
+                .fadeOut(withDuration: reducesMotion ? 0.28 : 0.38),
+            ]),
+            .removeFromParent(),
+        ]))
     }
 
     private func showScreenPulse(color: SKColor, strength: CGFloat) {

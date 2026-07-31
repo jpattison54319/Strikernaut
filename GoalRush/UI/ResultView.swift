@@ -242,11 +242,14 @@ struct ResultView: View {
     private var heroSubtitle: String {
         switch result.mode {
         case .endless:
-            "\(GameContent.world(result.world).name) • Powers reset"
+            return "\(GameContent.world(result.world).name) • Powers reset"
         case .campaign(let level):
-            result.didWin
-                ? GameContent.level(level).name
-                : "Tokens kept • Upgrade and retry"
+            let cyclePrefix = store.progress.campaignCycle > 0
+                ? "NG+\(store.progress.campaignCycle) · "
+                : ""
+            return result.didWin
+                ? cyclePrefix + GameContent.level(level).name
+                : cyclePrefix + "Tokens kept • Upgrade and retry"
         }
     }
 
@@ -269,7 +272,7 @@ struct ResultView: View {
         case .endless:
             "Run It Back"
         case .campaign(let level):
-            level < GameContent.levels.count ? "Play Next Level" : "Play Again"
+            level < GameContent.levels.count ? "Play Next Level" : "Continue Journey"
         }
     }
 

@@ -61,6 +61,15 @@ struct RelicDropRevealView: View {
                                 ? relic.rarity.color
                                 : GoalRushTheme.cyan
                         )
+                    if stage == .revealed, relic.newGamePlusCycle > 0 {
+                        GameStatusBadge(
+                            text: "NG+\(relic.newGamePlusCycle)",
+                            tone: .info
+                        )
+                        .accessibilityLabel(
+                            "New Game Plus \(relic.newGamePlusCycle) boosted relic"
+                        )
+                    }
                 }
 
                 Spacer(minLength: 4)

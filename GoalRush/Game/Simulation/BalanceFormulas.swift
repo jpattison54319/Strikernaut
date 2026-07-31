@@ -137,6 +137,7 @@ enum EconomyBalance {
     static let campaignLevelRewardGrowth = 0.06
     static let campaignBossRewardMultiplier = 1.25
     static let campaignReplayFraction = 0.42
+    static let campaignEnemyRewardExponent = 0.08
     static let endlessRewardExponent = 0.32
     static let goldenGoalLogCoefficient = 0.42
 
@@ -179,6 +180,23 @@ enum EconomyBalance {
         )
     }
 
+    /// Campaign enemy value follows authored pressure rather than the player's
+    /// owned ranks. New Game+ supplies its virtual progression level through
+    /// the same quota curve that drives the extra enemies.
+    static func campaignEnemyRewardMultiplier(
+        levelNumber: Int,
+        cycle: Int
+    ) -> Double {
+        let progressionLevel = CampaignDifficulty.quotaLevel(
+            cycle: cycle,
+            levelNumber: levelNumber
+        ) ?? Double(max(1, levelNumber))
+        return pow(
+            1 + max(0, progressionLevel - 1) / 10,
+            campaignEnemyRewardExponent
+        )
+    }
+
     /// Golden Goal has diminishing returns while remaining uncapped:
     /// `1 + 0.42 * ln(1 + rank)`.
     static func goldenGoalMultiplier(rank: Int) -> Double {
@@ -195,39 +213,120 @@ enum EconomyBalance {
         let waveMultiplier = isEndless
             ? endlessWaveRewardMultiplier(wave: wave)
             : 1
+        return scaledTokenReward(
+            baseValue: baseValue,
+            contentMultiplier: waveMultiplier,
+            goldenGoalRank: goldenGoalRank,
+            playerMultiplier: playerMultiplier
+        )
+    }
+
+    static func enemyTokenReward(
+        baseValue: Int,
+        isEndless: Bool,
+        wave: Int,
+        campaignLevel: Int,
+        campaignCycle: Int,
+        goldenGoalRank: Int,
+        playerMultiplier: Double = 1
+    ) -> Int {
+        let safeBase = max(0, baseValue)
+        let contentMultiplier: Double
+        if isEndless, safeBase > 0 {
+            let steppedBase = EndlessRules.enemyTokenBaseFloor(
+                baseValue: safeBase,
+                wave: wave
+            )
+            contentMultiplier = max(
+                endlessWaveRewardMultiplier(wave: wave),
+                Double(steppedBase) / Double(safeBase)
+            )
+        } else {
+            contentMultiplier = campaignEnemyRewardMultiplier(
+                levelNumber: campaignLevel,
+                cycle: campaignCycle
+            )
+        }
+        return scaledTokenReward(
+            baseValue: safeBase,
+            contentMultiplier: contentMultiplier,
+            goldenGoalRank: goldenGoalRank,
+            playerMultiplier: playerMultiplier
+        )
+    }
+
+    private static func scaledTokenReward(
+        baseValue: Int,
+        contentMultiplier: Double,
+        goldenGoalRank: Int,
+        playerMultiplier: Double
+    ) -> Int {
         let value = Double(max(0, baseValue))
             * max(0, playerMultiplier)
             * goldenGoalMultiplier(rank: goldenGoalRank)
-            * waveMultiplier
+            * max(0, contentMultiplier)
         return max(1, Int(value.rounded()))
     }
 
-    static func expectedCampaignCombatTokens(for level: LevelDefinition) -> Double {
+    static func expectedCampaignCombatTokens(
+        for level: LevelDefinition,
+        cycle: Int = 0
+    ) -> Double {
         let averageEnemyValue = level.enemies
-            .map { Double(CombatBalance.tokenValue($0)) }
+            .map {
+                Double(enemyTokenReward(
+                    baseValue: CombatBalance.tokenValue($0),
+                    isEndless: false,
+                    wave: 1,
+                    campaignLevel: level.number,
+                    campaignCycle: cycle,
+                    goldenGoalRank: 0
+                ))
+            }
             .reduce(0, +) / Double(max(1, level.enemies.count))
         let regularWaveValue = (1..<level.waveCount).reduce(0.0) { total, wave in
-            total + Double(CampaignBalance.regularEnemyQuota(wave: wave, for: level))
+            total + Double(CampaignBalance.regularEnemyQuota(
+                wave: wave,
+                for: level,
+                cycle: cycle
+            ))
                 * averageEnemyValue
         }
-        let finalWave = CampaignBalance.wave(level.waveCount, for: level)
+        let finalWave = CampaignBalance.wave(
+            level.waveCount,
+            for: level,
+            cycle: cycle
+        )
         let bossValue = finalWave.boss.map { boss in
             let base = CombatBalance.tokenValue(boss)
-            return Double(finalWave.bossTier == .miniBoss ? base * 5 : base)
+            return Double(enemyTokenReward(
+                baseValue: finalWave.bossTier == .miniBoss ? base * 5 : base,
+                isEndless: false,
+                wave: level.waveCount,
+                campaignLevel: level.number,
+                campaignCycle: cycle,
+                goldenGoalRank: 0
+            ))
         } ?? 0
         return regularWaveValue + bossValue
     }
 
     static func expectedCampaignTokens(
         throughLevel levelNumber: Int,
-        includeFirstClearBonuses: Bool = true
+        includeFirstClearBonuses: Bool = true,
+        cycle: Int = 0
     ) -> Double {
         GameContent.levels
             .prefix(max(0, min(levelNumber, GameContent.levels.count)))
             .reduce(0) { total, level in
                 total
-                    + expectedCampaignCombatTokens(for: level)
-                    + (includeFirstClearBonuses ? Double(level.firstClearBonus) : 0)
+                    + expectedCampaignCombatTokens(for: level, cycle: cycle)
+                    + (includeFirstClearBonuses
+                        ? Double(CampaignDifficulty.scaledCompletionBonus(
+                            level.firstClearBonus,
+                            cycle: cycle
+                        ))
+                        : 0)
             }
     }
 
@@ -240,20 +339,24 @@ enum EconomyBalance {
             let combatReward: Double
             if EndlessRules.isBossWave(wave) {
                 let boss = GameContent.world(EndlessRules.world(for: wave)).boss
-                combatReward = Double(tokenReward(
+                combatReward = Double(enemyTokenReward(
                     baseValue: CombatBalance.tokenValue(boss),
                     isEndless: true,
                     wave: wave,
+                    campaignLevel: 1,
+                    campaignCycle: 0,
                     goldenGoalRank: goldenGoalRank
                 ))
             } else {
                 let pool = EndlessRules.enemyPool(wave: wave)
                 let averageReward = pool
                     .map {
-                        Double(tokenReward(
+                        Double(enemyTokenReward(
                             baseValue: CombatBalance.tokenValue($0),
                             isEndless: true,
                             wave: wave,
+                            campaignLevel: 1,
+                            campaignCycle: 0,
                             goldenGoalRank: goldenGoalRank
                         ))
                     }
