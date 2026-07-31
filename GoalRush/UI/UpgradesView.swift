@@ -28,7 +28,7 @@ struct UpgradesView: View {
         }
         .sheet(isPresented: $showingInfo) {
             UpgradeInfoView()
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
         }
         .onAppear { store.uiAudio.play(.whoosh, volume: 0.35, feedback: nil) }
     }
@@ -66,7 +66,7 @@ struct UpgradesView: View {
 
             HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
                 TrainingTokenIcon(size: 28)
-                Text(store.progress.trainingTokens.formatted())
+                Text(GameNumberFormatter.compact(store.progress.trainingTokens))
                     .font(GoalRushTheme.Typography.metric(size: 24, relativeTo: .title2))
             }
             .foregroundStyle(.white)
@@ -93,7 +93,9 @@ struct UpgradesView: View {
                 .stroke(GoalRushTheme.gold.opacity(0.48), lineWidth: GoalRushTheme.Metrics.strokeWidth)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(store.progress.trainingTokens) Training Tokens")
+        .accessibilityLabel(
+            "\(GameNumberFormatter.exact(store.progress.trainingTokens)) Training Tokens"
+        )
     }
 
     private func goHome() {
@@ -104,24 +106,5 @@ struct UpgradesView: View {
     private func showInfo() {
         store.uiAudio.play(.tap)
         showingInfo = true
-    }
-}
-
-private struct UpgradeInfoView: View {
-    var body: some View {
-        GameSheetScaffold(title: "Upgrades", subtitle: "Permanent improvements for every mode.") {
-            VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing) {
-                Label("Upgrades are permanent", systemImage: "checkmark.shield.fill")
-                Label("Active in Campaign and Endless", systemImage: "gamecontroller.fill")
-                Label("Levels are permanent and continue after Diamond", systemImage: "infinity")
-                Label("Prestige at Levels 10, 20, 50, 100, and 200", systemImage: "medal.fill")
-                Label("Levels cost up to \(UpgradeRules.sustainedCost.formatted()) tokens", systemImage: "hexagon.fill")
-                Label("Prestige costs \(UpgradePrestigeRules.prestigeCost.formatted()) tokens", systemImage: "medal.fill")
-            }
-            .font(GoalRushTheme.Typography.headline)
-            .foregroundStyle(.white)
-            .padding(GoalRushTheme.Metrics.standardSpacing)
-            .gameSurface(.panel)
-        }
     }
 }

@@ -2,7 +2,10 @@ import SpriteKit
 
 @MainActor
 final class GoalRushScene: SKScene {
-    private unowned let session: GameSessionModel
+    // SpriteKit can retain and tick a scene briefly after SwiftUI replaces the
+    // surrounding view. Keep the session alive for exactly as long as the scene
+    // can use it so retry/navigation teardown cannot become a use-after-free.
+    private let session: GameSessionModel
     private let world = SKNode()
     private let targetLayer = SKNode()
     private let characterAttackLayer = SKNode()
@@ -14,6 +17,12 @@ final class GoalRushScene: SKScene {
     private var targetNodes: [Int: SKNode] = [:]
     private var projectileNodes: [Int: SKNode] = [:]
     private var characterAttackNodes: [Int: SKSpriteNode] = [:]
+    private var galeBounceNodes: [Int: SKNode] = [:]
+    private var galeInterceptorNodes: [Int: SKNode] = [:]
+    private var haloRingNodes: [Int: SKNode] = [:]
+    private var magneticTrapNodes: [Int: SKNode] = [:]
+    private var tidalWaveNodes: [Int: SKSpriteNode] = [:]
+    private var galeOrbitNode: SKNode?
     private var bossHazardNodes: [Int: SKShapeNode] = [:]
     private var targetKinds: [Int: TargetState.Kind] = [:]
     private var targetNodePools: [TargetState.Kind: [SKNode]] = [:]
@@ -37,6 +46,11 @@ final class GoalRushScene: SKScene {
     private var liveTargetIDs = Set<Int>()
     private var liveProjectileIDs = Set<Int>()
     private var liveCharacterAttackIDs = Set<Int>()
+    private var liveGaleBounceIDs = Set<Int>()
+    private var liveGaleInterceptorIDs = Set<Int>()
+    private var liveHaloRingIDs = Set<Int>()
+    private var liveMagneticTrapIDs = Set<Int>()
+    private var liveTidalWaveIDs = Set<Int>()
     private var liveBossHazardIDs = Set<Int>()
     private var targetHealthRatios: [Int: Double] = [:]
     private var fragmentedTargetIDs = Set<Int>()
@@ -47,12 +61,16 @@ final class GoalRushScene: SKScene {
     private var targetPrewarmIndex = 0
     private var impactPrewarmIndex = 0
     private let reducedEffects: Bool
+    private var isPreparedForRemoval = false
 #if DEBUG
     private var didShowRewardPreview = false
 #endif
     private lazy var meteorTexture = SKTexture(imageNamed: "AbilityMeteor")
     private lazy var shockwaveTexture = SKTexture(imageNamed: "AbilityShockwave")
     private lazy var meteorImpactTexture = SKTexture(imageNamed: "AbilityMeteorImpact")
+    private lazy var galeCrackTexture = SKTexture(imageNamed: "GaleImpactCracks")
+    private lazy var magneticTrapTexture = SKTexture(imageNamed: "FluxMagneticTrap")
+    private lazy var tidalCrestTexture = SKTexture(imageNamed: "SurgeTidalCrest")
     var eventHandler: (([SimulationEvent], SimulationSnapshot) -> Void)?
 
     init(session: GameSessionModel, reducedEffects: Bool) {
@@ -80,6 +98,19 @@ final class GoalRushScene: SKScene {
     }
 
     required init?(coder: NSCoder) { nil }
+
+    func synchronizePlayback(isPaused shouldPause: Bool) {
+        guard !isPreparedForRemoval else { return }
+        isPaused = shouldPause
+        view?.isPaused = shouldPause
+    }
+
+    func prepareForRemoval() {
+        isPreparedForRemoval = true
+        isPaused = true
+        view?.isPaused = true
+        eventHandler = nil
+    }
 
     override func didMove(to view: SKView) {
         view.shouldCullNonVisibleNodes = true
@@ -221,6 +252,12 @@ final class GoalRushScene: SKScene {
         playerNode.zPosition = 1_000
         syncTargets(snapshot.targets)
         syncCharacterAttacks(snapshot.characterAttacks)
+        syncGaleBounces(snapshot.galeBounces)
+        syncGaleInterceptors(snapshot.galeInterceptors)
+        syncGaleOrbit(count: snapshot.galeOrbitCount, elapsed: snapshot.elapsed)
+        syncHaloRings(snapshot.haloRings)
+        syncMagneticTraps(snapshot.magneticTraps, targets: snapshot.targets)
+        syncTidalWaves(snapshot.tidalWaves)
         syncProjectiles(snapshot.projectiles)
         syncBossHazards(snapshot.bossHazards)
     }
@@ -236,7 +273,8 @@ final class GoalRushScene: SKScene {
         }
         let reduceMotion = reducesMotion
         for target in targets {
-            let node = targetNodes[target.id] ?? {
+            let existingNode = targetNodes[target.id]
+            let node = existingNode ?? {
                 let newNode = dequeueTarget(for: target)
                 targetLayer.addChild(newNode)
                 targetNodes[target.id] = newNode
@@ -249,7 +287,9 @@ final class GoalRushScene: SKScene {
             if !isFrozen {
                 targetPoint.y += CGFloat(sin(target.phase * 7.5) * 2.2) * scale
             }
-            node.position = targetPoint
+            if !isFrozen || existingNode == nil {
+                node.position = targetPoint
+            }
             let bossMultiplier = scale * CGFloat(CampaignBalance.bossScale(tier: target.bossTier))
             if case .volatileCore = target.kind {
                 let arming = min(1, max(0, target.phase / 2.75))
@@ -258,21 +298,24 @@ final class GoalRushScene: SKScene {
             } else {
                 node.setScale(bossMultiplier)
             }
-            if isFrozen {
-                node.zRotation = 0
-            } else if case .enemy(let enemy) = target.kind, enemy == .tackleBot || enemy == .craterCrawler {
-                node.zRotation = 0.08 + CGFloat(sin(target.phase * 8)) * 0.045
-            } else {
-                node.zRotation = CGFloat(sin(target.phase * 5.5)) * 0.025
+            if !isFrozen || existingNode == nil {
+                if case .enemy(let enemy) = target.kind,
+                   enemy == .tackleBot || enemy == .craterCrawler {
+                    node.zRotation = 0.08 + CGFloat(sin(target.phase * 8)) * 0.045
+                } else {
+                    node.zRotation = CGFloat(sin(target.phase * 5.5)) * 0.025
+                }
             }
             node.zPosition = CGFloat(900 - target.position.y * 700)
-            GameNodeFactory.animateTarget(
-                on: node,
-                kind: target.kind,
-                phase: target.phase,
-                reducedMotion: reduceMotion,
-                frozen: isFrozen
-            )
+            if !isFrozen || existingNode == nil {
+                GameNodeFactory.animateTarget(
+                    on: node,
+                    kind: target.kind,
+                    phase: target.phase,
+                    reducedMotion: reduceMotion,
+                    frozen: isFrozen
+                )
+            }
             if case .powerUp = target.kind {
                 targetHealthRatios.removeValue(forKey: target.id)
             } else {
@@ -349,6 +392,334 @@ final class GoalRushScene: SKScene {
         }
     }
 
+    private func syncGaleBounces(_ bounces: [GaleBounceState]) {
+        liveGaleBounceIDs = Set(bounces.map(\.id))
+        for id in galeBounceNodes.keys where !liveGaleBounceIDs.contains(id) {
+            galeBounceNodes.removeValue(forKey: id)?.removeFromParent()
+        }
+
+        for bounce in bounces {
+            let node = galeBounceNodes[bounce.id] ?? {
+                let newNode = makeFloatingAbilityBall(
+                    temporaryAbility: nil,
+                    characterProjectile: .pinballBlitz,
+                    shadowColor: SKColor(red: 0.10, green: 0.03, blue: 0, alpha: 0.42)
+                )
+                projectileLayer.addChild(newNode)
+                galeBounceNodes[bounce.id] = newNode
+                return newNode
+            }()
+            let scale = perspectiveScale(bounce.position.y)
+            node.position = point(x: bounce.position.x, y: bounce.position.y)
+            node.setScale(scale * 1.72)
+            node.zPosition = CGFloat(1_060 - bounce.position.y * 520)
+            if let ball = node.childNode(withName: "ability-ball") {
+                ball.position.y = CGFloat(bounce.visualHeight)
+                    * size.height
+                    * 0.115
+                    / max(scale, 0.01)
+                ball.zRotation += reducesMotion ? 0.05 : 0.19
+            }
+            if let shadow = node.childNode(withName: "ability-shadow") {
+                shadow.alpha = 0.42 - CGFloat(bounce.visualHeight) * 0.22
+                shadow.xScale = 1 - CGFloat(bounce.visualHeight) * 0.38
+            }
+        }
+    }
+
+    private func syncGaleInterceptors(_ interceptors: [GaleInterceptorState]) {
+        liveGaleInterceptorIDs = Set(interceptors.map(\.id))
+        for id in galeInterceptorNodes.keys where !liveGaleInterceptorIDs.contains(id) {
+            galeInterceptorNodes.removeValue(forKey: id)?.removeFromParent()
+        }
+
+        for interceptor in interceptors {
+            let node = galeInterceptorNodes[interceptor.id] ?? {
+                let newNode = makeFloatingAbilityBall(
+                    temporaryAbility: .heatSeeking,
+                    characterProjectile: nil,
+                    shadowColor: .clear
+                )
+                projectileLayer.addChild(newNode)
+                galeInterceptorNodes[interceptor.id] = newNode
+                return newNode
+            }()
+            node.position = point(
+                x: interceptor.position.x,
+                y: interceptor.position.y
+            )
+            node.setScale(perspectiveScale(interceptor.position.y) * 1.08)
+            node.zPosition = 3_260
+            if let ball = node.childNode(withName: "ability-ball") {
+                ball.position.y = sin(CGFloat(interceptor.progress) * .pi) * 34
+                ball.zRotation += 0.26
+            }
+        }
+    }
+
+    private func makeFloatingAbilityBall(
+        temporaryAbility: TemporaryBallAbility?,
+        characterProjectile: CharacterProjectileKind?,
+        shadowColor: SKColor
+    ) -> SKNode {
+        let root = SKNode()
+        let shadow = SKShapeNode(ellipseOf: .init(width: 34, height: 10))
+        shadow.name = "ability-shadow"
+        shadow.fillColor = shadowColor
+        shadow.strokeColor = .clear
+        shadow.zPosition = -2
+        root.addChild(shadow)
+        let ball = GameNodeFactory.projectile(hostile: false)
+        ball.name = "ability-ball"
+        GameNodeFactory.configureProjectile(
+            ball,
+            hostile: false,
+            critical: true,
+            temporaryAbility: temporaryAbility,
+            characterProjectile: characterProjectile
+        )
+        root.addChild(ball)
+        return root
+    }
+
+    private func syncGaleOrbit(count: Int, elapsed: Double) {
+        if count == 0 {
+            galeOrbitNode?.removeFromParent()
+            galeOrbitNode = nil
+            return
+        }
+        if galeOrbitNode?.children.count != count {
+            galeOrbitNode?.removeFromParent()
+            let orbit = SKNode()
+            orbit.name = "gale-orbit"
+            for _ in 0..<count {
+                let ball = GameNodeFactory.projectile(hostile: false)
+                GameNodeFactory.configureProjectile(
+                    ball,
+                    hostile: false,
+                    critical: true,
+                    temporaryAbility: .heatSeeking
+                )
+                ball.setScale(0.72)
+                orbit.addChild(ball)
+            }
+            effectsLayer.addChild(orbit)
+            galeOrbitNode = orbit
+        }
+        guard let orbit = galeOrbitNode else { return }
+        orbit.position = playerNode.position + CGPoint(x: 0, y: 18)
+        orbit.zPosition = 3_080
+        let countValue = max(1, orbit.children.count)
+        for (index, ball) in orbit.children.enumerated() {
+            let angle = elapsed * 4.2
+                + Double(index) / Double(countValue) * .pi * 2
+            ball.position = .init(
+                x: cos(angle) * 42,
+                y: sin(angle) * 14
+            )
+            ball.zPosition = sin(angle) > 0 ? -1 : 1
+            ball.zRotation = angle
+        }
+    }
+
+    private func syncHaloRings(_ rings: [HaloRingState]) {
+        liveHaloRingIDs = Set(rings.map(\.id))
+        for id in haloRingNodes.keys where !liveHaloRingIDs.contains(id) {
+            haloRingNodes.removeValue(forKey: id)?.removeFromParent()
+        }
+
+        for ring in rings {
+            let node = haloRingNodes[ring.id] ?? {
+                let newNode = SKNode()
+                newNode.name = "halo-orbital-crown"
+                for _ in 0..<28 {
+                    let ball = GameNodeFactory.projectile(hostile: false)
+                    GameNodeFactory.configureProjectile(
+                        ball,
+                        hostile: false,
+                        critical: true,
+                        temporaryAbility: .ringReturn
+                    )
+                    ball.setScale(0.68)
+                    newNode.addChild(ball)
+                }
+                characterAttackLayer.addChild(newNode)
+                haloRingNodes[ring.id] = newNode
+                return newNode
+            }()
+            node.position = .zero
+            node.zPosition = 2_980
+            for (index, ball) in node.children.enumerated() {
+                let angle = ring.elapsed * 4.4
+                    + Double(index) / Double(max(1, node.children.count)) * .pi * 2
+                let worldPosition = Vector2(
+                    x: ring.center.x + cos(angle) * ring.radius,
+                    y: ring.center.y + sin(angle) * ring.radius * 0.58
+                )
+                ball.position = point(x: worldPosition.x, y: worldPosition.y)
+                ball.setScale(perspectiveScale(worldPosition.y) * 0.72)
+                ball.zPosition = CGFloat(950 - worldPosition.y * 620)
+                ball.zRotation = -angle
+            }
+        }
+    }
+
+    private func syncMagneticTraps(
+        _ traps: [MagneticTrapState],
+        targets: [TargetState]
+    ) {
+        liveMagneticTrapIDs = Set(traps.map(\.id))
+        for id in magneticTrapNodes.keys where !liveMagneticTrapIDs.contains(id) {
+            magneticTrapNodes.removeValue(forKey: id)?.removeFromParent()
+        }
+
+        for trap in traps {
+            let node = magneticTrapNodes[trap.id] ?? {
+                let newNode = makeMagneticTrapNode()
+                characterAttackLayer.addChild(newNode)
+                magneticTrapNodes[trap.id] = newNode
+                return newNode
+            }()
+            let scale = perspectiveScale(trap.position.y)
+            node.position = point(x: trap.position.x, y: trap.position.y)
+            node.setScale(scale)
+            node.zPosition = CGFloat(1_020 - trap.position.y * 520)
+            if !trap.hasLanded {
+                node.position.y += sin(CGFloat(trap.flightProgress) * .pi)
+                    * size.height
+                    * 0.10
+                node.zRotation = CGFloat(trap.flightProgress) * .pi * 2
+            } else {
+                node.zRotation = 0
+            }
+            let active = trap.captureRemaining > 0
+            let snapProgress = active
+                ? min(1, CGFloat(3.2 - trap.captureRemaining) / 0.16)
+                : 0
+            let jawScaleY = 0.54 + snapProgress * 0.58
+            let jawSeparation = 6 * (1 - snapProgress)
+            if let upperJaw = node.childNode(withName: "trap-upper-jaw") {
+                upperJaw.yScale = jawScaleY
+                upperJaw.position.y = jawSeparation
+                upperJaw.zRotation = active
+                    ? sin(CGFloat(trap.captureRemaining) * 17) * 0.025
+                    : 0
+            }
+            if let lowerJaw = node.childNode(withName: "trap-lower-jaw") {
+                lowerJaw.yScale = jawScaleY
+                lowerJaw.position.y = -jawSeparation
+                lowerJaw.zRotation = active
+                    ? -sin(CGFloat(trap.captureRemaining) * 17) * 0.025
+                    : 0
+            }
+            if let tether = node.childNode(withName: "trap-tether") as? SKShapeNode {
+                if let targetID = trap.targetID,
+                   let target = targets.first(where: { $0.id == targetID }),
+                   trap.hasLanded {
+                    let targetPoint = point(x: target.position.x, y: target.position.y)
+                    let localTarget = node.convert(targetPoint, from: world)
+                    let path = CGMutablePath()
+                    path.move(to: .zero)
+                    path.addLine(to: localTarget)
+                    tether.path = path
+                    tether.alpha = trap.captureRemaining > 0 ? 0.86 : 0.45
+                } else {
+                    tether.path = nil
+                }
+            }
+        }
+    }
+
+    private func makeMagneticTrapNode() -> SKNode {
+        let root = SKNode()
+        root.name = "magnetic-trap"
+        let underlay = SKShapeNode(ellipseOf: .init(width: 82, height: 25))
+        underlay.fillColor = SKColor(red: 0.02, green: 0.16, blue: 0.22, alpha: 0.66)
+        underlay.strokeColor = SKColor(red: 0.38, green: 1, blue: 0.86, alpha: 0.88)
+        underlay.lineWidth = 2
+        underlay.glowWidth = 6
+        root.addChild(underlay)
+
+        let upperTexture = SKTexture(
+            rect: .init(x: 0, y: 0.5, width: 1, height: 0.5),
+            in: magneticTrapTexture
+        )
+        let upperJaw = SKSpriteNode(texture: upperTexture)
+        upperJaw.name = "trap-upper-jaw"
+        upperJaw.anchorPoint = .init(x: 0.5, y: 0)
+        upperJaw.size = .init(width: 92, height: 36)
+        upperJaw.position.y = 6
+        upperJaw.yScale = 0.54
+        upperJaw.zPosition = 2
+        root.addChild(upperJaw)
+
+        let lowerTexture = SKTexture(
+            rect: .init(x: 0, y: 0, width: 1, height: 0.5),
+            in: magneticTrapTexture
+        )
+        let lowerJaw = SKSpriteNode(texture: lowerTexture)
+        lowerJaw.name = "trap-lower-jaw"
+        lowerJaw.anchorPoint = .init(x: 0.5, y: 1)
+        lowerJaw.size = .init(width: 92, height: 36)
+        lowerJaw.position.y = -6
+        lowerJaw.yScale = 0.54
+        lowerJaw.zPosition = 3
+        root.addChild(lowerJaw)
+
+        let tether = SKShapeNode()
+        tether.name = "trap-tether"
+        tether.strokeColor = SKColor(red: 0.38, green: 1, blue: 0.84, alpha: 0.82)
+        tether.lineWidth = 2
+        tether.glowWidth = 5
+        tether.zPosition = -1
+        root.addChild(tether)
+        return root
+    }
+
+    private func syncTidalWaves(_ waves: [TidalWaveState]) {
+        liveTidalWaveIDs = Set(waves.map(\.id))
+        for id in tidalWaveNodes.keys where !liveTidalWaveIDs.contains(id) {
+            tidalWaveNodes.removeValue(forKey: id)?.removeFromParent()
+        }
+
+        for wave in waves where wave.delayRemaining <= 0 {
+            let node = tidalWaveNodes[wave.id] ?? {
+                let newNode = SKSpriteNode(texture: tidalCrestTexture)
+                newNode.name = "surge-tidal-wave"
+                newNode.blendMode = .alpha
+                characterAttackLayer.addChild(newNode)
+                tidalWaveNodes[wave.id] = newNode
+                return newNode
+            }()
+            let center = point(x: wave.centerX, y: wave.positionY)
+            let left = point(
+                x: wave.centerX - wave.halfWidth,
+                y: wave.positionY
+            )
+            let right = point(
+                x: wave.centerX + wave.halfWidth,
+                y: wave.positionY
+            )
+            let laneWidth = max(54, abs(right.x - left.x))
+            node.position = center + CGPoint(x: 0, y: laneWidth * 0.28)
+            node.size = .init(
+                width: laneWidth * 1.12,
+                height: laneWidth * 0.72
+            )
+            node.xScale = 1
+            node.yScale = 1
+            node.alpha = wave.progress > 0.90
+                ? CGFloat(max(0, (1 - wave.progress) / 0.10))
+                : 0.96
+            node.zPosition = CGFloat(2_820 - wave.positionY * 460)
+            node.zRotation = sin(CGFloat(wave.elapsed) * 8) * 0.012
+            node.color = wave.round == 3
+                ? SKColor(red: 0.20, green: 0.82, blue: 1, alpha: 1)
+                : .white
+            node.colorBlendFactor = wave.round == 3 ? 0.10 : 0
+        }
+    }
+
     private func syncBossHazards(_ hazards: [BossHazardState]) {
         liveBossHazardIDs.removeAll(keepingCapacity: true)
         for hazard in hazards { liveBossHazardIDs.insert(hazard.id) }
@@ -401,7 +772,8 @@ final class GoalRushScene: SKScene {
                 ),
                 transform: nil
             )
-        case .orbitalLaser, .eclipseLane, .lunarDebris:
+        case .orbitalLaser, .eclipseLane, .lunarDebris, .windRail,
+             .ringSegment, .frozenRail, .pressureWall:
             let bottomY = 0.02
             let topY = renderedWorldID == .mars ? 0.86 : 0.92
             let bottom = point(x: hazard.position.x, y: bottomY)
@@ -428,6 +800,14 @@ final class GoalRushScene: SKScene {
             SKColor(red: 0.20, green: 0.90, blue: 1, alpha: 1)
         case .lunarDebris:
             SKColor(red: 0.76, green: 0.88, blue: 1, alpha: 1)
+        case .windRail:
+            SKColor(red: 1, green: 0.64, blue: 0.18, alpha: 1)
+        case .ringSegment:
+            SKColor(red: 0.94, green: 0.82, blue: 0.34, alpha: 1)
+        case .frozenRail:
+            SKColor(red: 0.34, green: 0.94, blue: 0.84, alpha: 1)
+        case .pressureWall:
+            SKColor(red: 0.10, green: 0.60, blue: 1, alpha: 1)
         }
     }
 
@@ -493,6 +873,7 @@ final class GoalRushScene: SKScene {
             hostile: projectile.hostile,
             critical: projectile.isCritical,
             temporaryAbility: projectile.temporaryAbility,
+            endlessEffects: projectile.endlessEffects,
             characterProjectile: projectile.characterProjectile
         )
         return node
@@ -596,6 +977,10 @@ final class GoalRushScene: SKScene {
                 spawnShockwaveLaunch(at: point(x: position.x, y: position.y))
             case .characterShockwaveHit(let position):
                 spawnShockwaveContact(at: point(x: position.x, y: position.y))
+            case .characterAbilityEffect(let effect):
+                showCharacterAbilityEffect(effect)
+            case .specialBallEffect(let effect):
+                showSpecialBallEffect(effect)
             case .voltChain(let chain):
                 showVoltChain(chain)
             case .finished(let won):
@@ -622,6 +1007,18 @@ final class GoalRushScene: SKScene {
         case .lunarDebris:
             text = "ORBITAL DEBRIS!"
             color = SKColor(red: 0.76, green: 0.88, blue: 1, alpha: 1)
+        case .windRail:
+            text = "WIND RAIL!"
+            color = SKColor(red: 1, green: 0.64, blue: 0.18, alpha: 1)
+        case .ringSegment:
+            text = "FIND THE GAP!"
+            color = SKColor(red: 0.94, green: 0.82, blue: 0.34, alpha: 1)
+        case .frozenRail:
+            text = "BRAKE EARLY!"
+            color = SKColor(red: 0.34, green: 0.94, blue: 0.84, alpha: 1)
+        case .pressureWall:
+            text = "FOLLOW THE CHANNEL!"
+            color = SKColor(red: 0.10, green: 0.60, blue: 1, alpha: 1)
         }
         showComicCallout(text, at: CGPoint(x: size.width * 0.5, y: size.height * 0.62), color: color)
     }
@@ -926,6 +1323,244 @@ final class GoalRushScene: SKScene {
         ring.lineWidth = 3
         ring.glowWidth = 6
         return ring
+    }
+
+    private func showSpecialBallEffect(_ effect: SpecialBallEffectEvent) {
+        switch effect {
+        case .gravityVortex(let position, let radius):
+            spawnGravityVortex(
+                at: point(x: position.x, y: position.y),
+                radius: radius
+            )
+        case .magnetMark(let position, _):
+            spawnMagnetMark(at: point(x: position.x, y: position.y))
+        case .orbitRedirect(let position):
+            spawnOrbitRedirect(at: point(x: position.x, y: position.y))
+        case .returnShot(let position):
+            spawnReturnArc(at: point(x: position.x, y: position.y))
+        case .solarPierce(let position):
+            spawnSolarPierce(at: point(x: position.x, y: position.y))
+        case .tidalPush(let position):
+            spawnTidalSplash(at: point(x: position.x, y: position.y))
+        }
+    }
+
+    private func spawnGravityVortex(at position: CGPoint, radius: Double) {
+        let root = SKNode()
+        root.name = "gravity-vortex-effect"
+        root.position = position
+        root.zPosition = 2_180
+        effectsLayer.addChild(root)
+
+        let renderedRadius = max(34, size.width * CGFloat(radius) * 0.42)
+        for index in 0..<3 {
+            let ring = SKShapeNode(
+                ellipseOf: .init(
+                    width: renderedRadius * 2,
+                    height: renderedRadius * 0.72
+                )
+            )
+            ring.fillColor = SKColor(
+                red: 0.35,
+                green: 0.04,
+                blue: 0.64,
+                alpha: 0.10
+            )
+            ring.strokeColor = index.isMultiple(of: 2)
+                ? SKColor(red: 0.82, green: 0.34, blue: 1, alpha: 0.95)
+                : .white.withAlphaComponent(0.88)
+            ring.lineWidth = 2.5
+            ring.glowWidth = reducesMotion ? 2 : 8
+            ring.zRotation = CGFloat(index) * 0.34
+            ring.setScale(1.30 + CGFloat(index) * 0.22)
+            root.addChild(ring)
+            ring.run(.sequence([
+                .wait(forDuration: Double(index) * 0.035),
+                .group([
+                    .scale(to: 0.18, duration: reducesMotion ? 0.18 : 0.46),
+                    .rotate(
+                        byAngle: reducesMotion ? 0 : .pi * 1.4,
+                        duration: reducesMotion ? 0.18 : 0.46
+                    ),
+                    .fadeOut(withDuration: reducesMotion ? 0.18 : 0.46),
+                ]),
+            ]))
+        }
+        root.run(.sequence([
+            .wait(forDuration: reducesMotion ? 0.24 : 0.58),
+            .removeFromParent(),
+        ]))
+    }
+
+    private func spawnMagnetMark(at position: CGPoint) {
+        let root = SKNode()
+        root.name = "magnet-mark-effect"
+        root.position = position
+        root.zPosition = 2_200
+        effectsLayer.addChild(root)
+
+        let ring = SKShapeNode(ellipseOf: .init(width: 68, height: 28))
+        ring.fillColor = SKColor(red: 0.06, green: 0.52, blue: 0.48, alpha: 0.14)
+        ring.strokeColor = SKColor(red: 0.20, green: 1, blue: 0.82, alpha: 0.96)
+        ring.lineWidth = 3
+        ring.glowWidth = reducesMotion ? 2 : 9
+        root.addChild(ring)
+        let poles: [(CGFloat, SKColor)] = [
+            (-34.0, SKColor(red: 0.08, green: 0.72, blue: 1, alpha: 1)),
+            (34.0, SKColor(red: 1, green: 0.18, blue: 0.62, alpha: 1)),
+        ]
+        for (x, color) in poles {
+            let pole = SKShapeNode(circleOfRadius: 5)
+            pole.position.x = x
+            pole.fillColor = color
+            pole.strokeColor = .white
+            pole.lineWidth = 1.5
+            pole.glowWidth = 5
+            root.addChild(pole)
+        }
+        root.setScale(0.46)
+        root.run(.sequence([
+            .group([
+                .scale(to: 1.12, duration: reducesMotion ? 0.10 : 0.18),
+                .fadeIn(withDuration: 0.08),
+            ]),
+            .scale(to: 1, duration: 0.10),
+            .wait(forDuration: reducesMotion ? 0.08 : 0.20),
+            .group([
+                .scale(to: 1.28, duration: 0.16),
+                .fadeOut(withDuration: 0.16),
+            ]),
+            .removeFromParent(),
+        ]))
+    }
+
+    private func spawnReturnArc(at position: CGPoint) {
+        let path = CGMutablePath()
+        path.addArc(
+            center: .zero,
+            radius: 25,
+            startAngle: .pi * 0.18,
+            endAngle: .pi * 1.82,
+            clockwise: false
+        )
+        let arc = SKShapeNode(path: path)
+        arc.name = "return-shot-effect"
+        arc.position = position
+        arc.zPosition = 2_190
+        arc.fillColor = .clear
+        arc.strokeColor = SKColor(red: 1, green: 0.76, blue: 0.12, alpha: 1)
+        arc.lineWidth = 4
+        arc.glowWidth = reducesMotion ? 2 : 9
+        effectsLayer.addChild(arc)
+
+        let arrow = SKLabelNode(text: "➤")
+        arrow.fontName = "AvenirNext-Heavy"
+        arrow.fontSize = 18
+        arrow.fontColor = .white
+        arrow.position = .init(x: -25, y: -8)
+        arrow.zRotation = -.pi * 0.58
+        arc.addChild(arrow)
+        arc.setScale(0.70)
+        arc.run(.sequence([
+            .group([
+                .scale(to: 1.20, duration: reducesMotion ? 0.12 : 0.28),
+                .rotate(
+                    byAngle: reducesMotion ? 0 : .pi * 0.70,
+                    duration: reducesMotion ? 0.12 : 0.28
+                ),
+            ]),
+            .group([
+                .scale(to: 1.38, duration: 0.16),
+                .fadeOut(withDuration: 0.16),
+            ]),
+            .removeFromParent(),
+        ]))
+    }
+
+    private func spawnOrbitRedirect(at position: CGPoint) {
+        let root = SKNode()
+        root.name = "orbit-redirect-effect"
+        root.position = position
+        root.zPosition = 2_190
+        effectsLayer.addChild(root)
+
+        for index in 0..<2 {
+            let ring = SKShapeNode(
+                ellipseOf: .init(
+                    width: 54 + CGFloat(index) * 16,
+                    height: 22 + CGFloat(index) * 8
+                )
+            )
+            ring.fillColor = .clear
+            ring.strokeColor = index == 0
+                ? SKColor(red: 0.62, green: 0.42, blue: 1, alpha: 0.96)
+                : .white.withAlphaComponent(0.88)
+            ring.lineWidth = 3
+            ring.glowWidth = reducesMotion ? 2 : 8
+            ring.zRotation = CGFloat(index) * .pi * 0.34
+            root.addChild(ring)
+        }
+
+        root.setScale(0.62)
+        root.run(.sequence([
+            .group([
+                .scale(to: 1.22, duration: reducesMotion ? 0.12 : 0.26),
+                .rotate(
+                    byAngle: reducesMotion ? 0 : .pi * 0.72,
+                    duration: reducesMotion ? 0.12 : 0.26
+                ),
+            ]),
+            .group([
+                .scale(to: 1.42, duration: 0.14),
+                .fadeOut(withDuration: 0.14),
+            ]),
+            .removeFromParent(),
+        ]))
+    }
+
+    private func spawnSolarPierce(at position: CGPoint) {
+        let root = SKNode()
+        root.name = "solar-pierce-effect"
+        root.position = position
+        root.zPosition = 2_205
+        effectsLayer.addChild(root)
+
+        let core = SKShapeNode(circleOfRadius: 8)
+        core.fillColor = .white
+        core.strokeColor = SKColor(red: 1, green: 0.72, blue: 0.08, alpha: 1)
+        core.lineWidth = 3
+        core.glowWidth = reducesMotion ? 2 : 10
+        root.addChild(core)
+
+        for index in 0..<8 {
+            let ray = SKShapeNode(
+                rectOf: .init(width: 3, height: 18),
+                cornerRadius: 1.5
+            )
+            ray.position.y = 18
+            ray.zRotation = CGFloat(index) * .pi / 4
+            ray.fillColor = index.isMultiple(of: 2)
+                ? .white
+                : SKColor(red: 1, green: 0.60, blue: 0.04, alpha: 1)
+            ray.strokeColor = .clear
+            root.addChild(ray)
+        }
+
+        root.setScale(0.54)
+        root.run(.sequence([
+            .group([
+                .scale(to: 1.34, duration: reducesMotion ? 0.10 : 0.20),
+                .rotate(
+                    byAngle: reducesMotion ? 0 : .pi * 0.24,
+                    duration: reducesMotion ? 0.10 : 0.20
+                ),
+            ]),
+            .group([
+                .scale(to: 1.62, duration: 0.14),
+                .fadeOut(withDuration: 0.14),
+            ]),
+            .removeFromParent(),
+        ]))
     }
 
     private func showVoltChain(_ chain: VoltChainEvent) {
@@ -1239,7 +1874,8 @@ final class GoalRushScene: SKScene {
         container.zPosition = 2_180
 
         let value = max(1, Int(damage.rounded()))
-        let text = critical ? "\(value)!" : "\(value)"
+        let compactValue = GameNumberFormatter.compact(value)
+        let text = critical ? "\(compactValue)!" : compactValue
         let fontSize: CGFloat = critical ? 27 : 20
         if let shadow = container.childNode(withName: "damage-shadow") as? SKLabelNode {
             shadow.text = text
@@ -1339,6 +1975,14 @@ final class GoalRushScene: SKScene {
             showComicCallout("ORBITAL DEBRIS!", at: position, color: SKColor(red: 0.76, green: 0.88, blue: 1, alpha: 1))
         case .volatileCores:
             showComicCallout("CORE ARMED!", at: position, color: SKColor(red: 1, green: 0.46, blue: 0.04, alpha: 1))
+        case .windShear:
+            showComicCallout("WIND SHEAR!", at: position, color: SKColor(red: 1, green: 0.70, blue: 0.24, alpha: 1))
+        case .ringSweep:
+            showComicCallout("FIND THE GAP!", at: position, color: SKColor(red: 1, green: 0.84, blue: 0.36, alpha: 1))
+        case .cryoDrift:
+            showComicCallout("CRYO DRIFT!", at: position, color: SKColor(red: 0.38, green: 0.94, blue: 0.88, alpha: 1))
+        case .pressureTide:
+            showComicCallout("PRESSURE TIDE!", at: position, color: SKColor(red: 0.12, green: 0.72, blue: 1, alpha: 1))
         }
     }
 
@@ -1350,6 +1994,14 @@ final class GoalRushScene: SKScene {
             if !reducedEffects { shake(intensity: 5) }
         case .volatileCores:
             break
+        case .windShear:
+            showScreenPulse(color: SKColor(red: 1, green: 0.64, blue: 0.18, alpha: 1), strength: 0.18)
+        case .ringSweep:
+            showScreenPulse(color: SKColor(red: 0.92, green: 0.78, blue: 0.32, alpha: 1), strength: 0.22)
+        case .cryoDrift:
+            showScreenPulse(color: SKColor(red: 0.34, green: 0.92, blue: 0.84, alpha: 1), strength: 0.18)
+        case .pressureTide:
+            showScreenPulse(color: SKColor(red: 0.08, green: 0.56, blue: 0.94, alpha: 1), strength: 0.24)
         }
     }
 
@@ -1518,7 +2170,9 @@ final class GoalRushScene: SKScene {
 #endif
 
     private func spawnHeal(amount: Double, from position: CGPoint) {
-        let label = SKLabelNode(text: "+\(Int(amount)) STAMINA")
+        let label = SKLabelNode(
+            text: "+\(GameNumberFormatter.compact(Int(amount))) STAMINA"
+        )
         label.fontName = "AvenirNext-Heavy"
         label.fontSize = 14
         label.fontColor = SKColor(red: 0.20, green: 1, blue: 0.72, alpha: 1)
@@ -1572,6 +2226,7 @@ final class GoalRushScene: SKScene {
     }
 
     private func showCharacterAbility(_ ability: CharacterAbility) {
+        showUltimateCinematic(ability)
         switch ability {
         case .pinballBlitz:
             spawnPinballLaunch()
@@ -1587,7 +2242,263 @@ final class GoalRushScene: SKScene {
             showScreenPulse(color: SKColor(red: 1, green: 0.76, blue: 0.14, alpha: 1), strength: 0.60)
             spawnAbilityAura()
             shake(intensity: 6)
+        case .stormbreak:
+            showScreenPulse(color: SKColor(red: 1, green: 0.66, blue: 0.18, alpha: 1), strength: 0.48)
+            spawnGaleLaunch()
+        case .ringRelay:
+            showScreenPulse(color: SKColor(red: 0.94, green: 0.82, blue: 0.36, alpha: 1), strength: 0.48)
+            spawnAbilityAura()
+        case .poleShift:
+            showScreenPulse(color: SKColor(red: 0.34, green: 0.94, blue: 0.82, alpha: 1), strength: 0.50)
+            spawnAbilityAura()
+        case .tidalBreak:
+            showScreenPulse(color: SKColor(red: 0.10, green: 0.66, blue: 1, alpha: 1), strength: 0.58)
+            spawnAbilityAura()
+            shake(intensity: 7)
         }
+    }
+
+    private func showUltimateCinematic(_ ability: CharacterAbility) {
+        let color: SKColor = switch ability {
+        case .pinballBlitz:
+            SKColor(red: 0.10, green: 0.88, blue: 1, alpha: 1)
+        case .timeBreak:
+            SKColor(red: 0.42, green: 0.92, blue: 1, alpha: 1)
+        case .meteorVolley:
+            SKColor(red: 1, green: 0.28, blue: 0.08, alpha: 1)
+        case .lastStand:
+            SKColor(red: 1, green: 0.76, blue: 0.14, alpha: 1)
+        case .stormbreak:
+            SKColor(red: 1, green: 0.66, blue: 0.18, alpha: 1)
+        case .ringRelay:
+            SKColor(red: 0.94, green: 0.82, blue: 0.36, alpha: 1)
+        case .poleShift:
+            SKColor(red: 0.34, green: 0.94, blue: 0.82, alpha: 1)
+        case .tidalBreak:
+            SKColor(red: 0.10, green: 0.66, blue: 1, alpha: 1)
+        }
+
+        if let body = playerNode.childNode(withName: "body") {
+            body.removeAction(forKey: "ultimate-cast")
+            body.run(.sequence([
+                .group([
+                    .scale(to: reducesMotion ? 1.04 : 1.18, duration: 0.08),
+                    .moveBy(x: 0, y: reducesMotion ? 2 : 9, duration: 0.08),
+                ]),
+                .group([
+                    .scale(to: 1, duration: reducesMotion ? 0.12 : 0.28),
+                    .moveBy(x: 0, y: reducesMotion ? -2 : -9, duration: reducesMotion ? 0.12 : 0.28),
+                ]),
+            ]), withKey: "ultimate-cast")
+        }
+
+        let groundSeal = SKShapeNode(
+            ellipseOf: .init(width: size.width * 0.42, height: size.width * 0.105)
+        )
+        groundSeal.position = point(x: session.snapshot.playerX, y: 0.12)
+        groundSeal.zPosition = 2_960
+        groundSeal.fillColor = color.withAlphaComponent(0.12)
+        groundSeal.strokeColor = .white.withAlphaComponent(0.92)
+        groundSeal.lineWidth = 3
+        groundSeal.glowWidth = reducesMotion ? 2 : 12
+        effectsLayer.addChild(groundSeal)
+        groundSeal.run(.sequence([
+            .group([
+                .scale(to: reducesMotion ? 1.16 : 1.72, duration: reducesMotion ? 0.14 : 0.34),
+                .fadeOut(withDuration: reducesMotion ? 0.14 : 0.34),
+            ]),
+            .removeFromParent(),
+        ]))
+
+        guard !reducesMotion else { return }
+        let wash = SKShapeNode(rectOf: size)
+        wash.position = .init(x: size.width * 0.5, y: size.height * 0.5)
+        wash.zPosition = 3_360
+        wash.fillColor = color.withAlphaComponent(0.13)
+        wash.strokeColor = .clear
+        wash.alpha = 0
+        effectsLayer.addChild(wash)
+        wash.run(.sequence([
+            .fadeAlpha(to: 1, duration: 0.045),
+            .wait(forDuration: 0.08),
+            .fadeOut(withDuration: 0.18),
+            .removeFromParent(),
+        ]))
+
+        let portrait = GameNodeFactory.player(
+            character: session.character.id,
+            presentation: .roster
+        )
+        portrait.position = .init(
+            x: size.width * 0.14,
+            y: size.height * 0.40
+        )
+        portrait.zPosition = 3_380
+        portrait.alpha = 0
+        portrait.setScale(1.28)
+        effectsLayer.addChild(portrait)
+        portrait.run(.sequence([
+            .group([
+                .fadeIn(withDuration: 0.055),
+                .moveBy(x: size.width * 0.07, y: 0, duration: 0.055),
+            ]),
+            .wait(forDuration: 0.10),
+            .group([
+                .moveBy(x: size.width * 0.12, y: 0, duration: 0.19),
+                .fadeOut(withDuration: 0.19),
+                .scale(to: 1.42, duration: 0.19),
+            ]),
+            .removeFromParent(),
+        ]))
+    }
+
+    private func spawnGaleLaunch() {
+        let origin = point(x: session.snapshot.playerX, y: 0.18)
+        for (index, destinationX) in [-0.72, -0.36, 0, 0.36, 0.72].enumerated() {
+            let path = CGMutablePath()
+            path.move(to: origin)
+            let destination = point(x: destinationX, y: 0.38)
+            path.addQuadCurve(
+                to: destination,
+                control: .init(
+                    x: (origin.x + destination.x) * 0.5,
+                    y: max(origin.y, destination.y) + size.height * 0.09
+                )
+            )
+            let streak = SKShapeNode(path: path)
+            streak.zPosition = 3_160
+            streak.strokeColor = index.isMultiple(of: 2)
+                ? SKColor(red: 1, green: 0.80, blue: 0.18, alpha: 0.92)
+                : .white.withAlphaComponent(0.92)
+            streak.lineWidth = 6
+            streak.glowWidth = reducesMotion ? 2 : 10
+            streak.alpha = 0
+            effectsLayer.addChild(streak)
+            streak.run(.sequence([
+                .wait(forDuration: Double(index) * 0.025),
+                .fadeIn(withDuration: 0.035),
+                .fadeOut(withDuration: reducesMotion ? 0.12 : 0.24),
+                .removeFromParent(),
+            ]))
+        }
+    }
+
+    private func showCharacterAbilityEffect(_ effect: CharacterAbilityEffect) {
+        switch effect {
+        case .timeShatter(let positions):
+            showScreenPulse(
+                color: SKColor(red: 0.72, green: 0.96, blue: 1, alpha: 1),
+                strength: 0.58
+            )
+            for position in positions.prefix(14) {
+                spawnImpact(
+                    at: point(x: position.x, y: position.y),
+                    flavor: .ice,
+                    critical: true
+                )
+            }
+            if !reducesMotion { shake(intensity: 8) }
+        case .galeLanding(let position, let variant):
+            spawnGaleCrack(at: position, variant: variant)
+            spawnImpact(
+                at: point(x: position.x, y: position.y),
+                flavor: .explosive,
+                critical: true
+            )
+            if !reducesMotion { shake(intensity: 4) }
+        case .galeInterception(let position):
+            let location = point(x: position.x, y: position.y)
+            spawnPinballRicochet(at: location)
+            spawnImpact(at: location, flavor: .standard, critical: true)
+            if !reducesMotion { shake(intensity: 7) }
+        case .haloContact(let position):
+            spawnPinballRicochet(at: point(x: position.x, y: position.y))
+        case .magneticTrapSnap(let position):
+            let location = point(x: position.x, y: position.y)
+            spawnImpact(at: location, flavor: .reverse, critical: true)
+            if !reducesMotion { shake(intensity: 3) }
+        case .tidalLaunch(let lane, let round, let position):
+            let laneColor = SKColor(
+                red: 0.08,
+                green: round == 3 ? 0.78 : 0.62,
+                blue: 1,
+                alpha: 1
+            )
+            let launch = SKShapeNode(ellipseOf: .init(width: 78, height: 20))
+            launch.position = point(x: position.x, y: position.y)
+            launch.zPosition = 2_760
+            launch.strokeColor = laneColor
+            launch.fillColor = laneColor.withAlphaComponent(0.16)
+            launch.lineWidth = 3
+            launch.glowWidth = 9
+            launch.xScale = lane == .middle ? 1.08 : 1
+            characterAttackLayer.addChild(launch)
+            launch.run(.sequence([
+                .group([
+                    .scale(to: reducesMotion ? 1.3 : 2.1, duration: 0.22),
+                    .fadeOut(withDuration: 0.22),
+                ]),
+                .removeFromParent(),
+            ]))
+            if round == 3 {
+                showScreenPulse(color: laneColor, strength: 0.24)
+            }
+        case .tidalHit(let position):
+            spawnTidalSplash(at: point(x: position.x, y: position.y))
+        }
+    }
+
+    private func spawnGaleCrack(at position: Vector2, variant: Int) {
+        let safeVariant = min(2, max(0, variant))
+        let texture = SKTexture(
+            rect: CGRect(
+                x: CGFloat(safeVariant) / 3,
+                y: 0,
+                width: 1 / 3,
+                height: 1
+            ),
+            in: galeCrackTexture
+        )
+        let crack = SKSpriteNode(texture: texture)
+        let trackScale = CGFloat(0.43 - 0.22 * position.y)
+        let visualWidth = max(74, size.width * trackScale * 0.78)
+        crack.size = .init(width: visualWidth, height: visualWidth * 0.40)
+        crack.position = point(x: position.x, y: position.y)
+        crack.zPosition = CGFloat(910 - position.y * 540)
+        crack.alpha = 0.96
+        crack.setScale(reducesMotion ? 0.92 : 0.52)
+        crack.zRotation = CGFloat(safeVariant - 1) * 0.08
+        characterAttackLayer.addChild(crack)
+        crack.run(.sequence([
+            .group([
+                .scale(to: 1, duration: reducesMotion ? 0.08 : 0.14),
+                .fadeAlpha(to: 0.92, duration: 0.08),
+            ]),
+            .wait(forDuration: reducesMotion ? 0.05 : 0.16),
+            .group([
+                .scale(to: 1.10, duration: 0.20),
+                .fadeOut(withDuration: 0.20),
+            ]),
+            .removeFromParent(),
+        ]))
+    }
+
+    private func spawnTidalSplash(at position: CGPoint) {
+        let splash = SKShapeNode(ellipseOf: .init(width: 62, height: 22))
+        splash.position = position
+        splash.zPosition = 3_250
+        splash.fillColor = SKColor(red: 0.18, green: 0.76, blue: 1, alpha: 0.28)
+        splash.strokeColor = .white
+        splash.lineWidth = 2
+        splash.glowWidth = 7
+        effectsLayer.addChild(splash)
+        splash.run(.sequence([
+            .group([
+                .scale(to: reducesMotion ? 1.28 : 2.05, duration: 0.20),
+                .fadeOut(withDuration: 0.20),
+            ]),
+            .removeFromParent(),
+        ]))
     }
 
     private func spawnPinballLaunch() {
@@ -1663,7 +2574,7 @@ final class GoalRushScene: SKScene {
                     if self.freezeCrystalPool.count < 12 { self.freezeCrystalPool.append(crystal) }
                 }
             }
-        case .meteorVolley, .lastStand:
+        case .meteorVolley, .lastStand, .stormbreak, .ringRelay, .poleShift, .tidalBreak:
             break
         }
     }
@@ -1775,7 +2686,9 @@ final class GoalRushScene: SKScene {
         backplate.lineWidth = 2
         container.addChild(backplate)
 
-        let label = SKLabelNode(text: "WAVE \(wave) CLEARED")
+        let label = SKLabelNode(
+            text: "WAVE \(GameNumberFormatter.compact(wave)) CLEARED"
+        )
         label.fontName = "AvenirNext-Heavy"
         label.fontSize = 20
         label.fontColor = .white
@@ -1808,7 +2721,9 @@ final class GoalRushScene: SKScene {
 
     private func showComboPopup(count: Int) {
         guard !reducesMotion else { return }
-        let label = SKLabelNode(text: "COMBO ×\(count)")
+        let label = SKLabelNode(
+            text: "COMBO ×\(GameNumberFormatter.compact(count))"
+        )
         label.fontName = "AvenirNext-Heavy"
         label.fontSize = 30
         label.fontColor = SKColor(red: 1.0, green: 0.72, blue: 0.12, alpha: 1)

@@ -105,7 +105,9 @@ struct AbilityDraftView: View {
 
     private var headerEyebrow: String {
         if session.isStarterDraft { return "ENDLESS RUN" }
-        if session.mode.isEndless { return "ENDLESS • WAVE \(session.snapshot.wave)" }
+        if session.mode.isEndless {
+            return "ENDLESS • WAVE \(GameNumberFormatter.compact(session.snapshot.wave))"
+        }
         return "WAVE \(session.snapshot.wave) OF \(session.snapshot.waveCount)"
     }
 
@@ -115,7 +117,7 @@ struct AbilityDraftView: View {
 
     private var headerScope: String {
         session.mode.isEndless
-            ? "LASTS THIS RUN • NO RANK CAP"
+            ? "EFFECTS CAN STACK • NO RANK CAP"
             : "LASTS THIS LEVEL"
     }
 

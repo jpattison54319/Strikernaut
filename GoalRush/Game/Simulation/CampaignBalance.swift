@@ -2,10 +2,11 @@ import Foundation
 
 enum CampaignBalance {
     static let bossArenaY = 0.70
-    static let waveHealthGrowth = 1.15
-    static let landmarkHealthGrowth = 1.08
-    static let landmarkDamageGrowth = 1.025
-    static let landmarkSpawnPressure = 0.96
+    static let expectedDraftOffenseGrowth = 1.14
+    static let landmarkWorldLevels = [5, 8, 10]
+    static let representativeIncomingDamage = 14.0
+    static let maximumEmptyFieldSpawnDelay = 0.55
+    static let enemyStaggerInterval = 0.12
 
     static func waveCount(worldLevel: Int) -> Int {
         switch worldLevel {
@@ -18,32 +19,24 @@ enum CampaignBalance {
     static func wave(_ number: Int, for level: LevelDefinition) -> CampaignWaveDefinition {
         let safeWave = min(max(number, 1), level.waveCount)
         let waveIndex = Double(safeWave - 1)
-        let worldLevelIndex = Double(level.worldLevel - 1)
-        let landmarkIndex = Double(landmarkTier(worldLevel: level.worldLevel))
-        let worldIndex = Double(WorldID.allCases.firstIndex(of: level.world) ?? 0)
         let isBossWave = safeWave == level.waveCount
         let isMegaBoss = level.hasBoss && isBossWave
+        let spawnInterval = spawnInterval(level: level, wave: safeWave)
         return CampaignWaveDefinition(
             number: safeWave,
             totalWaves: level.waveCount,
             enemyQuota: isBossWave ? 1 : regularEnemyQuota(wave: safeWave, for: level),
-            healthMultiplier: baseHealthMultiplier(level: level)
-                * pow(landmarkHealthGrowth, landmarkIndex)
-                * pow(waveHealthGrowth, waveIndex),
-            damageMultiplier: baseDamageMultiplier(world: level.world)
-                * (1 + worldLevelIndex * 0.015)
-                * pow(landmarkDamageGrowth, landmarkIndex)
-                * pow(1.07, waveIndex),
-            speedMultiplier: baseSpeedMultiplier(level: level)
-                * pow(1.10, worldIndex)
-                * (1 + waveIndex * 0.05),
-            spawnInterval: max(
-                0.60,
-                continuousSpawnInterval(levelNumber: level.number)
-                    * pow(0.90, worldIndex)
-                    * pow(landmarkSpawnPressure, landmarkIndex)
-                    * pow(0.91, waveIndex)
+            healthMultiplier: regularHealthMultiplier(
+                level: level,
+                wave: safeWave
             ),
+            damageMultiplier: damageMultiplier(
+                level: level,
+                wave: safeWave
+            ),
+            speedMultiplier: baseSpeedMultiplier(level: level)
+                * (1 + waveIndex * 0.04),
+            spawnInterval: spawnInterval,
             boss: isBossWave
                 ? (isMegaBoss
                     ? GameContent.world(level.world).boss
@@ -65,15 +58,47 @@ enum CampaignBalance {
         let safeWave = min(max(wave, 1), level.waveCount)
         let worldIndex = WorldID.allCases.firstIndex(of: level.world) ?? 0
         let base = 18
-            + Int((0.9 * Double(max(0, level.number - 1))).rounded())
+            + 2 * max(0, level.number - 1)
             + 3 * worldIndex
-        let waveMultiplier = 1 + 0.12 * Double(max(0, safeWave - 1))
+        let waveMultiplier = 1 + 0.18 * Double(max(0, safeWave - 1))
         return max(1, Int((Double(base) * waveMultiplier).rounded()))
     }
 
-    static func maximumActiveEnemies(wave: Int, world: WorldID) -> Int {
-        let worldIndex = WorldID.allCases.firstIndex(of: world) ?? 0
-        return min(8, 4 + worldIndex + max(0, wave - 1) / 2)
+    static func enemyPackSize(wave: Int, for level: LevelDefinition) -> Int {
+        let safeWave = min(max(wave, 1), level.waveCount)
+        return min(
+            16,
+            1
+                + max(0, level.number - 1) / 9
+                + landmarkTier(worldLevel: level.worldLevel)
+                + max(0, safeWave - 1)
+        )
+    }
+
+    static func maximumActiveEnemies(wave: Int, for level: LevelDefinition) -> Int {
+        return min(
+            48,
+            6
+                + max(0, level.number - 1) / 2
+                + landmarkTier(worldLevel: level.worldLevel)
+                + 2 * max(0, wave - 1)
+        )
+    }
+
+    /// Horde size can climb far beyond the number of readable projectiles.
+    /// Ranged enemies still attack faster every level, while this cap prevents
+    /// a large mixed pack from turning into an unavoidable solid wall.
+    static func maximumHostileProjectiles(
+        wave: Int,
+        for level: LevelDefinition
+    ) -> Int {
+        min(
+            10,
+            3
+                + max(0, level.number - 1) / 15
+                + landmarkTier(worldLevel: level.worldLevel)
+                + max(0, wave - 1) / 2
+        )
     }
 
     static func reinforcementPulseSize(levelNumber: Int) -> Int {
@@ -93,6 +118,10 @@ enum CampaignBalance {
             case .earth: 2.50
             case .moon: 2.30
             case .mars: 2.50
+            case .jupiter: 2.65
+            case .saturn: 2.80
+            case .uranus: 2.95
+            case .neptune: 3.10
             }
         }
     }
@@ -114,34 +143,191 @@ enum CampaignBalance {
     }
 
     static func expectedOffenseMultiplier(afterUpgradeCount count: Int) -> Double {
-        pow(1.14, Double(max(0, count)))
+        pow(expectedDraftOffenseGrowth, Double(max(0, count)))
     }
 
-    private static func continuousSpawnInterval(levelNumber: Int) -> Double {
-        1.55 * pow(0.985, Double(max(0, levelNumber - 1)))
-    }
-
-    private static func baseHealthMultiplier(level: LevelDefinition) -> Double {
-        if level.number == 1 { return 0.78 }
-        let worldBase = switch level.world {
-        case .earth: 0.92
-        case .moon: 1.60
-        case .mars: 2.80
+    static func cumulativeLandmarkCount(for level: LevelDefinition) -> Int {
+        let completedWorlds = max(0, (level.number - 1) / 10)
+        let localLandmarks = landmarkWorldLevels.count {
+            level.worldLevel >= $0
         }
-        return worldBase * pow(1.030, Double(level.worldLevel - 1))
+        return completedWorlds * landmarkWorldLevels.count + localLandmarks
     }
 
-    private static func baseDamageMultiplier(world: WorldID) -> Double {
-        switch world {
-        case .earth: 1
-        case .moon: 1.34
-        case .mars: 1.75
+    /// The equal-rank reference build used to tune Campaign. It is determined
+    /// only by authored progress, never by the player's live loadout.
+    ///
+    /// World finales target ranks 3, 5, 7, ... 15. Every level raises the
+    /// reference, while Levels 5, 8, and 10 make the larger organic grind steps.
+    static func targetPermanentRank(for level: LevelDefinition) -> Double {
+        let worldIndex = WorldID.allCases.firstIndex(of: level.world) ?? 0
+        let previousFinalRank = 3 + 2 * Double(max(0, worldIndex - 1))
+        let startRank = worldIndex == 0 ? 0 : previousFinalRank + 0.15
+        let endRank = 3 + 2 * Double(worldIndex)
+        let fractions = [0.0, 0.08, 0.16, 0.25, 0.43, 0.52, 0.62, 0.79, 0.89, 1.0]
+        let index = min(max(level.worldLevel, 1), fractions.count) - 1
+        let fraction = fractions[index]
+        return startRank + (endRank - startRank) * fraction
+    }
+
+    static func referenceDamagePerKick(for level: LevelDefinition) -> Double {
+        let rank = targetPermanentRank(for: level)
+        let damage = referenceBallDamage(for: level)
+        let expectedCriticalMultiplier = 1 + 0.05 + 0.03 * rank
+        return damage * expectedCriticalMultiplier
+    }
+
+    static func referenceBallDamage(for level: LevelDefinition) -> Double {
+        10 * (1 + 0.10 * targetPermanentRank(for: level))
+    }
+
+    /// Expected single-target automatic-kick DPS for the reference build.
+    /// Critical tiers have expectation `1 + criticalPower`, including overflow.
+    static func referenceSingleTargetDPS(for level: LevelDefinition) -> Double {
+        let rank = targetPermanentRank(for: level)
+        let cooldown = UpgradeRules.kickCooldown(for: rank)
+        return referenceDamagePerKick(for: level) / cooldown
+    }
+
+    /// Boss health is reference DPS multiplied by a target time-to-defeat.
+    /// The target rises across worlds so later bosses are tougher before their
+    /// denser hazards, adds, and faster attacks are considered.
+    static func bossHitPoints(
+        tier: CampaignBossTier,
+        wave: Int,
+        for level: LevelDefinition
+    ) -> Double {
+        let draftAdjustedDPS = referenceSingleTargetDPS(for: level)
+            * expectedOffenseMultiplier(afterUpgradeCount: max(0, wave - 1))
+        let targetSeconds: Double = switch tier {
+        case .standard:
+            1
+        case .miniBoss:
+            7
+                + 0.16 * Double(max(0, level.number - 1))
+                + 1.5 * Double(landmarkTier(worldLevel: level.worldLevel))
+                + 0.5 * Double(max(0, wave - 3))
+        case .megaBoss:
+            megaBossTargetSeconds(for: level)
         }
+        return draftAdjustedDPS * targetSeconds
+    }
+
+    private static func megaBossTargetSeconds(for level: LevelDefinition) -> Double {
+        50 + 1.5 * Double(WorldID.allCases.firstIndex(of: level.world) ?? 0)
+    }
+
+    static func attackCadenceMultiplier(
+        level: LevelDefinition,
+        wave: Int
+    ) -> Double {
+        let levelIndex = Double(max(0, level.number - 1))
+        let landmarks = Double(cumulativeLandmarkCount(for: level))
+        let waveIndex = Double(max(0, wave - 1))
+        return 1 / (
+            1
+                + 0.006 * levelIndex
+                + 0.015 * landmarks
+                + 0.04 * waveIndex
+        )
+    }
+
+    static func hostileProjectileSpeedMultiplier(
+        level: LevelDefinition,
+        wave: Int
+    ) -> Double {
+        1
+            + 0.006 * Double(max(0, level.number - 1))
+            + 0.012 * Double(cumulativeLandmarkCount(for: level))
+            + 0.035 * Double(max(0, wave - 1))
+    }
+
+    static func bossSupportCapacity(for level: LevelDefinition) -> Int {
+        let worldIndex = WorldID.allCases.firstIndex(of: level.world) ?? 0
+        return min(
+            6,
+            2
+                + worldIndex / 2
+                + landmarkTier(worldLevel: level.worldLevel)
+        )
+    }
+
+    static func bossSupportSpawnInterval(
+        level: LevelDefinition,
+        wave: Int
+    ) -> TimeInterval {
+        max(
+            1.75,
+            3.6 * attackCadenceMultiplier(level: level, wave: wave)
+        )
+    }
+
+    /// Durability is independent from spawn density. Faster spawning and
+    /// tougher enemies therefore compound instead of silently cancelling out.
+    private static func regularHealthMultiplier(
+        level: LevelDefinition,
+        wave: Int
+    ) -> Double {
+        let averageBaseHealth = level.enemies
+            .map { CombatBalance.baseHealth($0) }
+            .reduce(0, +) / Double(max(1, level.enemies.count))
+        let openingDamageFraction = if level.number < 5 {
+            0.62 + 0.03 * Double(max(0, level.number - 1))
+        } else {
+            0.94
+                + 0.0003 * Double(level.number - 5)
+                + 0.0003 * Double(cumulativeLandmarkCount(for: level))
+        }
+        let damageFraction = openingDamageFraction
+            + 0.05 * Double(max(0, wave - 1))
+        let targetAverageHealth = referenceBallDamage(for: level)
+            * damageFraction
+            * expectedOffenseMultiplier(afterUpgradeCount: max(0, wave - 1))
+        return targetAverageHealth
+            / averageBaseHealth
+    }
+
+    /// Actual post-cap damage rises every level. The authored raw damage is
+    /// solved against baseline stamina so Conditioning remains a real survival
+    /// upgrade instead of enemy damage silently cancelling the extra stamina.
+    /// Exposure, spawn cadence, and hazard density never reduce severity.
+    private static func damageMultiplier(
+        level: LevelDefinition,
+        wave: Int
+    ) -> Double {
+        let effectiveFraction =
+            0.075
+                + 0.002 * Double(max(0, level.number - 1))
+                + 0.0007 * Double(cumulativeLandmarkCount(for: level))
+                + 0.005 * Double(max(0, wave - 1))
+        let balanceStamina = 100.0
+        let effectiveDamage = balanceStamina * min(0.245, effectiveFraction)
+        let limit = balanceStamina * CombatBalance.incomingDamageLimitFraction
+        let rawDamage = -limit * log1p(-effectiveDamage / limit)
+        return rawDamage / representativeIncomingDamage
     }
 
     private static func baseSpeedMultiplier(level: LevelDefinition) -> Double {
         if level.number == 1 { return 0.80 }
-        return 1 + min(0.34, Double(level.number - 1) * 0.018)
+        return pow(1.0065, Double(max(0, level.number - 2)))
+            * pow(1.008, Double(cumulativeLandmarkCount(for: level)))
+    }
+
+    private static func spawnInterval(
+        level: LevelDefinition,
+        wave: Int
+    ) -> TimeInterval {
+        let pressureIndex =
+            Double(max(0, level.number - 1))
+                + 1.5 * Double(cumulativeLandmarkCount(for: level))
+        let continuousInterval = 1.55 * pow(0.9745, pressureIndex)
+        let lateGameFloor = 0.60 * pow(0.9965, pressureIndex)
+        let perEnemyInterval = max(continuousInterval, lateGameFloor)
+            * pow(0.91, Double(max(0, wave - 1)))
+        return max(
+            0.32,
+            perEnemyInterval * Double(enemyPackSize(wave: wave, for: level))
+        )
     }
 
     private static func miniBoss(for level: LevelDefinition, wave: Int) -> EnemyKind {

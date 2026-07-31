@@ -107,18 +107,26 @@ enum MissionCatalog {
         }
     }
 
-    static func goalText(for kind: MissionKind, goal: Int) -> String {
-        switch kind {
-        case .defeatTargets: "Defeat \(goal) targets"
-        case .earnTokens: "Earn \(goal) tokens"
-        case .reachWave: "Reach wave \(goal)"
+    static func goalText(
+        for kind: MissionKind,
+        goal: Int,
+        compactNumbers: Bool = true
+    ) -> String {
+        let displayedGoal = compactNumbers
+            ? GameNumberFormatter.compact(goal)
+            : GameNumberFormatter.exact(goal)
+
+        return switch kind {
+        case .defeatTargets: "Defeat \(displayedGoal) targets"
+        case .earnTokens: "Earn \(displayedGoal) tokens"
+        case .reachWave: "Reach wave \(displayedGoal)"
         case .clearLevels: "Clear \(goal) level\(goal == 1 ? "" : "s")"
         case .draftAbilities: "Draft \(goal) powers"
         case .winWithStamina: "Win with 50%+ stamina"
-        case .achieveCombo: "Reach a ×\(goal) combo"
+        case .achieveCombo: "Reach a ×\(displayedGoal) combo"
         case .defeatBosses: "Defeat a boss"
-        case .playEndlessRuns: "Play \(goal) Endless runs"
-        case .earnScore: "Score \(goal.formatted()) in a run"
+        case .playEndlessRuns: "Play \(displayedGoal) Endless runs"
+        case .earnScore: "Score \(displayedGoal) in a run"
         }
     }
 }

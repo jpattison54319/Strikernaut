@@ -82,6 +82,14 @@ private struct WorldSelectionButton: View {
             "Clear Earth challenge 10 to unlock"
         case .mars:
             "Clear Moon challenge 10 to unlock"
+        case .jupiter:
+            "Clear Mars challenge 30 to unlock"
+        case .saturn:
+            "Clear Jupiter challenge 40 to unlock"
+        case .uranus:
+            "Clear Saturn challenge 50 to unlock"
+        case .neptune:
+            "Clear Uranus challenge 60 to unlock"
         }
     }
 }

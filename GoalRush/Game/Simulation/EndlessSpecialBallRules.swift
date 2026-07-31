@@ -2,6 +2,7 @@ import Foundation
 
 enum EndlessSpecialBallRules {
     static let campaignEquivalentRank = 5
+    static let chancePerRank = 0.10
     static let abilities: [TemporaryBallAbility] = [
         .volt,
         .ice,
@@ -9,10 +10,29 @@ enum EndlessSpecialBallRules {
         .reverse,
         .explosive,
         .split,
+        .gravityWell,
+        .ringReturn,
+        .polarLink,
+        .undertow,
     ]
 
     static func isAvailable(_ ability: TemporaryBallAbility) -> Bool {
         abilities.contains(ability)
+    }
+
+    static func triggerChance(rank: Int) -> Double {
+        min(1, Double(max(0, rank)) * chancePerRank)
+    }
+
+    static func triggeredEffects(
+        ranks: [TemporaryBallAbility: Int],
+        rolls: [TemporaryBallAbility: Double]
+    ) -> Set<TemporaryBallAbility> {
+        Set(abilities.filter { ability in
+            let chance = triggerChance(rank: ranks[ability, default: 0])
+            let roll = min(0.999_999, max(0, rolls[ability, default: 1]))
+            return chance > roll
+        })
     }
 
     static func scale(rank: Int) -> Double {
@@ -20,18 +40,16 @@ enum EndlessSpecialBallRules {
         return sqrt(Double(rank) / Double(campaignEquivalentRank))
     }
 
-    static func selectedAbility(
-        ranks: [TemporaryBallAbility: Int],
-        roll: Double
-    ) -> TemporaryBallAbility? {
-        let owned = abilities.filter { ranks[$0, default: 0] > 0 }
-        guard !owned.isEmpty else { return nil }
-        let clampedRoll = min(0.999_999, max(0, roll))
-        return owned[Int(clampedRoll * Double(owned.count))]
-    }
-
-    static func voltDamageMultiplier(recipientOffset: Int, rank: Int) -> Double {
-        (0.15 + Double(max(0, recipientOffset)) * 0.05) * scale(rank: rank)
+    static func voltDamageMultiplier(
+        recipientOffset: Int,
+        recipientCount: Int,
+        rank: Int
+    ) -> Double {
+        let safeCount = max(1, recipientCount)
+        let safeOffset = min(max(0, recipientOffset), safeCount - 1)
+        let reverseOffset = safeCount - safeOffset - 1
+        return (0.15 + Double(reverseOffset) * 0.05)
+            * scale(rank: rank)
     }
 
     static func iceDuration(rank: Int) -> TimeInterval {
@@ -71,4 +89,46 @@ enum EndlessSpecialBallRules {
     static func splitDamageMultiplier(rank: Int) -> Double {
         0.42 * scale(rank: rank)
     }
+
+    static func gravityWellDamageMultiplier(rank: Int) -> Double {
+        0.38 * scale(rank: rank)
+    }
+
+    static func gravityWellRadius(rank: Int) -> Double {
+        guard rank > 0 else { return 0 }
+        return 0.42 * pow(Double(rank) / Double(campaignEquivalentRank), 0.18)
+    }
+
+    static func gravityWellPullStrength(rank: Int) -> Double {
+        6.5 * scale(rank: rank)
+    }
+
+    static let gravityWellPullDuration: TimeInterval = 0.55
+
+    static func ringReturnPasses(rank: Int) -> Int {
+        guard rank > 0 else { return 0 }
+        return 1 + max(0, rank - 1) / campaignEquivalentRank
+    }
+
+    static func ringReturnDamageMultiplier(rank: Int) -> Double {
+        scale(rank: rank)
+    }
+
+    static func polarLinkTurnRate(rank: Int) -> Double {
+        5.5 * scale(rank: rank)
+    }
+
+    static func polarLinkMarkDuration(rank: Int) -> TimeInterval {
+        1.4 * scale(rank: rank)
+    }
+
+    static func undertowPush(rank: Int) -> Double {
+        0.14 * scale(rank: rank)
+    }
+
+    static func undertowSlowDuration(rank: Int) -> TimeInterval {
+        0.55 * scale(rank: rank)
+    }
+
+    static let undertowSpeedFactor = 0.55
 }

@@ -5,19 +5,28 @@ struct GameDestinationBar: View {
 
     let title: String
     let trailingText: String?
+    let trailingActionTitle: String?
+    let trailingActionSystemImage: String?
     let onHome: () -> Void
     let onInfo: (() -> Void)?
+    let onTrailingAction: (() -> Void)?
 
     init(
         title: String,
         trailingText: String? = nil,
+        trailingActionTitle: String? = nil,
+        trailingActionSystemImage: String? = nil,
         onHome: @escaping () -> Void,
-        onInfo: (() -> Void)? = nil
+        onInfo: (() -> Void)? = nil,
+        onTrailingAction: (() -> Void)? = nil
     ) {
         self.title = title
         self.trailingText = trailingText
+        self.trailingActionTitle = trailingActionTitle
+        self.trailingActionSystemImage = trailingActionSystemImage
         self.onHome = onHome
         self.onInfo = onInfo
+        self.onTrailingAction = onTrailingAction
     }
 
     var body: some View {
@@ -57,7 +66,9 @@ struct GameDestinationBar: View {
     private var accessibilityControls: some View {
         VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
             homeButton
-            if onInfo != nil, trailingText != nil {
+            if hasTrailingAction {
+                trailingActionButton
+            } else if onInfo != nil, trailingText != nil {
                 infoButton
             }
         }
@@ -92,7 +103,10 @@ struct GameDestinationBar: View {
                 homeButton
                     .fixedSize(horizontal: true, vertical: false)
                 Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
-                if onInfo != nil, trailingText != nil {
+                if hasTrailingAction {
+                    trailingActionButton
+                        .fixedSize(horizontal: true, vertical: false)
+                } else if onInfo != nil, trailingText != nil {
                     infoButton
                         .fixedSize(horizontal: true, vertical: false)
                 }
@@ -137,9 +151,37 @@ struct GameDestinationBar: View {
         }
     }
 
+    private var hasTrailingAction: Bool {
+        onTrailingAction != nil && trailingActionTitle != nil
+    }
+
+    private var trailingActionButton: some View {
+        Button(action: { onTrailingAction?() }) {
+            Label(
+                trailingActionTitle ?? "",
+                systemImage: trailingActionSystemImage ?? "arrow.right"
+            )
+            .font(GoalRushTheme.Typography.subheadlineEmphasized)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, GoalRushTheme.Metrics.standardSpacing)
+            .frame(
+                maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil,
+                minHeight: GoalRushTheme.Metrics.minimumTapTarget,
+                alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center
+            )
+        }
+        .accessibilityIdentifier(
+            "destination-\(trailingActionTitle?.lowercased() ?? "action")"
+        )
+    }
+
     @ViewBuilder
     private var trailingControl: some View {
-        if onInfo != nil, trailingText != nil {
+        if hasTrailingAction {
+            trailingActionButton
+                .fixedSize(horizontal: true, vertical: false)
+        } else if onInfo != nil, trailingText != nil {
             infoButton
                 .fixedSize(horizontal: true, vertical: false)
         } else {

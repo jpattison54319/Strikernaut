@@ -67,10 +67,70 @@ struct VisualThemeTests {
         for name in Self.factionSigilNames {
             #expect(UIImage(named: name)?.size == CGSize(width: 512, height: 512), "\(name) changed size")
         }
-        #expect(UIImage(named: "GameplayArena")?.size == CGSize(width: 1024, height: 1536))
-        #expect(UIImage(named: "MarsArena")?.size == CGSize(width: 1024, height: 1536))
+        for name in Self.arenaAndMapNames {
+            #expect(UIImage(named: name)?.size == CGSize(width: 1024, height: 1536), "\(name) changed size")
+        }
+        for name in Self.planetNames {
+            #expect(UIImage(named: name)?.size == CGSize(width: 1254, height: 1254), "\(name) changed size")
+        }
         #expect(UIImage(named: "MenuHero")?.size == CGSize(width: 1024, height: 1536))
         #expect(UIImage(named: "TrainingToken")?.size == CGSize(width: 512, height: 512))
+    }
+
+    @Test func everyCharacterUsesDistinctRosterAndGameplayArtwork() {
+        let rosterArtwork = CharacterID.allCases.compactMap { character in
+            UIImage(named: CharacterCatalog.character(character).assetStem + "Roster")?
+                .pngData()
+        }
+        let gameplayArtwork = CharacterID.allCases.compactMap { character in
+            UIImage(named: CharacterCatalog.character(character).assetStem + "Gameplay")?
+                .pngData()
+        }
+
+        #expect(rosterArtwork.count == CharacterID.allCases.count)
+        #expect(gameplayArtwork.count == CharacterID.allCases.count)
+        #expect(Set(rosterArtwork).count == rosterArtwork.count)
+        #expect(Set(gameplayArtwork).count == gameplayArtwork.count)
+    }
+
+    @Test func characterSilhouettesRemainDistinctAndAlphaSafe() {
+        for suffix in ["Roster", "Gameplay"] {
+            let masks = CharacterID.allCases.compactMap { character -> (CharacterID, [UInt8])? in
+                let name = CharacterCatalog.character(character).assetStem + suffix
+                guard let image = UIImage(named: name),
+                      let mask = Self.alphaMask(for: image) else {
+                    return nil
+                }
+                return (character, mask)
+            }
+
+            #expect(masks.count == CharacterID.allCases.count)
+
+            for (character, mask) in masks {
+                let coverage = Double(mask.reduce(0) { $0 + Int($1) }) / Double(mask.count)
+                #expect(coverage > 0.08, "\(character) \(suffix) has too little visible artwork")
+                #expect(coverage < 0.35, "\(character) \(suffix) exceeds the sprite safe area")
+                #expect(mask[0] == 0)
+                #expect(mask[63] == 0)
+                #expect(mask[64 * 63] == 0)
+                #expect(mask[(64 * 64) - 1] == 0)
+            }
+
+            for firstIndex in masks.indices {
+                for secondIndex in masks.indices where secondIndex > firstIndex {
+                    let first = masks[firstIndex]
+                    let second = masks[secondIndex]
+                    let difference = zip(first.1, second.1).reduce(0) {
+                        $0 + ($1.0 == $1.1 ? 0 : 1)
+                    }
+                    let differenceRatio = Double(difference) / Double(first.1.count)
+                    #expect(
+                        differenceRatio > 0.025,
+                        "\(first.0) and \(second.0) \(suffix) silhouettes are too similar"
+                    )
+                }
+            }
+        }
     }
 
     @Test func moonEnemiesUseUniqueMoonArtwork() {
@@ -252,6 +312,33 @@ struct VisualThemeTests {
         #expect(Set(pathBoxes.map { "\($0.minX),\($0.minY),\($0.maxX),\($0.maxY)" }).count > 1)
     }
 
+    private static func alphaMask(for image: UIImage, side: Int = 64) -> [UInt8]? {
+        guard let source = image.cgImage else { return nil }
+
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        let rendered = pixels.withUnsafeMutableBytes { storage -> Bool in
+            guard let context = CGContext(
+                data: storage.baseAddress,
+                width: side,
+                height: side,
+                bitsPerComponent: 8,
+                bytesPerRow: side * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else {
+                return false
+            }
+
+            context.interpolationQuality = .high
+            context.clear(CGRect(x: 0, y: 0, width: side, height: side))
+            context.draw(source, in: CGRect(x: 0, y: 0, width: side, height: side))
+            return true
+        }
+
+        guard rendered else { return nil }
+        return stride(from: 3, to: pixels.count, by: 4).map { pixels[$0] > 16 ? 1 : 0 }
+    }
+
     private static let projectileNames = [
         "SoccerBall",
         "SoccerBallExplosive",
@@ -269,7 +356,42 @@ struct VisualThemeTests {
         "MoonFactionSigil",
         "MoonBossFactionSigil",
         "MarsFactionSigil",
-        "MarsBossFactionSigil"
+        "MarsBossFactionSigil",
+        "JupiterFactionSigil",
+        "JupiterBossFactionSigil",
+        "SaturnFactionSigil",
+        "SaturnBossFactionSigil",
+        "UranusFactionSigil",
+        "UranusBossFactionSigil",
+        "NeptuneFactionSigil",
+        "NeptuneBossFactionSigil"
+    ]
+
+    private static let arenaAndMapNames = [
+        "GameplayArena",
+        "MoonArena",
+        "MarsArena",
+        "JupiterArena",
+        "SaturnArena",
+        "UranusArena",
+        "NeptuneArena",
+        "EarthWorldMap",
+        "MoonWorldMap",
+        "MarsWorldMap",
+        "JupiterWorldMap",
+        "SaturnWorldMap",
+        "UranusWorldMap",
+        "NeptuneWorldMap"
+    ]
+
+    private static let planetNames = [
+        "PlanetEarth",
+        "PlanetMoon",
+        "PlanetMars",
+        "PlanetJupiter",
+        "PlanetSaturn",
+        "PlanetUranus",
+        "PlanetNeptune"
     ]
 
     private static let characterAndWorldObjectNames = [
@@ -288,6 +410,14 @@ struct VisualThemeTests {
         "CharacterNovaRoster",
         "CharacterVoltGameplay",
         "CharacterVoltRoster",
+        "CharacterFluxGameplay",
+        "CharacterFluxRoster",
+        "CharacterGaleGameplay",
+        "CharacterGaleRoster",
+        "CharacterHaloGameplay",
+        "CharacterHaloRoster",
+        "CharacterSurgeGameplay",
+        "CharacterSurgeRoster",
         "EarthAegisKeeper",
         "EarthBallCart",
         "EarthBallLauncher",
@@ -321,6 +451,8 @@ struct VisualThemeTests {
     private static let productionAssetNames = characterAndWorldObjectNames
         + projectileNames
         + factionSigilNames
+        + arenaAndMapNames
+        + planetNames
         + [
             "AbilityCleanSheet",
             "AbilityCurler",
@@ -335,8 +467,6 @@ struct VisualThemeTests {
             "AbilityThroughBall",
             "AbilityWideVolley",
             "DailyChest",
-            "GameplayArena",
-            "MarsArena",
             "MenuHero",
             "OnboardingHero",
             "TrainingToken",

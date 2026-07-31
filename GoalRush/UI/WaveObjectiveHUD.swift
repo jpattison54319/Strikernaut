@@ -42,7 +42,7 @@ struct WaveObjectiveHUD: View {
                 )
 
             AnimatedObjectiveCounter(
-                text: remainingEnemies.formatted(),
+                text: GameNumberFormatter.compact(remainingEnemies),
                 value: remainingEnemies,
                 color: isBossWave ? GoalRushTheme.orange : .white,
                 fontSize: 21,
@@ -92,7 +92,7 @@ struct WaveObjectiveHUD: View {
     }
 
     private var waveText: String {
-        isEndless ? wave.formatted() : "\(wave)/\(waveCount)"
+        isEndless ? GameNumberFormatter.compact(wave) : "\(wave)/\(waveCount)"
     }
 
     private var waveColor: Color {
@@ -101,11 +101,11 @@ struct WaveObjectiveHUD: View {
 
     private var accessibilityLabel: String {
         let waveDescription = isEndless
-            ? "Wave \(wave)"
+            ? "Wave \(GameNumberFormatter.exact(wave))"
             : "Wave \(wave) of \(waveCount)"
         let enemyDescription = remainingEnemies == 1
             ? "1 enemy remaining"
-            : "\(remainingEnemies) enemies remaining"
+            : "\(GameNumberFormatter.exact(remainingEnemies)) enemies remaining"
         return "\(waveDescription), \(isBossWave ? "boss objective, " : "")\(enemyDescription)"
     }
 }

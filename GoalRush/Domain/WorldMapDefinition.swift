@@ -27,6 +27,10 @@ enum WorldMapCatalog {
         case .earth: "building.2.crop.circle.fill"
         case .moon: "antenna.radiowaves.left.and.right.circle.fill"
         case .mars: "mountain.2.circle.fill"
+        case .jupiter: "hurricane.circle.fill"
+        case .saturn: "circle.hexagongrid.circle.fill"
+        case .uranus: "snowflake.circle.fill"
+        case .neptune: "water.waves"
         }
         return WorldMapDefinition(
             id: world,

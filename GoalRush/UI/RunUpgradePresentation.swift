@@ -5,6 +5,24 @@ struct AbilityEffectPresentation {
     let current: String
     let next: String
     let accent: Color
+    let chanceCurrent: String?
+    let chanceNext: String?
+
+    init(
+        metric: String,
+        current: String,
+        next: String,
+        accent: Color,
+        chanceCurrent: String? = nil,
+        chanceNext: String? = nil
+    ) {
+        self.metric = metric
+        self.current = current
+        self.next = next
+        self.accent = accent
+        self.chanceCurrent = chanceCurrent
+        self.chanceNext = chanceNext
+    }
 }
 
 struct RunUpgradePresentation {
@@ -14,8 +32,12 @@ struct RunUpgradePresentation {
     let effect: AbilityEffectPresentation
 
     static func rankLabel(forCurrentRank currentRank: Int) -> String {
-        currentRank == 0
-            ? "NEW • RANK 1"
-            : "RANK \(currentRank) → \(currentRank + 1)"
+        if currentRank == 0 {
+            return "NEW • RANK 1"
+        }
+        if currentRank >= 1_000 {
+            return "RANK \(GameNumberFormatter.compact(currentRank)) → NEXT"
+        }
+        return "RANK \(currentRank) → \(currentRank + 1)"
     }
 }

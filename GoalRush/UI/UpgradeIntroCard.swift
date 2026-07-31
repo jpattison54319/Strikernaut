@@ -12,7 +12,7 @@ struct UpgradeIntroCard: View {
                         .foregroundStyle(GoalRushTheme.gold)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Permanent Training").font(GoalRushTheme.Typography.title3)
-                        Text("These unlimited upgrades stay active in every level. Prices rise through rank 5, then remain steady while your power keeps growing.")
+                        Text("These unlimited upgrades stay active in every level. Post-mastery prices keep rising with your power.")
                             .font(GoalRushTheme.Typography.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -20,10 +20,13 @@ struct UpgradeIntroCard: View {
                 Divider().overlay(.white.opacity(0.12))
                 HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
                     TrainingTokenIcon(size: 22)
-                    Text("\(tokens) Training Tokens available")
+                    Text("\(GameNumberFormatter.compact(tokens)) Training Tokens available")
                 }
                     .font(GoalRushTheme.Typography.headline)
                     .foregroundStyle(GoalRushTheme.gold)
+                    .accessibilityLabel(
+                        "\(GameNumberFormatter.exact(tokens)) Training Tokens available"
+                    )
             }
         }
     }

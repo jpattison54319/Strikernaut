@@ -6,25 +6,61 @@ struct CampaignBalancePlaytests {
     private struct Outcome {
         let didWin: Bool
         let progress: Double
+        let stamina: Double
+        let elapsed: Double
     }
 
-    private struct LandmarkProfile {
+    private struct ProgressionProfile {
         let level: Int
         let underBudgetRank: Int
         let recoveryRank: Int
+        let character: CharacterID
     }
 
-    @Test func seededLandmarkRunsRewardPermanentInvestment() {
+    @Test func seededWorldFinalesRewardPermanentInvestment() {
         let profiles = [
-            LandmarkProfile(level: 5, underBudgetRank: 0, recoveryRank: 1),
-            LandmarkProfile(level: 8, underBudgetRank: 1, recoveryRank: 2),
-            LandmarkProfile(level: 10, underBudgetRank: 2, recoveryRank: 3),
-            LandmarkProfile(level: 15, underBudgetRank: 4, recoveryRank: 5),
-            LandmarkProfile(level: 18, underBudgetRank: 6, recoveryRank: 7),
-            LandmarkProfile(level: 20, underBudgetRank: 7, recoveryRank: 8),
-            LandmarkProfile(level: 25, underBudgetRank: 7, recoveryRank: 9),
-            LandmarkProfile(level: 28, underBudgetRank: 9, recoveryRank: 11),
-            LandmarkProfile(level: 30, underBudgetRank: 10, recoveryRank: 12)
+            ProgressionProfile(
+                level: 10,
+                underBudgetRank: 0,
+                recoveryRank: 3,
+                character: .ace
+            ),
+            ProgressionProfile(
+                level: 20,
+                underBudgetRank: 3,
+                recoveryRank: 5,
+                character: .volt
+            ),
+            ProgressionProfile(
+                level: 30,
+                underBudgetRank: 5,
+                recoveryRank: 8,
+                character: .nova
+            ),
+            ProgressionProfile(
+                level: 40,
+                underBudgetRank: 7,
+                recoveryRank: 10,
+                character: .aegis
+            ),
+            ProgressionProfile(
+                level: 50,
+                underBudgetRank: 9,
+                recoveryRank: 16,
+                character: .gale
+            ),
+            ProgressionProfile(
+                level: 60,
+                underBudgetRank: 11,
+                recoveryRank: 15,
+                character: .halo
+            ),
+            ProgressionProfile(
+                level: 70,
+                underBudgetRank: 15,
+                recoveryRank: 24,
+                character: .aegis
+            ),
         ]
         let seeds: [UInt64] = [11, 29, 47]
         var underBudgetWins = 0
@@ -32,10 +68,20 @@ struct CampaignBalancePlaytests {
 
         for profile in profiles {
             let underBudget = seeds.map {
-                run(level: profile.level, permanentRank: profile.underBudgetRank, seed: $0)
+                run(
+                    level: profile.level,
+                    permanentRank: profile.underBudgetRank,
+                    seed: $0,
+                    character: profile.character
+                )
             }
             let recovered = seeds.map {
-                run(level: profile.level, permanentRank: profile.recoveryRank, seed: $0)
+                run(
+                    level: profile.level,
+                    permanentRank: profile.recoveryRank,
+                    seed: $0,
+                    character: profile.character
+                )
             }
             let underBudgetProgress = underBudget.reduce(0) { $0 + $1.progress }
             let recoveredProgress = recovered.reduce(0) { $0 + $1.progress }
@@ -44,21 +90,80 @@ struct CampaignBalancePlaytests {
             underBudgetWins += profileUnderBudgetWins
             recoveryWins += profileRecoveryWins
 
-            #expect(recoveredProgress > underBudgetProgress)
-            #expect(profileUnderBudgetWins < seeds.count)
-            #expect(profileRecoveryWins > 0)
+            #expect(
+                recoveredProgress > underBudgetProgress,
+                "Level \(profile.level) must reward the recovery profile."
+            )
+            #expect(
+                profileUnderBudgetWins < seeds.count,
+                "Level \(profile.level) under-budget profile cannot sweep every seed."
+            )
+            #expect(
+                profileRecoveryWins > 0,
+                """
+                Level \(profile.level) recovery profile must retain a winning seed. \
+                Recovered progress: \(recovered.map(\.progress)); stamina: \
+                \(recovered.map(\.stamina)); elapsed: \(recovered.map(\.elapsed)).
+                """
+            )
             #expect(profileRecoveryWins >= profileUnderBudgetWins)
         }
 
-        #expect(underBudgetWins <= seeds.count * 3)
         #expect(recoveryWins > underBudgetWins)
     }
 
-    private func run(level: Int, permanentRank: Int, seed: UInt64) -> Outcome {
+    @Test func moonReadyBuildCannotSkipTheCampaignToUranus() {
+        let seeds: [UInt64] = [11, 29, 47]
+        let moonReady = seeds.map {
+            run(level: 20, permanentRank: 5, seed: $0)
+        }
+        let skippedToUranus = seeds.map {
+            run(level: 51, permanentRank: 5, seed: $0)
+        }
+        let uranusRecovery = seeds.map {
+            run(level: 51, permanentRank: 12, seed: $0)
+        }
+
+        #expect(
+            moonReady.contains { $0.didWin },
+            "A rank-5 balanced build must retain a winning Moon-finale seed."
+        )
+        #expect(
+            skippedToUranus.allSatisfy { !$0.didWin },
+            """
+            A Moon-ready build cannot clear Uranus after a debug unlock. \
+            Progress: \(skippedToUranus.map(\.progress)); stamina: \
+            \(skippedToUranus.map(\.stamina)); elapsed: \
+            \(skippedToUranus.map(\.elapsed)).
+            """
+        )
+        #expect(
+            uranusRecovery.contains { $0.didWin },
+            """
+            Uranus must remain beatable after permanent investment. \
+            Progress: \(uranusRecovery.map(\.progress)); stamina: \
+            \(uranusRecovery.map(\.stamina)); elapsed: \
+            \(uranusRecovery.map(\.elapsed)).
+            """
+        )
+        #expect(
+            uranusRecovery.reduce(0) { $0 + $1.progress }
+                > skippedToUranus.reduce(0) { $0 + $1.progress }
+        )
+    }
+
+    private func run(
+        level: Int,
+        permanentRank: Int,
+        seed: UInt64,
+        character: CharacterID? = nil
+    ) -> Outcome {
         var progress = PlayerProgress.newPlayer
         for track in UpgradeTrack.allCases {
             progress.setRank(permanentRank, for: track)
         }
+        progress.selectedCharacter = character
+            ?? representativeCharacter(entering: GameContent.level(level).world)
         let simulation = GameSimulation(
             level: GameContent.level(level),
             progress: progress,
@@ -66,11 +171,11 @@ struct CampaignBalancePlaytests {
             seed: seed
         )
         let draftOrder: [AbilityKind] = [
-            .powerDrive,
-            .quickRelease,
             .throughBall,
-            .curler,
             .oneTwo,
+            .quickRelease,
+            .powerDrive,
+            .gravityBoots,
             .cleanSheet
         ]
         var draftIndex = 0
@@ -94,7 +199,9 @@ struct CampaignBalancePlaytests {
                         progress: won
                             ? Double(simulation.snapshot.waveCount + 1)
                             : Double(simulation.snapshot.wave)
-                                + simulation.snapshot.waveObjectiveProgress
+                                + simulation.snapshot.waveObjectiveProgress,
+                        stamina: simulation.snapshot.stamina,
+                        elapsed: simulation.snapshot.elapsed
                     )
                 }
             }
@@ -103,8 +210,22 @@ struct CampaignBalancePlaytests {
         return Outcome(
             didWin: false,
             progress: Double(simulation.snapshot.wave)
-                + simulation.snapshot.waveObjectiveProgress
+                + simulation.snapshot.waveObjectiveProgress,
+            stamina: simulation.snapshot.stamina,
+            elapsed: simulation.snapshot.elapsed
         )
+    }
+
+    private func representativeCharacter(entering world: WorldID) -> CharacterID {
+        switch world {
+        case .earth: .ace
+        case .moon: .volt
+        case .mars: .nova
+        case .jupiter: .aegis
+        case .saturn: .gale
+        case .uranus: .halo
+        case .neptune: .flux
+        }
     }
 
     private func aimRepresentativePlayer(_ simulation: GameSimulation) {

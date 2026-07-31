@@ -19,6 +19,30 @@ enum EnemyKind: String, Codable, CaseIterable, Sendable {
     case saucerKeeper
     case plasmaStriker
     case marsColossus
+    case cloudRunner
+    case pressureBrute
+    case vortexSkimmer
+    case stormKeeper
+    case boltStriker
+    case tempestRegent
+    case ringRunner
+    case iceMason
+    case shepherdDrone
+    case haloKeeper
+    case shardStriker
+    case crownSovereign
+    case frostSprinter
+    case tiltBrute
+    case auroraDrifter
+    case polarKeeper
+    case magnetStriker
+    case axisPrime
+    case mistRunner
+    case currentBrute
+    case squallRay
+    case tridentKeeper
+    case pressureStriker
+    case abyssalMonarch
 }
 
 enum FieldObjectKind: String, Codable, CaseIterable, Sendable {
@@ -37,9 +61,29 @@ enum FieldObjectKind: String, Codable, CaseIterable, Sendable {
     case holoGate
     case crystalBarricade
     case artifactVault
+    case pressureCell
+    case cloudCondenser
+    case windGate
+    case lightningMast
+    case stormVault
+    case ringShardCrate
+    case thermalPod
+    case shepherdBeacon
+    case iceBarricade
+    case crownVault
+    case magneticCoil
+    case cryoCanister
+    case auroraRelay
+    case frostBarricade
+    case polarVault
+    case stormBattery
+    case oxygenBell
+    case currentGate
+    case coralBarricade
+    case trenchVault
 }
 
-enum AbilityKind: String, Codable, CaseIterable, Identifiable, Sendable {
+nonisolated enum AbilityKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case powerDrive
     case quickRelease
     case throughBall
@@ -62,18 +106,6 @@ enum UpgradeTrack: String, Codable, CaseIterable, Identifiable, Sendable {
     case flight
     case spin
 
-    var id: String { rawValue }
-    var category: UpgradeCategory {
-        switch self {
-        case .conditioning, .footwork, .tempo: .player
-        case .impact, .flight, .spin: .ball
-        }
-    }
-}
-
-enum UpgradeCategory: String, CaseIterable, Identifiable, Sendable {
-    case player = "Player"
-    case ball = "Ball"
     var id: String { rawValue }
 }
 
@@ -104,7 +136,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
     var selectedCharacter: CharacterID
 
     static let newPlayer = PlayerProgress(
-        schemaVersion: 9,
+        schemaVersion: 11,
         trainingTokens: 0,
         highestUnlockedLevel: 1,
         upgradeRanks: [:],
@@ -172,7 +204,8 @@ struct PlayerProgress: Codable, Equatable, Sendable {
                 )
             }
         }
-        schemaVersion = 9
+        endlessRecord.reconcileRelics()
+        schemaVersion = 11
     }
 
     enum CodingKeys: String, CodingKey {
@@ -279,7 +312,7 @@ struct PlayerProgress: Codable, Equatable, Sendable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(9, forKey: .schemaVersion)
+        try container.encode(11, forKey: .schemaVersion)
         try container.encode(trainingTokens, forKey: .trainingTokens)
         try container.encode(highestUnlockedLevel, forKey: .highestUnlockedLevel)
         try container.encode(upgradeRanks, forKey: .upgradeRanks)

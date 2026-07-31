@@ -223,55 +223,137 @@ struct GameSimulationTests {
         let simulation = GameSimulation(mode: .endless, progress: .newPlayer, assistMode: false, seed: 1)
         for _ in 0..<40 { simulation.apply(.powerDrive) }
         #expect(simulation.abilityRank(.powerDrive) == 40)
-        #expect(simulation.kickInterval(atAbilityRank: 40) == 0.14)
         #expect(
-            simulation.quickReleaseDamageMultiplier(atAbilityRank: 40)
-                > simulation.quickReleaseDamageMultiplier(atAbilityRank: 39)
+            simulation.kickInterval(atAbilityRank: 40)
+                < simulation.kickInterval(atAbilityRank: 39)
+        )
+        #expect(
+            simulation.kickInterval(atAbilityRank: 40)
+                > EndlessAbilityRules.minimumRenderedKickInterval
+        )
+        #expect(
+            simulation.quickReleaseDamageMultiplier(atAbilityRank: 100)
+                > simulation.quickReleaseDamageMultiplier(atAbilityRank: 99)
         )
     }
 
-    @Test func endlessDraftPoolContainsTenCoreAndSixNonRedundantBallTracks() {
+    @Test func endlessContinuousUpgradesDiminishAfterRankFiveWithoutDeadRanks() {
+        let ranks = [0, 1, 5, 6, 10, 30, 100]
+        let effectiveRanks = ranks.map(EndlessAbilityRules.effectiveRank)
+        #expect(effectiveRanks == effectiveRanks.sorted())
+        #expect(effectiveRanks[2] == 5)
+        #expect(abs(effectiveRanks[4] - 8.465_736) < 0.000_001)
+        #expect(abs(effectiveRanks[5] - 13.958_797) < 0.000_001)
+
+        for rank in 1...100 {
+            #expect(
+                EndlessAbilityRules.effectiveRank(rank)
+                    > EndlessAbilityRules.effectiveRank(rank - 1)
+            )
+            #expect(
+                EndlessAbilityRules.powerDriveMultiplier(rank: rank)
+                    > EndlessAbilityRules.powerDriveMultiplier(rank: rank - 1)
+            )
+            #expect(
+                EndlessAbilityRules.theoreticalKickInterval(
+                    base: 1.12,
+                    rank: rank
+                ) < EndlessAbilityRules.theoreticalKickInterval(
+                    base: 1.12,
+                    rank: rank - 1
+                )
+            )
+            #expect(
+                EndlessAbilityRules.curlerTurnRate(rank: rank)
+                    > EndlessAbilityRules.curlerTurnRate(rank: rank - 1)
+            )
+            #expect(
+                EndlessAbilityRules.meteorDamageMultiplier(rank: rank)
+                    > EndlessAbilityRules.meteorDamageMultiplier(rank: rank - 1)
+            )
+            #expect(
+                EndlessAbilityRules.secondWindImmediateRecovery(rank: rank)
+                    > EndlessAbilityRules.secondWindImmediateRecovery(
+                        rank: rank - 1
+                    )
+            )
+        }
+
+        let firstDiminishedGain = EndlessAbilityRules.effectiveRank(6)
+            - EndlessAbilityRules.effectiveRank(5)
+        let deepGain = EndlessAbilityRules.effectiveRank(30)
+            - EndlessAbilityRules.effectiveRank(29)
+        #expect(firstDiminishedGain < 1)
+        #expect(deepGain < firstDiminishedGain)
+    }
+
+    @Test func endlessWideVolleyKeepsAddingBallsWhileMasteryDiminishes() {
+        for rank in 4...100 {
+            #expect(
+                EndlessAbilityRules.wideVolleySecondaryMastery(rank: rank)
+                    > EndlessAbilityRules.wideVolleySecondaryMastery(
+                        rank: rank - 1
+                    )
+            )
+        }
+
+        let rankFiveGain = EndlessAbilityRules
+            .wideVolleySecondaryMastery(rank: 5)
+            - EndlessAbilityRules.wideVolleySecondaryMastery(rank: 4)
+        let rankThirtyGain = EndlessAbilityRules
+            .wideVolleySecondaryMastery(rank: 30)
+            - EndlessAbilityRules.wideVolleySecondaryMastery(rank: 29)
+        #expect(rankThirtyGain < rankFiveGain)
+
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 2
+        )
+        for _ in 0..<30 { simulation.apply(.oneTwo) }
+        for _ in 0..<23 { _ = simulation.update(delta: 0.05) }
+        #expect(simulation.snapshot.projectiles.filter { !$0.hostile }.count == 31)
+    }
+
+    @Test func endlessDraftPoolContainsTenCoreAndTenNonRedundantBallTracks() {
         let pool = RunUpgradeChoice.endlessPool
         let ballChoices = pool.compactMap { choice -> TemporaryBallAbility? in
             if case .specialBall(let ability) = choice { return ability }
             return nil
         }
 
-        #expect(pool.count == 16)
+        #expect(pool.count == 20)
         #expect(Set(pool).count == pool.count)
-        #expect(ballChoices == [.volt, .ice, .fire, .reverse, .explosive, .split])
+        #expect(
+            ballChoices
+                == [.volt, .ice, .fire, .reverse, .explosive, .split,
+                    .gravityWell, .ringReturn, .polarLink, .undertow]
+        )
         #expect(!ballChoices.contains(.rapidFire))
         #expect(!ballChoices.contains(.heatSeeking))
         #expect(!ballChoices.contains(.orbitShot))
         #expect(!ballChoices.contains(.solarPierce))
     }
 
-    @Test func endlessSpecialBallSelectionUsesEqualOrderedBuckets() {
-        let ranks = Dictionary(
-            uniqueKeysWithValues: EndlessSpecialBallRules.abilities.map { ($0, 1) }
-        )
-        let count = Double(EndlessSpecialBallRules.abilities.count)
+    @Test func endlessSpecialBallEffectsRollIndependentlyAndReachCertainty() {
+        #expect(EndlessSpecialBallRules.triggerChance(rank: 0) == 0)
+        #expect(EndlessSpecialBallRules.triggerChance(rank: 1) == 0.10)
+        #expect(EndlessSpecialBallRules.triggerChance(rank: 5) == 0.50)
+        #expect(EndlessSpecialBallRules.triggerChance(rank: 10) == 1)
+        #expect(EndlessSpecialBallRules.triggerChance(rank: 10_000) == 1)
 
-        for (index, ability) in EndlessSpecialBallRules.abilities.enumerated() {
-            let roll = (Double(index) + 0.5) / count
-            #expect(
-                EndlessSpecialBallRules.selectedAbility(ranks: ranks, roll: roll)
-                    == ability
-            )
-        }
+        let effects = EndlessSpecialBallRules.triggeredEffects(
+            ranks: [.ice: 1, .fire: 5, .split: 10],
+            rolls: [.ice: 0.09, .fire: 0.51, .split: 0.999_999]
+        )
+        #expect(effects == [.ice, .split])
 
-        #expect(
-            EndlessSpecialBallRules.selectedAbility(
-                ranks: [.ice: 4, .split: 1],
-                roll: 0.49
-            ) == .ice
+        let simultaneous = EndlessSpecialBallRules.triggeredEffects(
+            ranks: [.ice: 4, .fire: 4, .reverse: 4],
+            rolls: [.ice: 0.12, .fire: 0.22, .reverse: 0.32]
         )
-        #expect(
-            EndlessSpecialBallRules.selectedAbility(
-                ranks: [.ice: 4, .split: 1],
-                roll: 0.50
-            ) == .split
-        )
+        #expect(simultaneous == [.ice, .fire, .reverse])
     }
 
     @Test func endlessSpecialBallRanksMatchCampaignAtFiveAndKeepGrowing() {
@@ -290,6 +372,10 @@ struct GameSimulationTests {
             EndlessSpecialBallRules.splitDamageMultiplier(rank: 10_001)
                 > EndlessSpecialBallRules.splitDamageMultiplier(rank: 10_000)
         )
+        #expect(
+            EndlessSpecialBallRules.ringReturnDamageMultiplier(rank: 10_001)
+                > EndlessSpecialBallRules.ringReturnDamageMultiplier(rank: 10_000)
+        )
 
         #expect(abs(EndlessSpecialBallRules.iceDuration(rank: 5) - 1.7) < 0.000_001)
         #expect(abs(EndlessSpecialBallRules.fireDuration(rank: 5) - 4) < 0.000_001)
@@ -299,7 +385,33 @@ struct GameSimulationTests {
         #expect(EndlessSpecialBallRules.splitProjectileCount(rank: 5, isCritical: false) == 5)
         #expect(EndlessSpecialBallRules.splitProjectileCount(rank: 5, isCritical: true) == 8)
         #expect(abs(EndlessSpecialBallRules.splitDamageMultiplier(rank: 5) - 0.42) < 0.000_001)
-        #expect(abs(EndlessSpecialBallRules.voltDamageMultiplier(recipientOffset: 0, rank: 5) - 0.15) < 0.000_001)
+        #expect(
+            abs(
+                EndlessSpecialBallRules.voltDamageMultiplier(
+                    recipientOffset: 0,
+                    recipientCount: 9,
+                    rank: 5
+                ) - 0.55
+            ) < 0.000_001
+        )
+        #expect(
+            EndlessSpecialBallRules.voltDamageMultiplier(
+                recipientOffset: 1,
+                recipientCount: 9,
+                rank: 5
+            ) < EndlessSpecialBallRules.voltDamageMultiplier(
+                recipientOffset: 0,
+                recipientCount: 9,
+                rank: 5
+            )
+        )
+        #expect(
+            EndlessSpecialBallRules.voltDamageMultiplier(
+                recipientOffset: 100,
+                recipientCount: 101,
+                rank: 5
+            ) > 0
+        )
     }
 
     @Test func endlessSpecialBallRanksAreRunOnlyAndCampaignRejectsThem() {
@@ -332,16 +444,21 @@ struct GameSimulationTests {
         #expect(campaign.specialBallRank(.fire) == 0)
     }
 
-    @Test func oneEndlessKickGivesEveryVolleyProjectileTheSameOwnedBallType() {
+    @Test func rankTenEndlessVolleyCanApplyEveryBallEffectTogether() {
         let simulation = GameSimulation(
             mode: .endless,
             progress: .newPlayer,
             assistMode: false,
             seed: 97
         )
-        simulation.apply(.specialBall(.ice))
-        simulation.apply(.ability(.oneTwo))
-        simulation.apply(.ability(.oneTwo))
+        for ability in EndlessSpecialBallRules.abilities {
+            for _ in 0..<10 {
+                simulation.apply(.specialBall(ability))
+            }
+        }
+        for _ in 0..<9 {
+            simulation.apply(.ability(.oneTwo))
+        }
 
         var sawKick = false
         for _ in 0..<30 where !sawKick {
@@ -350,8 +467,61 @@ struct GameSimulationTests {
 
         let friendly = simulation.snapshot.projectiles.filter { !$0.hostile }
         #expect(sawKick)
-        #expect(friendly.count == 3)
-        #expect(friendly.allSatisfy { $0.temporaryAbility == .ice })
+        #expect(friendly.count == EndlessSpecialBallRules.abilities.count)
+        #expect(friendly.allSatisfy { $0.temporaryAbility == nil })
+        #expect(friendly.allSatisfy {
+            $0.ballEffects == Set(EndlessSpecialBallRules.abilities)
+        })
+    }
+
+    @Test func meteorStrikeCountsAllKicksAndLaunchesATargetedAreaAttack() {
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 99
+        )
+        for _ in 0..<4 {
+            simulation.apply(.ability(.meteorStrike))
+        }
+        simulation.replaceTargetsForTesting([
+            TargetState(
+                id: 9_900,
+                kind: .enemy(.titanKeeper),
+                position: .init(x: 0, y: 0.62),
+                hitPoints: 1_000_000,
+                maximumHitPoints: 1_000_000,
+                phase: 0
+            )
+        ])
+
+        var kicks = 0
+        var meteorLaunchEvents = 0
+        for _ in 0..<100 where meteorLaunchEvents == 0 {
+            let events = simulation.update(delta: 0.05)
+            kicks += events.count { $0 == .kick }
+            meteorLaunchEvents += events.count { $0 == .meteorKick }
+        }
+
+        #expect(kicks == 3)
+        #expect(meteorLaunchEvents == 1)
+        #expect(simulation.snapshot.characterAttacks.contains {
+            $0.kind == .meteor
+                && $0.targetID == 9_900
+                && $0.awardsAbilityCharge
+        })
+
+        var sawImpact = false
+        for _ in 0..<30 where !sawImpact {
+            sawImpact = simulation.update(delta: 0.05).contains {
+                if case .characterMeteorImpact = $0 { true } else { false }
+            }
+        }
+        #expect(sawImpact)
+        #expect(
+            (simulation.snapshot.targets.first(where: { $0.id == 9_900 })?
+                .hitPoints ?? 1_000_000) < 1_000_000
+        )
     }
 
     @Test func endlessNeverSpawnsShootablePowerUpsOnRegularOrBossWaves() {
@@ -506,11 +676,9 @@ struct GameSimulationTests {
     }
 
     @Test func allLevelsHaveValidContent() {
-        #expect(GameContent.levels.count == 30)
-        #expect(GameContent.worlds.count == 3)
-        #expect(GameContent.levels(in: .earth).count == 10)
-        #expect(GameContent.levels(in: .moon).count == 10)
-        #expect(GameContent.levels(in: .mars).count == 10)
+        #expect(GameContent.levels.count == 70)
+        #expect(GameContent.worlds.count == 7)
+        #expect(WorldID.allCases.allSatisfy { GameContent.levels(in: $0).count == 10 })
         for level in GameContent.levels {
             #expect(!level.enemies.isEmpty)
             #expect(!level.objects.isEmpty)
@@ -531,60 +699,267 @@ struct GameSimulationTests {
         #expect(GameContent.level(21).world == .mars)
     }
 
-    @Test func campaignWavePressureOutgrowsAnAverageDraftChoice() {
+    @Test func campaignWaveLoadOutgrowsTheReferenceDraftAdjustedDPS() {
         for level in GameContent.levels {
             var previous = CampaignBalance.wave(1, for: level)
+            let averageBaseHealth = level.enemies
+                .map { CombatBalance.baseHealth($0) }
+                .reduce(0, +) / Double(level.enemies.count)
+            var previousLoad = previous.healthMultiplier
+                * averageBaseHealth
+                * Double(CampaignBalance.enemyPackSize(wave: 1, for: level))
+                / previous.spawnInterval
             for waveNumber in 2...level.waveCount {
                 let wave = CampaignBalance.wave(waveNumber, for: level)
                 #expect(wave.healthMultiplier > previous.healthMultiplier)
                 #expect(wave.damageMultiplier > previous.damageMultiplier)
+                #expect(wave.damageMultiplier.isFinite)
                 #expect(wave.speedMultiplier > previous.speedMultiplier)
-                #expect(wave.spawnInterval <= previous.spawnInterval)
+                #expect(
+                    CampaignBalance.attackCadenceMultiplier(
+                        level: level,
+                        wave: waveNumber
+                    ) < CampaignBalance.attackCadenceMultiplier(
+                        level: level,
+                        wave: waveNumber - 1
+                    )
+                )
+                #expect(
+                    CampaignBalance.hostileProjectileSpeedMultiplier(
+                        level: level,
+                        wave: waveNumber
+                    ) > CampaignBalance.hostileProjectileSpeedMultiplier(
+                        level: level,
+                        wave: waveNumber - 1
+                    )
+                )
 
-                let enemyGrowth = wave.healthMultiplier / CampaignBalance.wave(1, for: level).healthMultiplier
-                let playerGrowth = CampaignBalance.expectedOffenseMultiplier(afterUpgradeCount: waveNumber - 1)
-                #expect(enemyGrowth > playerGrowth)
+                let load = wave.healthMultiplier
+                    * averageBaseHealth
+                    * Double(
+                        CampaignBalance.enemyPackSize(
+                            wave: waveNumber,
+                            for: level
+                        )
+                    )
+                    / wave.spawnInterval
+                    / CampaignBalance.expectedOffenseMultiplier(
+                        afterUpgradeCount: waveNumber - 1
+                    )
+                let priorDraftAdjustedLoad = previousLoad
+                    / CampaignBalance.expectedOffenseMultiplier(
+                        afterUpgradeCount: waveNumber - 2
+                )
+                #expect(load > priorDraftAdjustedLoad)
+                previousLoad = wave.healthMultiplier
+                    * averageBaseHealth
+                    * Double(
+                        CampaignBalance.enemyPackSize(
+                            wave: waveNumber,
+                            for: level
+                        )
+                    )
+                    / wave.spawnInterval
                 previous = wave
             }
         }
     }
 
-    @Test func levelsFiveAndEightCreatePersistentLandmarkStepsInEveryWorld() {
+    private func averageEnemyHitPoints(
+        _ wave: CampaignWaveDefinition,
+        level: LevelDefinition
+    ) -> Double {
+        let averageBaseHealth = level.enemies
+            .map { CombatBalance.baseHealth($0) }
+            .reduce(0, +) / Double(level.enemies.count)
+        return wave.healthMultiplier * averageBaseHealth
+    }
+
+    private func effectiveRunnerContactDamage(
+        _ wave: CampaignWaveDefinition,
+        maxStamina: Double
+    ) -> Double {
+        CombatBalance.effectiveIncomingDamage(
+            rawDamage: 9 * wave.damageMultiplier,
+            maxStamina: maxStamina
+        )
+    }
+
+    @Test func everyCampaignLevelRaisesAllContinuousPressureAxes() {
+        let fixedMoonReadyStamina = 140.0
+        var previousLevel = GameContent.levels[0]
+        var previousWave = CampaignBalance.wave(1, for: previousLevel)
+
+        for level in GameContent.levels.dropFirst() {
+            let wave = CampaignBalance.wave(1, for: level)
+
+            #expect(
+                CampaignBalance.targetPermanentRank(for: level)
+                    > CampaignBalance.targetPermanentRank(for: previousLevel),
+                "Level \(level.number) must require more permanent power."
+            )
+            #expect(
+                averageEnemyHitPoints(wave, level: level)
+                    > averageEnemyHitPoints(previousWave, level: previousLevel),
+                "Level \(level.number) must raise average enemy durability."
+            )
+            #expect(
+                effectiveRunnerContactDamage(
+                    wave,
+                    maxStamina: fixedMoonReadyStamina
+                ) > effectiveRunnerContactDamage(
+                    previousWave,
+                    maxStamina: fixedMoonReadyStamina
+                ),
+                "Level \(level.number) must deal more damage to the same build."
+            )
+            #expect(
+                wave.speedMultiplier > previousWave.speedMultiplier,
+                "Level \(level.number) must move enemies faster."
+            )
+            #expect(
+                wave.spawnInterval
+                    / Double(CampaignBalance.enemyPackSize(wave: 1, for: level))
+                    < previousWave.spawnInterval
+                        / Double(
+                            CampaignBalance.enemyPackSize(
+                                wave: 1,
+                                for: previousLevel
+                            )
+                        ),
+                "Level \(level.number) must increase effective spawn pressure."
+            )
+            #expect(
+                wave.enemyQuota > previousWave.enemyQuota,
+                "Level \(level.number) must increase the opening workload."
+            )
+            #expect(
+                CampaignBalance.attackCadenceMultiplier(level: level, wave: 1)
+                    < CampaignBalance.attackCadenceMultiplier(
+                        level: previousLevel,
+                        wave: 1
+                    ),
+                "Level \(level.number) must accelerate hostile attacks."
+            )
+            #expect(
+                CampaignBalance.hostileProjectileSpeedMultiplier(
+                    level: level,
+                    wave: 1
+                ) > CampaignBalance.hostileProjectileSpeedMultiplier(
+                    level: previousLevel,
+                    wave: 1
+                ),
+                "Level \(level.number) must accelerate hostile projectiles."
+            )
+
+            previousLevel = level
+            previousWave = wave
+        }
+    }
+
+    @Test func levelsFiveEightAndTenCreatePersistentLandmarkStepsInEveryWorld() {
         for world in WorldID.allCases {
             let levels = GameContent.levels(in: world)
             let fourth = CampaignBalance.wave(1, for: levels[3])
             let fifth = CampaignBalance.wave(1, for: levels[4])
             let seventh = CampaignBalance.wave(1, for: levels[6])
             let eighth = CampaignBalance.wave(1, for: levels[7])
+            let ninth = CampaignBalance.wave(1, for: levels[8])
+            let finale = CampaignBalance.wave(1, for: levels[9])
 
             #expect(CampaignBalance.landmarkTier(worldLevel: levels[3].worldLevel) == 0)
             #expect(CampaignBalance.landmarkTier(worldLevel: levels[4].worldLevel) == 1)
             #expect(CampaignBalance.landmarkTier(worldLevel: levels[7].worldLevel) == 2)
-            #expect(fifth.healthMultiplier / fourth.healthMultiplier > 1.11)
-            #expect(fifth.damageMultiplier / fourth.damageMultiplier > 1.038)
             #expect(
-                fifth.spawnInterval < fourth.spawnInterval * 0.96
-                    || fifth.spawnInterval == 0.60
+                CampaignBalance.cumulativeLandmarkCount(for: levels[4])
+                    == CampaignBalance.cumulativeLandmarkCount(for: levels[3]) + 1
             )
-            #expect(eighth.healthMultiplier / seventh.healthMultiplier > 1.11)
-            #expect(eighth.damageMultiplier / seventh.damageMultiplier > 1.038)
             #expect(
-                eighth.spawnInterval < seventh.spawnInterval * 0.96
-                    || eighth.spawnInterval == 0.60
+                CampaignBalance.cumulativeLandmarkCount(for: levels[7])
+                    == CampaignBalance.cumulativeLandmarkCount(for: levels[6]) + 1
+            )
+            #expect(
+                CampaignBalance.cumulativeLandmarkCount(for: levels[9])
+                    == CampaignBalance.cumulativeLandmarkCount(for: levels[8]) + 1
+            )
+            #expect(averageEnemyHitPoints(fifth, level: levels[4])
+                    > averageEnemyHitPoints(fourth, level: levels[3]))
+            #expect(averageEnemyHitPoints(eighth, level: levels[7])
+                    > averageEnemyHitPoints(seventh, level: levels[6]))
+            #expect(averageEnemyHitPoints(finale, level: levels[9])
+                    > averageEnemyHitPoints(ninth, level: levels[8]))
+            #expect(fifth.damageMultiplier > fourth.damageMultiplier)
+            #expect(eighth.damageMultiplier > seventh.damageMultiplier)
+            #expect(finale.damageMultiplier > ninth.damageMultiplier)
+            #expect(
+                fifth.spawnInterval
+                    / Double(CampaignBalance.enemyPackSize(wave: 1, for: levels[4]))
+                    < fourth.spawnInterval
+                        / Double(CampaignBalance.enemyPackSize(wave: 1, for: levels[3]))
+            )
+            #expect(
+                eighth.spawnInterval
+                    / Double(CampaignBalance.enemyPackSize(wave: 1, for: levels[7]))
+                    < seventh.spawnInterval
+                        / Double(CampaignBalance.enemyPackSize(wave: 1, for: levels[6]))
+            )
+            #expect(
+                finale.spawnInterval
+                    / Double(CampaignBalance.enemyPackSize(wave: 1, for: levels[9]))
+                    < ninth.spawnInterval
+                        / Double(CampaignBalance.enemyPackSize(wave: 1, for: levels[8]))
             )
         }
     }
 
+    @Test func moonReadyBuildTakesSevereDamageWhenItSkipsToUranus() {
+        var moonReadyProgress = PlayerProgress.newPlayer
+        for track in UpgradeTrack.allCases {
+            moonReadyProgress.setRank(5, for: track)
+        }
+
+        func escapedEnemyDamage(levelNumber: Int, id: Int) -> Double {
+            let level = GameContent.level(levelNumber)
+            let simulation = GameSimulation(
+                level: level,
+                progress: moonReadyProgress,
+                assistMode: false,
+                seed: UInt64(levelNumber)
+            )
+            let startingStamina = simulation.snapshot.stamina
+            simulation.replaceTargetsForTesting([
+                TargetState(
+                    id: id,
+                    kind: .enemy(level.enemies[0]),
+                    position: .init(x: 0.70, y: 0.121),
+                    hitPoints: 10_000,
+                    maximumHitPoints: 10_000,
+                    phase: 0,
+                    waveRole: .quota
+                )
+            ])
+            _ = simulation.update(delta: 0.05)
+            return startingStamina - simulation.snapshot.stamina
+        }
+
+        let moonDamage = escapedEnemyDamage(levelNumber: 11, id: 20_011)
+        let uranusDamage = escapedEnemyDamage(levelNumber: 51, id: 20_051)
+
+        #expect(uranusDamage > moonDamage * 2)
+        #expect(uranusDamage > 13.5)
+    }
+
     @Test func campaignEnemyQuotasScaleAcrossWavesLevelsAndWorlds() {
         #expect(CampaignBalance.wave(1, for: GameContent.level(1)).enemyQuota == 18)
-        #expect(CampaignBalance.wave(1, for: GameContent.level(11)).enemyQuota == 30)
-        #expect(CampaignBalance.wave(1, for: GameContent.level(21)).enemyQuota == 42)
-        #expect(CampaignBalance.wave(1, for: GameContent.level(30)).enemyQuota == 50)
+        #expect(CampaignBalance.wave(1, for: GameContent.level(11)).enemyQuota == 41)
+        #expect(CampaignBalance.wave(1, for: GameContent.level(21)).enemyQuota == 64)
+        #expect(CampaignBalance.wave(1, for: GameContent.level(30)).enemyQuota == 82)
+        #expect(CampaignBalance.wave(1, for: GameContent.level(70)).enemyQuota == 174)
 
         var previousOpeningQuota = 0
         for level in GameContent.levels {
             let openingQuota = CampaignBalance.wave(1, for: level).enemyQuota
-            #expect(openingQuota >= previousOpeningQuota)
+            #expect(openingQuota > previousOpeningQuota)
             previousOpeningQuota = openingQuota
 
             var previousWaveQuota = 0
@@ -601,15 +976,63 @@ struct GameSimulationTests {
         }
     }
 
-    @Test func activeEnemyCapsRiseWithoutAllowingUnboundedCrowds() {
-        #expect(CampaignBalance.maximumActiveEnemies(wave: 1, world: .earth) == 4)
-        #expect(CampaignBalance.maximumActiveEnemies(wave: 5, world: .earth) == 6)
-        #expect(CampaignBalance.maximumActiveEnemies(wave: 5, world: .mars) == 8)
-        #expect(CampaignBalance.maximumActiveEnemies(wave: 100, world: .mars) == 8)
+    @Test func campaignPacksAndActiveCapsGrowIntoBoundedHordes() {
+        #expect(CampaignBalance.enemyPackSize(
+            wave: 1,
+            for: GameContent.level(1)
+        ) == 1)
+        #expect(CampaignBalance.enemyPackSize(
+            wave: 1,
+            for: GameContent.level(5)
+        ) == 2)
+        #expect(CampaignBalance.enemyPackSize(
+            wave: 1,
+            for: GameContent.level(20)
+        ) == 5)
+        #expect(CampaignBalance.enemyPackSize(
+            wave: 1,
+            for: GameContent.level(51)
+        ) == 6)
+        #expect(CampaignBalance.enemyPackSize(
+            wave: 4,
+            for: GameContent.level(70)
+        ) == 13)
 
-        #expect(EndlessRules.maximumActiveEnemies(wave: 1) == 5)
-        #expect(EndlessRules.maximumActiveEnemies(wave: 21) == 7)
-        #expect(EndlessRules.maximumActiveEnemies(wave: 100) == 10)
+        #expect(CampaignBalance.maximumActiveEnemies(
+            wave: 1,
+            for: GameContent.level(1)
+        ) == 6)
+        #expect(CampaignBalance.maximumActiveEnemies(
+            wave: 5,
+            for: GameContent.level(10)
+        ) == 20)
+        #expect(CampaignBalance.maximumActiveEnemies(
+            wave: 5,
+            for: GameContent.level(30)
+        ) == 30)
+        #expect(CampaignBalance.maximumActiveEnemies(
+            wave: 5,
+            for: GameContent.level(70)
+        ) == 48)
+        #expect(CampaignBalance.maximumHostileProjectiles(
+            wave: 1,
+            for: GameContent.level(1)
+        ) == 3)
+        #expect(CampaignBalance.maximumHostileProjectiles(
+            wave: 1,
+            for: GameContent.level(51)
+        ) == 6)
+        #expect(CampaignBalance.maximumHostileProjectiles(
+            wave: 5,
+            for: GameContent.level(70)
+        ) == 10)
+
+        #expect(EndlessRules.maximumActiveEnemies(wave: 1) == 7)
+        #expect(EndlessRules.maximumActiveEnemies(wave: 21) == 13)
+        #expect(EndlessRules.maximumActiveEnemies(wave: 100) == 24)
+        #expect(EndlessRules.maximumHostileProjectiles(wave: 1) == 4)
+        #expect(EndlessRules.maximumHostileProjectiles(wave: 30) == 9)
+        #expect(EndlessRules.maximumHostileProjectiles(wave: 100) == 12)
     }
 
     @Test func spawningNeverExceedsTheUnspawnedQuotaTail() {
@@ -639,6 +1062,94 @@ struct GameSimulationTests {
             if case .enemy = $0.kind { $0.waveRole == .quota } else { false }
         }
         #expect(endlessQuotaEnemies.count == 2)
+    }
+
+    @Test func campaignHostileProjectilesRespectTheReadableHordeCap() {
+        let level = GameContent.level(70)
+        let simulation = GameSimulation(
+            level: level,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 103
+        )
+        simulation.setCampaignWaveForTesting(level.waveCount)
+        let cap = CampaignBalance.maximumHostileProjectiles(
+            wave: level.waveCount,
+            for: level
+        )
+
+        for index in 0..<(cap + 5) {
+            simulation.spawnHostileProjectileForTesting(
+                x: Double(index).truncatingRemainder(dividingBy: 3) * 0.2,
+                y: 0.80
+            )
+        }
+
+        #expect(simulation.snapshot.projectiles.count(where: \.hostile) == cap)
+    }
+
+    @Test func lateCampaignSpawningStreamsOneEnemyAtATime() {
+        let level = GameContent.level(51)
+        let simulation = GameSimulation(
+            level: level,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 102
+        )
+        let interval = CampaignBalance.wave(1, for: level).spawnInterval
+        #expect(interval > CampaignBalance.maximumEmptyFieldSpawnDelay)
+
+        for _ in 0..<Int(
+            (CampaignBalance.maximumEmptyFieldSpawnDelay / 0.05).rounded(.up)
+        ) + 2 {
+            _ = simulation.update(delta: 0.05)
+        }
+
+        let quotaEnemies = simulation.snapshot.targets.filter {
+            if case .enemy = $0.kind { $0.waveRole == .quota } else { false }
+        }
+        #expect(
+            quotaEnemies.count == 1
+        )
+        for _ in 0..<Int(
+            (CampaignBalance.enemyStaggerInterval / 0.05).rounded(.up)
+        ) {
+            _ = simulation.update(delta: 0.05)
+        }
+        #expect(simulation.snapshot.targets.count {
+            if case .enemy = $0.kind { $0.waveRole == .quota } else { false }
+        } == 2)
+    }
+
+    @Test func powerfulCampaignBuildNeverWaitsLongOnAnEmptyField() {
+        let level = GameContent.level(10)
+        let simulation = GameSimulation(
+            level: level,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 10
+        )
+        let interval = CampaignBalance.wave(1, for: level).spawnInterval
+        #expect(interval > CampaignBalance.maximumEmptyFieldSpawnDelay)
+
+        let allowedFrames = Int(
+            (CampaignBalance.maximumEmptyFieldSpawnDelay / 0.05).rounded(.up)
+        ) + 2
+        for _ in 0..<8 {
+            simulation.replaceTargetsForTesting([])
+            var emptyFrames = 0
+            while emptyFrames < allowedFrames,
+                  !simulation.snapshot.targets.contains(where: {
+                      if case .enemy = $0.kind { $0.waveRole == .quota } else { false }
+                  }) {
+                _ = simulation.update(delta: 0.05)
+                emptyFrames += 1
+            }
+            #expect(emptyFrames <= allowedFrames)
+            #expect(simulation.snapshot.targets.count {
+                if case .enemy = $0.kind { $0.waveRole == .quota } else { false }
+            } == 1)
+        }
     }
 
     @Test func elapsedTimeCannotCompleteAQuotaWave() {
@@ -739,18 +1250,25 @@ struct GameSimulationTests {
         ])
         simulation.spawnFriendlyProjectileForTesting(pierce: 0)
 
-        _ = simulation.update(delta: 0.05)
+        let events = simulation.update(delta: 0.05)
 
         #expect(simulation.snapshot.targetsDefeated == 1)
         #expect(simulation.snapshot.waveDefeats == 0)
         #expect(simulation.snapshot.remainingEnemies == simulation.snapshot.waveEnemyQuota)
+        #expect(simulation.snapshot.tokens == 0)
+        #expect(simulation.snapshot.score > 0)
+        #expect(simulation.snapshot.combo == 1)
+        #expect(!events.contains {
+            if case .reward = $0 { true } else { false }
+        })
     }
 
-    @Test func endlessQuotasGrowAndEveryFifthWaveIsBossOnly() {
+    @Test func endlessQuotasGrowAndEveryFifthWaveUsesABossObjective() {
         #expect(EndlessRules.enemyQuota(wave: 1) == 18)
-        #expect(EndlessRules.enemyQuota(wave: 11) == 30)
-        #expect(EndlessRules.enemyQuota(wave: 21) == 42)
-        #expect(EndlessRules.enemyQuota(wave: 31) == 54)
+        #expect(EndlessRules.enemyQuota(wave: 11) == 36)
+        #expect(EndlessRules.enemyQuota(wave: 21) == 54)
+        #expect(EndlessRules.enemyQuota(wave: 30) == 67)
+        #expect(EndlessRules.enemyQuota(wave: 31) == 72)
         #expect(EndlessRules.enemyQuota(wave: 100) > EndlessRules.enemyQuota(wave: 10))
         #expect(!EndlessRules.isBossWave(4))
         #expect(EndlessRules.isBossWave(5))
@@ -784,14 +1302,19 @@ struct GameSimulationTests {
         #expect(EndlessRules.world(for: 20) == .moon)
         #expect(EndlessRules.world(for: 21) == .mars)
         #expect(EndlessRules.world(for: 30) == .mars)
-        #expect(EndlessRules.world(for: 31) == .earth)
-        #expect(EndlessRules.world(for: 41) == .moon)
+        #expect(EndlessRules.world(for: 31) == .jupiter)
+        #expect(EndlessRules.world(for: 41) == .saturn)
+        #expect(EndlessRules.world(for: 51) == .uranus)
+        #expect(EndlessRules.world(for: 61) == .neptune)
+        #expect(EndlessRules.world(for: 70) == .neptune)
+        #expect(EndlessRules.world(for: 71) == .earth)
         #expect(EndlessRules.waveInWorld(for: 31) == 1)
         #expect(EndlessRules.chapterIndex(for: 31) == 3)
         #expect(EndlessRules.worldTransition(after: 9) == nil)
         #expect(EndlessRules.worldTransition(after: 10)?.from == .earth)
         #expect(EndlessRules.worldTransition(after: 10)?.to == .moon)
-        #expect(EndlessRules.worldTransition(after: 30)?.to == .earth)
+        #expect(EndlessRules.worldTransition(after: 30)?.to == .jupiter)
+        #expect(EndlessRules.worldTransition(after: 70)?.to == .earth)
     }
 
     @Test func endlessWorldTransitionChangesTheSnapshotAndEmitsOneHandoff() {
@@ -930,7 +1453,7 @@ struct GameSimulationTests {
         #expect(simulation.snapshot.stamina == staminaAfterHit)
     }
 
-    @Test func bossReinforcementsArriveInSeparatedPhasePulsesAndNeverCount() {
+    @Test func campaignBossReinforcementsContinuouslyRefillAndNeverCount() {
         let level = GameContent.level(10)
         let simulation = GameSimulation(
             level: level,
@@ -939,39 +1462,150 @@ struct GameSimulationTests {
             seed: 107
         )
         simulation.setCampaignWaveForTesting(level.waveCount)
+
         _ = simulation.update(delta: 0.01)
-        guard var boss = simulation.snapshot.targets.first(where: { $0.waveRole == .boss }) else {
-            #expect(Bool(false), "Expected the world boss to spawn immediately")
+        guard var boss = simulation.snapshot.targets.first(where: {
+            $0.waveRole == .boss
+        }) else {
+            Issue.record("Expected the world boss to spawn immediately")
             return
         }
         boss.maximumHitPoints = 1_000_000_000
-        // A high-damage build can cross both markers in one simulation frame.
-        // Both authored pulses must still be queued.
-        boss.hitPoints = 300_000_000
+        boss.hitPoints = 1_000_000_000
         boss.freezeRemaining = 30
         simulation.replaceTargetsForTesting([boss])
 
-        _ = simulation.update(delta: 0.01)
-        _ = simulation.update(delta: 0.01)
-
-        let firstPulse = simulation.snapshot.targets.filter { $0.waveRole == .reinforcement }
-        #expect(firstPulse.count == CampaignBalance.reinforcementPulseSize(levelNumber: level.number))
+        for _ in 0..<35 {
+            _ = simulation.update(delta: 0.05)
+        }
+        #expect(simulation.snapshot.targets.contains {
+            $0.waveRole == .reinforcement
+        })
         #expect(simulation.snapshot.waveDefeats == 0)
         #expect(simulation.snapshot.remainingEnemies == 1)
 
-        guard let phaseThreeBoss = simulation.snapshot.targets.first(where: { $0.waveRole == .boss }) else {
-            #expect(Bool(false), "Expected the boss to remain active")
+        guard let currentBoss = simulation.snapshot.targets.first(where: {
+            $0.waveRole == .boss
+        }) else {
+            Issue.record("Expected the boss to remain active")
             return
         }
-        simulation.replaceTargetsForTesting([phaseThreeBoss])
-        _ = simulation.update(delta: 0.01)
-
-        for _ in 0..<59 { _ = simulation.update(delta: 0.05) }
-        #expect(!simulation.snapshot.targets.contains { $0.waveRole == .reinforcement })
-
-        _ = simulation.update(delta: 0.05)
-        #expect(simulation.snapshot.targets.contains { $0.waveRole == .reinforcement })
+        simulation.replaceTargetsForTesting([currentBoss])
+        var refillFramesRemaining = 80
+        while refillFramesRemaining > 0,
+              !simulation.snapshot.targets.contains(where: {
+                  $0.waveRole == .reinforcement
+              }) {
+            _ = simulation.update(delta: 0.05)
+            refillFramesRemaining -= 1
+        }
+        #expect(simulation.snapshot.targets.contains {
+            $0.waveRole == .reinforcement
+        })
         #expect(simulation.snapshot.remainingEnemies == 1)
+    }
+
+    @Test func endlessBossReinforcementsArriveInFiniteHealthTriggeredWaves() {
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 108
+        )
+        simulation.setEndlessWaveForTesting(5)
+        _ = simulation.update(delta: 0.01)
+        guard var boss = simulation.snapshot.targets.first(where: {
+            $0.waveRole == .boss
+        }) else {
+            Issue.record("Expected the Endless boss to spawn immediately")
+            return
+        }
+        boss.maximumHitPoints = 1_000_000_000
+        boss.hitPoints = 1_000_000_000
+        boss.freezeRemaining = 60
+        simulation.replaceTargetsForTesting([boss])
+
+        for _ in 0..<35 {
+            _ = simulation.update(delta: 0.05)
+        }
+        #expect(
+            simulation.snapshot.targets.count(where: {
+                $0.waveRole == .reinforcement
+            }) == EndlessRules.bossReinforcementWaveSize(wave: 5)
+        )
+
+        guard var currentBoss = simulation.snapshot.targets.first(where: {
+            $0.waveRole == .boss
+        }) else {
+            Issue.record("Expected the Endless boss to remain active")
+            return
+        }
+        simulation.replaceTargetsForTesting([currentBoss])
+        for _ in 0..<120 {
+            _ = simulation.update(delta: 0.05)
+        }
+        #expect(!simulation.snapshot.targets.contains {
+            $0.waveRole == .reinforcement
+        })
+
+        currentBoss.hitPoints = currentBoss.maximumHitPoints * 0.65
+        simulation.replaceTargetsForTesting([currentBoss])
+        _ = simulation.update(delta: 0.05)
+        _ = simulation.update(delta: 0.05)
+        #expect(
+            simulation.snapshot.targets.count(where: {
+                $0.waveRole == .reinforcement
+            }) == EndlessRules.bossReinforcementWaveSize(wave: 5)
+        )
+        #expect(simulation.snapshot.waveDefeats == 0)
+        #expect(simulation.snapshot.remainingEnemies == 1)
+    }
+
+    @Test func bossReinforcementsSpawnAcrossTheFieldInsteadOfCenterLane() {
+        let level = GameContent.level(10)
+        let simulation = GameSimulation(
+            level: level,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 8_701
+        )
+        simulation.setCampaignWaveForTesting(level.waveCount)
+        _ = simulation.update(delta: 0.01)
+        guard var boss = simulation.snapshot.targets.first(where: {
+            $0.waveRole == .boss
+        }) else {
+            Issue.record("Expected the world boss to spawn immediately")
+            return
+        }
+        boss.maximumHitPoints = 1_000_000_000
+        boss.hitPoints = 1_000_000_000
+        boss.freezeRemaining = 60
+        simulation.replaceTargetsForTesting([boss])
+
+        var observedIDs = Set<Int>()
+        var observedSpawnXs: [Double] = []
+        for _ in 0..<700 {
+            _ = simulation.update(delta: 0.05)
+            for target in simulation.snapshot.targets
+                where target.waveRole == .reinforcement
+                    && !observedIDs.contains(target.id) {
+                observedIDs.insert(target.id)
+                observedSpawnXs.append(target.position.x)
+            }
+            simulation.replaceTargetsForTesting(
+                simulation.snapshot.targets.filter {
+                    $0.waveRole != .reinforcement
+                }
+            )
+        }
+
+        #expect(observedSpawnXs.count >= 12)
+        #expect(observedSpawnXs.allSatisfy { (-0.77...0.77).contains($0) })
+        #expect((observedSpawnXs.min() ?? 0) < -0.40)
+        #expect((observedSpawnXs.max() ?? 0) > 0.40)
+        #expect(
+            Set(observedSpawnXs.map { Int(($0 * 100).rounded()) }).count >= 8
+        )
     }
 
     @Test func bossWavesOfferPowerUpsAfterSevenSecondsThenSixteenSecondIntervals() {
@@ -993,15 +1627,30 @@ struct GameSimulationTests {
         boss.freezeRemaining = 40
         simulation.replaceTargetsForTesting([boss])
 
-        for _ in 0..<139 { _ = simulation.update(delta: 0.05) }
+        func removeBossSupport() {
+            simulation.replaceTargetsForTesting(
+                simulation.snapshot.targets.filter {
+                    $0.waveRole != .reinforcement
+                }
+            )
+        }
+
+        for _ in 0..<139 {
+            _ = simulation.update(delta: 0.05)
+            removeBossSupport()
+        }
         #expect(!simulation.snapshot.targets.contains {
             if case .powerUp = $0.kind { true } else { false }
         })
 
-        _ = simulation.update(delta: 0.05)
-        #expect(simulation.snapshot.targets.contains {
+        let firstSpawnEvents = simulation.update(delta: 0.05)
+        removeBossSupport()
+        let firstPowerUpAppeared = simulation.snapshot.targets.contains {
             if case .powerUp = $0.kind { true } else { false }
-        })
+        } || firstSpawnEvents.contains {
+            if case .temporaryAbilityActivated = $0 { true } else { false }
+        }
+        #expect(firstPowerUpAppeared)
 
         guard let currentBoss = simulation.snapshot.targets.first(where: { $0.waveRole == .boss }) else {
             #expect(Bool(false), "Expected the boss to remain active")
@@ -1009,15 +1658,29 @@ struct GameSimulationTests {
         }
         simulation.replaceTargetsForTesting([currentBoss])
 
-        for _ in 0..<319 { _ = simulation.update(delta: 0.05) }
+        var earlyIntervalEvents: [SimulationEvent] = []
+        for _ in 0..<319 {
+            earlyIntervalEvents.append(contentsOf: simulation.update(delta: 0.05))
+            removeBossSupport()
+        }
         #expect(!simulation.snapshot.targets.contains {
             if case .powerUp = $0.kind { true } else { false }
         })
-
-        for _ in 0..<2 { _ = simulation.update(delta: 0.05) }
-        #expect(simulation.snapshot.targets.contains {
-            if case .powerUp = $0.kind { true } else { false }
+        #expect(!earlyIntervalEvents.contains {
+            if case .temporaryAbilityActivated = $0 { true } else { false }
         })
+
+        var secondSpawnEvents: [SimulationEvent] = []
+        for _ in 0..<2 {
+            secondSpawnEvents.append(contentsOf: simulation.update(delta: 0.05))
+            removeBossSupport()
+        }
+        let secondPowerUpAppeared = simulation.snapshot.targets.contains {
+            if case .powerUp = $0.kind { true } else { false }
+        } || secondSpawnEvents.contains {
+            if case .temporaryAbilityActivated = $0 { true } else { false }
+        }
+        #expect(secondPowerUpAppeared)
     }
 
     @Test func moonCadenceSchedulesTwoHarmfulDebrisStrikesWithoutHUDState() {
@@ -1057,6 +1720,51 @@ struct GameSimulationTests {
         } == 2)
     }
 
+    @Test func everyOuterWorldHazardActivatesFromArenaCadence() {
+        let cases: [(level: Int, rule: WorldRule, hazard: BossAttackKind)] = [
+            (31, .windShear, .windRail),
+            (41, .ringSweep, .ringSegment),
+            (51, .cryoDrift, .frozenRail),
+            (61, .pressureTide, .pressureWall),
+        ]
+
+        for item in cases {
+            var progress = PlayerProgress.newPlayer
+            progress.setRank(100, for: .conditioning)
+            let simulation = GameSimulation(
+                level: GameContent.level(item.level),
+                progress: progress,
+                assistMode: false,
+                seed: UInt64(item.level)
+            )
+            var events: [SimulationEvent] = []
+            for _ in 0..<360 where
+                !events.contains(where: {
+                    if case .worldEffectActivated(let rule, _) = $0 {
+                        rule == item.rule
+                    } else {
+                        false
+                    }
+                }) {
+                events.append(contentsOf: simulation.update(delta: 0.05))
+                simulation.replaceTargetsForTesting(
+                    simulation.snapshot.targets.filter {
+                        if case .enemy = $0.kind { false } else { true }
+                    }
+                )
+            }
+
+            #expect(events.contains(where: {
+                if case .worldEffectActivated(let rule, _) = $0 {
+                    rule == item.rule
+                } else {
+                    false
+                }
+            }))
+            #expect(simulation.snapshot.bossHazards.contains { $0.kind == item.hazard })
+        }
+    }
+
     @Test func lunarDebrisTelegraphsThenDamagesItsLaneOnce() {
         var progress = PlayerProgress.newPlayer
         progress.setRank(100, for: .conditioning)
@@ -1068,7 +1776,9 @@ struct GameSimulationTests {
             seed: 19
         )
 
-        for _ in 0..<205 {
+        for _ in 0..<205 where !simulation.snapshot.bossHazards.contains(where: {
+            $0.kind == .lunarDebris
+        }) {
             _ = simulation.update(delta: 0.05)
             simulation.replaceTargetsForTesting(
                 simulation.snapshot.targets.filter {
@@ -1079,7 +1789,7 @@ struct GameSimulationTests {
         guard let debris = simulation.snapshot.bossHazards.first(where: {
             $0.kind == .lunarDebris
         }) else {
-            Issue.record("Expected lunar debris at the ten-second cadence")
+            Issue.record("Expected lunar debris at the level-scaled cadence")
             return
         }
 
@@ -1097,9 +1807,10 @@ struct GameSimulationTests {
         #expect(simulation.snapshot.stamina < startingStamina)
     }
 
-    @Test func moonNeverSlowsHostileProjectiles() {
+    @Test func moonAcceleratesHostileProjectilesWithoutHazardSlowdown() {
+        let level = GameContent.level(11)
         let moon = GameSimulation(
-            level: GameContent.level(11),
+            level: level,
             progress: .newPlayer,
             assistMode: false,
             seed: 21
@@ -1107,7 +1818,15 @@ struct GameSimulationTests {
         moon.spawnHostileProjectileForTesting(x: 0.8, y: 0.60)
         _ = moon.update(delta: 0.05)
 
-        #expect(abs((moon.snapshot.projectiles.first?.position.y ?? 0) - 0.581) < 0.0001)
+        let expectedY = 0.60
+            - 0.38
+                * CampaignBalance.hostileProjectileSpeedMultiplier(
+                    level: level,
+                    wave: 1
+                )
+                * 0.05
+        #expect(abs((moon.snapshot.projectiles.first?.position.y ?? 0) - expectedY) < 0.0001)
+        #expect(expectedY < 0.581)
     }
 
     @Test func marsDefeatsExposeAVolatileCore() {
@@ -1215,26 +1934,32 @@ struct GameSimulationTests {
         #expect(simulation.snapshot.tokens == 0)
     }
 
-    @Test func campaignDifficultyKeepsEscalatingFromEarthThroughMars() {
-        let openingEarth = CampaignBalance.wave(1, for: GameContent.level(1))
-        let earthFinale = CampaignBalance.wave(1, for: GameContent.level(10))
-        let openingMoon = CampaignBalance.wave(1, for: GameContent.level(11))
-        let moonFinale = CampaignBalance.wave(1, for: GameContent.level(20))
-        let openingMars = CampaignBalance.wave(1, for: GameContent.level(21))
-        let marsFinale = CampaignBalance.wave(1, for: GameContent.level(30))
-        #expect(earthFinale.healthMultiplier > openingEarth.healthMultiplier)
-        #expect(openingMoon.healthMultiplier > earthFinale.healthMultiplier)
-        #expect(moonFinale.healthMultiplier > openingMoon.healthMultiplier)
-        #expect(openingMars.healthMultiplier > moonFinale.healthMultiplier)
-        #expect(marsFinale.healthMultiplier > openingMars.healthMultiplier)
-        #expect(openingMoon.healthMultiplier / earthFinale.healthMultiplier > 1.14)
-        #expect(openingMoon.damageMultiplier / earthFinale.damageMultiplier > 1.12)
-        #expect(openingMoon.speedMultiplier / earthFinale.speedMultiplier > 1.08)
-        #expect(openingMoon.spawnInterval < earthFinale.spawnInterval)
-        #expect(openingMars.healthMultiplier / moonFinale.healthMultiplier > 1.14)
-        #expect(openingMars.damageMultiplier / moonFinale.damageMultiplier > 1.09)
-        #expect(openingMars.speedMultiplier / moonFinale.speedMultiplier > 1.08)
-        #expect(openingMars.spawnInterval < moonFinale.spawnInterval)
+    @Test func campaignReferenceBuildAndBossPressureEscalateAcrossAllWorlds() {
+        var previousFinalRank = 0.0
+        var previousBossHealth = 0.0
+        for (index, world) in WorldID.allCases.enumerated() {
+            let levels = GameContent.levels(in: world)
+            let opening = levels[0]
+            let finale = levels[9]
+            let finalRank = CampaignBalance.targetPermanentRank(for: finale)
+            let bossHealth = CampaignBalance.bossHitPoints(
+                tier: .megaBoss,
+                wave: finale.waveCount,
+                for: finale
+            )
+
+            #expect(finalRank == Double(3 + 2 * index))
+            #expect(finalRank > previousFinalRank)
+            #expect(bossHealth > previousBossHealth)
+            #expect(CampaignBalance.referenceSingleTargetDPS(for: finale)
+                    > CampaignBalance.referenceSingleTargetDPS(for: opening))
+            if index > 0 {
+                #expect(CampaignBalance.targetPermanentRank(for: opening)
+                        > previousFinalRank)
+            }
+            previousFinalRank = finalRank
+            previousBossHealth = bossHealth
+        }
     }
 
     @Test func campaignBossesAppearOnlyOnTheFinalWave() {
@@ -1325,13 +2050,248 @@ struct GameSimulationTests {
         #expect(simulation.update(delta: 0.05).isEmpty)
     }
 
+    @Test func zeroStaminaDefeatPrecedesASameFrameBossClear() {
+        let level = GameContent.level(8)
+        let simulation = GameSimulation(
+            level: level,
+            progress: .newPlayer,
+            assistMode: true,
+            seed: 90
+        )
+        simulation.setCampaignWaveForTesting(level.waveCount)
+        simulation.replaceTargetsForTesting([
+            TargetState(
+                id: 9_702,
+                kind: .enemy(.ballLauncher),
+                position: .init(x: 0, y: 0.21),
+                hitPoints: 1,
+                maximumHitPoints: 1,
+                phase: 0,
+                bossTier: .miniBoss
+            ),
+        ])
+        simulation.setStaminaForTesting(0.5)
+        simulation.spawnFriendlyProjectileForTesting(pierce: 0)
+        simulation.spawnHostileProjectileForTesting(
+            x: simulation.snapshot.playerX,
+            y: 0.16,
+            damage: 100
+        )
+
+        let events = simulation.update(delta: 0.05)
+
+        #expect(simulation.snapshot.stamina == 0)
+        #expect(events.contains(.finished(false)))
+        #expect(!events.contains(.finished(true)))
+        #expect(!events.contains(.waveCompleted(level.waveCount)))
+    }
+
     @Test func endlessDifficultyContinuesGrowingAtHighWaves() {
         #expect(EndlessRules.healthMultiplier(wave: 100) > EndlessRules.healthMultiplier(wave: 10))
         #expect(EndlessRules.healthMultiplier(wave: 1_000) > EndlessRules.healthMultiplier(wave: 100))
         #expect(EndlessRules.damageMultiplier(wave: 1_000) > EndlessRules.damageMultiplier(wave: 100))
         #expect(EndlessRules.speedMultiplier(wave: 1_000) > EndlessRules.speedMultiplier(wave: 100))
-        #expect(EndlessRules.spawnInterval(wave: 10_000) == 0.32)
-        #expect(EndlessRules.packSize(wave: 10_000) == 4)
+        #expect(
+            EndlessRules.attackCadenceMultiplier(wave: 1_000)
+                < EndlessRules.attackCadenceMultiplier(wave: 100)
+        )
+        #expect(
+            EndlessRules.hostileProjectileSpeedMultiplier(wave: 1_000)
+                > EndlessRules.hostileProjectileSpeedMultiplier(wave: 100)
+        )
+        #expect(EndlessRules.spawnInterval(wave: 10_000) == 0.22)
+        #expect(EndlessRules.packSize(wave: 10_000) == 6)
+        #expect(EndlessRules.maximumActiveEnemies(wave: 10_000) == 24)
+        #expect(EndlessRules.maximumHostileProjectiles(wave: 10_000) == 12)
+    }
+
+    @Test func endlessWaveThirtyAppliesTheHighPressureCurve() {
+        let health = EndlessRules.healthMultiplier(wave: 30)
+        let damage = EndlessRules.damageMultiplier(wave: 30)
+
+        #expect(abs(health - 22.99) < 0.02)
+        #expect(abs(damage - 4.116) < 0.002)
+        #expect(EndlessRules.enemyQuota(wave: 30) == 67)
+        #expect(EndlessRules.maximumActiveEnemies(wave: 30) == 16)
+        #expect(EndlessRules.maximumHostileProjectiles(wave: 30) == 9)
+        #expect(EndlessRules.packSize(wave: 30) == 5)
+        #expect(EndlessRules.spawnInterval(wave: 30) < 0.34)
+        #expect(EndlessRules.attackCadenceMultiplier(wave: 30) < 0.58)
+        #expect(EndlessRules.hostileProjectileSpeedMultiplier(wave: 30) > 1.52)
+    }
+
+    @Test func endlessBossDurabilityStartsFairAndContinuesScaling() {
+        #expect(abs(EndlessRules.bossHealthMultiplier(wave: 5) - 0.70) < 0.000_001)
+        #expect(
+            EndlessRules.bossHealthMultiplier(wave: 30)
+                > EndlessRules.bossHealthMultiplier(wave: 5)
+        )
+        #expect(
+            EndlessRules.bossHealthMultiplier(wave: 1_000)
+                > EndlessRules.bossHealthMultiplier(wave: 100)
+        )
+        #expect(EndlessRules.bossReinforcementWaveSize(wave: 5) == 2)
+        #expect(EndlessRules.bossDirectDamageWindow(wave: 5) == 5)
+
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 5
+        )
+        simulation.setEndlessWaveForTesting(5)
+        _ = simulation.update(delta: 0.01)
+
+        let boss = simulation.snapshot.targets.first {
+            $0.waveRole == .boss
+        }
+        let expectedHealth = CombatBalance.baseHealth(.titanKeeper)
+            * EndlessRules.healthMultiplier(wave: 5)
+            * EndlessRules.bossHealthMultiplier(wave: 5)
+        #expect(abs((boss?.maximumHitPoints ?? 0) - expectedHealth) < 0.001)
+        #expect((boss?.maximumHitPoints ?? .infinity) < 1_000)
+    }
+
+    @Test func endlessHostileProjectilesRespectTheReadableWaveCap() {
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 1_930
+        )
+        simulation.setEndlessWaveForTesting(30)
+
+        for index in 0..<20 {
+            simulation.spawnHostileProjectileForTesting(
+                x: Double(index) * 0.01,
+                y: 0.80
+            )
+        }
+
+        #expect(
+            simulation.snapshot.projectiles.count(where: \.hostile)
+                == EndlessRules.maximumHostileProjectiles(wave: 30)
+        )
+    }
+
+    @Test func endlessStartingPowerOnlyPartiallyCountersPermanentUpgrades() {
+        let baseline = PlayerStats(progress: .newPlayer, mode: .endless)
+        var progress = PlayerProgress.newPlayer
+        for track in UpgradeTrack.allCases {
+            progress.setRank(5, for: track)
+        }
+        let upgraded = PlayerStats(progress: progress, mode: .endless)
+
+        let baselineOffense = EndlessRules.startingOffenseFactor(stats: baseline)
+        let upgradedOffense = EndlessRules.startingOffenseFactor(stats: upgraded)
+        let rawOffenseRatio = (
+            (upgraded.ballDamage / baseline.ballDamage)
+                * ((1 + upgraded.criticalChance) / (1 + baseline.criticalChance))
+                * (baseline.kickCooldown / upgraded.kickCooldown)
+        )
+        let upgradedSurvival = EndlessRules.startingSurvivalFactor(
+            stats: upgraded
+        )
+
+        #expect(abs(baselineOffense - 1) < 0.000_001)
+        #expect(upgradedOffense > 1)
+        #expect(upgradedOffense < rawOffenseRatio)
+        #expect(abs(upgradedOffense * upgradedOffense - rawOffenseRatio) < 0.000_001)
+        #expect(upgradedSurvival > 1)
+        #expect(upgradedSurvival < upgraded.maxStamina / baseline.maxStamina)
+
+        let baselineWave30 = EndlessRules.healthMultiplier(wave: 30)
+        let upgradedWave30 = EndlessRules.healthMultiplier(
+            wave: 30,
+            startingOffenseFactor: upgradedOffense
+        )
+        #expect(abs(upgradedWave30 / baselineWave30 - upgradedOffense) < 0.000_001)
+    }
+
+    @Test func upgradedWaveThirtyBuildCannotClearWhileStandingStill() {
+        let relicID = UUID(uuidString: "F2411AB8-9AB3-4FE9-8B51-68CCDB35D130")!
+        let relic = EndlessRelic(
+            id: relicID,
+            acquiredAt: Date(timeIntervalSince1970: 0),
+            sourceWaveMilestone: 30,
+            rarity: .rare,
+            primaryStat: .attackDamage,
+            affixes: [
+                .init(stat: .attackDamage, basisPoints: 1_000),
+                .init(stat: .maximumStamina, basisPoints: 1_000),
+            ]
+        )
+        var progress = PlayerProgress.newPlayer
+        for track in UpgradeTrack.allCases {
+            progress.setRank(5, for: track)
+        }
+        progress.endlessRecord.relics = [relic]
+        progress.endlessRecord.equippedRelicID = relicID
+
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: progress,
+            assistMode: false,
+            seed: 30
+        )
+        let coreRanks: [(AbilityKind, Int)] = [
+            (.powerDrive, 4),
+            (.quickRelease, 4),
+            (.throughBall, 2),
+            (.curler, 2),
+            (.oneTwo, 3),
+            (.cleanSheet, 1),
+            (.secondWind, 1),
+            (.gravityBoots, 1),
+            (.meteorStrike, 2),
+        ]
+        for (ability, rank) in coreRanks {
+            for _ in 0..<rank { simulation.apply(ability) }
+        }
+        for ability in EndlessSpecialBallRules.abilities {
+            simulation.apply(.specialBall(ability))
+        }
+        simulation.setEndlessWaveForTesting(30)
+
+        var clearedWaveThirty = false
+        var wasDefeated = false
+        for _ in 0..<2_400 where !clearedWaveThirty && !wasDefeated {
+            let events = simulation.update(delta: 0.05)
+            clearedWaveThirty = events.contains(.waveCompleted(30))
+            wasDefeated = events.contains(.finished(false))
+        }
+
+        #expect(wasDefeated)
+        #expect(!clearedWaveThirty)
+    }
+
+    @Test func endlessTokenGrowthIsUncappedSublinearAndGoldenGoalDiminishes() {
+        let wave10 = EconomyBalance.endlessWaveRewardMultiplier(wave: 10)
+        let wave100 = EconomyBalance.endlessWaveRewardMultiplier(wave: 100)
+        let wave1_000 = EconomyBalance.endlessWaveRewardMultiplier(wave: 1_000)
+        #expect(wave10 > 1)
+        #expect(wave100 > wave10)
+        #expect(wave1_000 > wave100)
+        #expect(wave100 / wave10 < 10)
+
+        let golden1 = EconomyBalance.goldenGoalMultiplier(rank: 1)
+        let golden5 = EconomyBalance.goldenGoalMultiplier(rank: 5)
+        let golden100 = EconomyBalance.goldenGoalMultiplier(rank: 100)
+        #expect(golden1 > 1)
+        #expect(golden5 > golden1)
+        #expect(golden100 > golden5)
+        #expect(golden5 - golden1 > golden100 - EconomyBalance.goldenGoalMultiplier(rank: 96))
+
+        let through10 = EconomyBalance.expectedEndlessTokens(throughWave: 10)
+        let through30 = EconomyBalance.expectedEndlessTokens(throughWave: 30)
+        let through100 = EconomyBalance.expectedEndlessTokens(throughWave: 100)
+        #expect(through10 > 1_100 && through10 < 1_300)
+        #expect(through30 > through10)
+        #expect(through100 > through30)
+        #expect(EconomyBalance.expectedEndlessTokens(
+            throughWave: 30,
+            goldenGoalRank: 5
+        ) > through30)
     }
 
     @Test func everyCharacterHasRosterAndGameplayPresentation() {
@@ -1370,6 +2330,104 @@ struct GameSimulationTests {
 
             #expect(kickingLeg?.action(forKey: "kick-leg") != nil)
         }
+    }
+
+    @Test func characterAbilityChargeIsQuotaNormalized() {
+        for quota in [18, 99, 255] {
+            let enemyCharge = CharacterAbilityChargeBalance.enemyDefeatCharge(
+                referenceQuota: quota
+            )
+            #expect(abs(
+                enemyCharge * Double(quota)
+                    - CharacterAbilityChargeBalance.fullCharge
+                        * CharacterAbilityChargeBalance.targetChargesPerWave
+            ) < 0.001)
+            #expect(abs(
+                CharacterAbilityChargeBalance.fieldObjectDefeatCharge(
+                    referenceQuota: quota
+                )
+                    - enemyCharge
+                        * CharacterAbilityChargeBalance.fieldObjectChargeFraction
+            ) < 0.001)
+        }
+
+        #expect(abs(
+            CharacterAbilityChargeBalance.bossDamageCharge(
+                damage: 40,
+                maximumHitPoints: 100
+            ) - 20
+        ) < 0.001)
+        #expect(abs(
+            CharacterAbilityChargeBalance.bossDamageCharge(
+                damage: 150,
+                maximumHitPoints: 100
+            ) - CharacterAbilityChargeBalance.bossDamageChargeBudget
+        ) < 0.001)
+    }
+
+    @Test func enemyObjectReinforcementAndBossAllContributeCharge() {
+        func chargeAfterDefeating(_ target: TargetState) -> Double {
+            let simulation = GameSimulation(
+                level: GameContent.level(1),
+                progress: .newPlayer,
+                assistMode: false,
+                seed: 801
+            )
+            simulation.replaceTargetsForTesting([target])
+            simulation.spawnFriendlyProjectileForTesting(pierce: 0)
+            _ = simulation.update(delta: 0.01)
+            return simulation.snapshot.characterAbilityCharge
+        }
+
+        let enemyCharge = chargeAfterDefeating(TargetState(
+            id: 18_001,
+            kind: .enemy(.coneRunner),
+            position: .init(x: 0, y: 0.18),
+            hitPoints: 1,
+            maximumHitPoints: 1,
+            phase: 0
+        ))
+        let objectCharge = chargeAfterDefeating(TargetState(
+            id: 18_002,
+            kind: .fieldObject(.ballCart),
+            position: .init(x: 0, y: 0.18),
+            hitPoints: 1,
+            maximumHitPoints: 1,
+            phase: 0
+        ))
+        let reinforcementCharge = chargeAfterDefeating(TargetState(
+            id: 18_003,
+            kind: .enemy(.coneRunner),
+            position: .init(x: 0, y: 0.18),
+            hitPoints: 1,
+            maximumHitPoints: 1,
+            phase: 0,
+            waveRole: .reinforcement
+        ))
+
+        let expectedEnemyCharge =
+            CharacterAbilityChargeBalance.enemyDefeatCharge(referenceQuota: 18)
+        #expect(abs(enemyCharge - expectedEnemyCharge) < 0.001)
+        #expect(abs(
+            objectCharge
+                - expectedEnemyCharge
+                    * CharacterAbilityChargeBalance.fieldObjectChargeFraction
+        ) < 0.001)
+        #expect(abs(reinforcementCharge - expectedEnemyCharge) < 0.001)
+
+        let bossCharge = chargeAfterDefeating(TargetState(
+            id: 18_004,
+            kind: .enemy(.titanKeeper),
+            position: .init(x: 0, y: 0.18),
+            hitPoints: 10,
+            maximumHitPoints: 10,
+            phase: 0,
+            bossTier: .megaBoss,
+            waveRole: .boss
+        ))
+        #expect(abs(
+            bossCharge - CharacterAbilityChargeBalance.bossDamageChargeBudget
+        ) < 0.001)
     }
 
     @Test func eachCharacterAbilityConsumesFullCharge() {
@@ -1445,9 +2503,88 @@ struct GameSimulationTests {
             }
 
             #expect(simulation.snapshot.targetsDefeated == 1)
+            #expect(simulation.snapshot.characterAbilityDefeats == 1)
             #expect(simulation.snapshot.characterAbilityCharge == 0)
             #expect(!simulation.snapshot.characterAbilityReady)
         }
+    }
+
+    @Test func everyCharacterPowerCreditsActualEnemyDefeats() {
+        let cases: [(CharacterID, Vector2, Int)] = [
+            (.ace, .init(x: -0.07, y: 0.18), 2),
+            (.volt, .init(x: 0.60, y: 0.55), 115),
+            (.nova, .init(x: 0.60, y: 0.55), 35),
+            (.aegis, .init(x: 0, y: 0.20), 8),
+            (.gale, .init(x: 0.52, y: 0.24), 10),
+            (.halo, .init(x: 0.72, y: 0.18), 60),
+            (.flux, .init(x: 0.60, y: 0.52), 120),
+            (.surge, .init(x: 0.60, y: 0.50), 60),
+        ]
+
+        for (index, abilityCase) in cases.enumerated() {
+            let (characterID, position, updateCount) = abilityCase
+            var progress = PlayerProgress.newPlayer
+            progress.selectedCharacter = characterID
+            progress.unlockedCharacters.insert(characterID)
+            let simulation = GameSimulation(
+                level: GameContent.level(1),
+                progress: progress,
+                assistMode: false,
+                seed: UInt64(9_500 + index)
+            )
+            var enemy = TargetState(
+                id: 9_500 + index,
+                kind: .enemy(.coneRunner),
+                position: position,
+                hitPoints: 1,
+                maximumHitPoints: 1,
+                phase: 0
+            )
+            enemy.waveRole = .reinforcement
+            enemy.freezeRemaining = 30
+            simulation.replaceTargetsForTesting([enemy])
+            simulation.fullyChargeCharacterAbilityForTesting()
+
+            _ = simulation.activateCharacterAbility()
+            for _ in 0..<updateCount {
+                _ = simulation.update(delta: 0.05)
+            }
+
+            #expect(
+                simulation.snapshot.characterAbilityDefeats >= 1,
+                "\(characterID.rawValue) did not receive defeat credit"
+            )
+        }
+    }
+
+    @Test func characterPowerDoesNotCreditDestroyedFieldObjectsAsEnemyDefeats() {
+        var progress = PlayerProgress.newPlayer
+        progress.selectedCharacter = .aegis
+        progress.unlockedCharacters.insert(.aegis)
+        let simulation = GameSimulation(
+            level: GameContent.level(1),
+            progress: progress,
+            assistMode: false,
+            seed: 9_600
+        )
+        let fieldObject = TargetState(
+            id: 9_600,
+            kind: .fieldObject(.ballCart),
+            position: .init(x: 0, y: 0.20),
+            hitPoints: 1,
+            maximumHitPoints: 1,
+            phase: 0
+        )
+        simulation.replaceTargetsForTesting([fieldObject])
+        simulation.fullyChargeCharacterAbilityForTesting()
+
+        _ = simulation.activateCharacterAbility()
+        for _ in 0..<8 {
+            _ = simulation.update(delta: 0.05)
+        }
+
+        #expect(simulation.snapshot.targetsDefeated == 1)
+        #expect(simulation.snapshot.characterAbilityDefeats == 0)
     }
 
     @Test func characterAbilityCanNeutralizeCoreWithoutCoreRewards() {
@@ -1619,6 +2756,33 @@ struct GameSimulationTests {
 
         #expect(events.contains(.characterAbilityTargets(.timeBreak, [robot.position])))
         #expect((simulation.snapshot.targets.first?.freezeRemaining ?? 0) >= 5.5)
+
+        simulation.spawnHostileProjectileForTesting(x: 0.72, y: 0.82)
+        let hostileStart = simulation.snapshot.projectiles
+            .first(where: \.hostile)?
+            .position
+        _ = simulation.update(delta: 0.05)
+        #expect(
+            simulation.snapshot.projectiles.first(where: \.hostile)?.position
+                == hostileStart
+        )
+
+        var sawShatter = false
+        for _ in 0..<110 {
+            let updateEvents = simulation.update(delta: 0.05)
+            sawShatter = sawShatter || updateEvents.contains {
+                if case .characterAbilityEffect(.timeShatter(_)) = $0 {
+                    return true
+                }
+                return false
+            }
+        }
+        #expect(sawShatter)
+        #expect(!simulation.snapshot.projectiles.contains { $0.hostile })
+        #expect(
+            (simulation.snapshot.targets.first(where: { $0.id == robot.id })?
+                .hitPoints ?? 500) < 500
+        )
     }
 
     @Test func meteorVolleyUsesVisibleFlightBeforeImpactDamage() {
@@ -1640,11 +2804,14 @@ struct GameSimulationTests {
         _ = simulation.activateCharacterAbility()
 
         #expect(simulation.snapshot.targets.first?.hitPoints == 500)
-        #expect(simulation.snapshot.characterAttacks.count == 1)
-        #expect(simulation.snapshot.characterAttacks.first?.kind == .meteor)
+        #expect(simulation.snapshot.characterAttacks.count == 7)
+        #expect(simulation.snapshot.characterAttacks.allSatisfy {
+            $0.kind == .meteor
+        })
+        #expect(simulation.snapshot.characterAttacks.first?.targetID == robot.id)
 
         var sawImpact = false
-        for _ in 0..<20 {
+        for _ in 0..<35 {
             let events = simulation.update(delta: 0.05)
             sawImpact = sawImpact || events.contains {
                 if case .characterMeteorImpact = $0 { return true }
@@ -1738,6 +2905,366 @@ struct GameSimulationTests {
         #expect((simulation.snapshot.targets.first?.hitPoints ?? 500) < 500)
     }
 
+    @Test func galeLaunchesFiveBouncersAndUsesOrbitersOnSeparateEnemies() {
+        var progress = PlayerProgress.newPlayer
+        progress.selectedCharacter = .gale
+        progress.unlockedCharacters.insert(.gale)
+        let simulation = GameSimulation(
+            level: GameContent.level(31),
+            progress: progress,
+            assistMode: false,
+            seed: 861
+        )
+        simulation.replaceTargetsForTesting([])
+        simulation.setPlayerTarget(x: -0.78)
+        for _ in 0..<20 {
+            _ = simulation.update(delta: 0.05)
+        }
+        #expect(simulation.snapshot.playerX < -0.65)
+        let enemies = [-0.52, 0.0, 0.52].enumerated().map { index, x in
+            TargetState(
+                id: 9_100 + index,
+                kind: .enemy(.cloudRunner),
+                position: .init(x: x, y: 0.24 + Double(index) * 0.01),
+                hitPoints: 500,
+                maximumHitPoints: 500,
+                phase: 0,
+                freezeRemaining: 20
+            )
+        }
+        simulation.replaceTargetsForTesting(enemies)
+        simulation.spawnHostileProjectileForTesting(x: 0.80, y: 0.68)
+        simulation.fullyChargeCharacterAbilityForTesting()
+
+        _ = simulation.activateCharacterAbility()
+
+        #expect(simulation.snapshot.galeBounces.count == 5)
+        #expect(Set(simulation.snapshot.galeBounces.map(\.startPosition.x)).count == 1)
+        #expect(
+            simulation.snapshot.galeBounces.map(\.destinationX)
+                == [-0.78, -0.39, 0, 0.39, 0.78]
+        )
+        #expect(simulation.snapshot.galeOrbitCount == 3)
+        #expect(!simulation.snapshot.projectiles.contains {
+            !$0.hostile && $0.temporaryAbility == .heatSeeking
+        })
+
+        _ = simulation.update(delta: 0.01)
+        #expect(simulation.snapshot.galeOrbitCount == 0)
+        #expect(simulation.snapshot.galeInterceptors.count == 3)
+        #expect(
+            Set(simulation.snapshot.galeInterceptors.map(\.targetID))
+                == Set(enemies.map(\.id))
+        )
+        #expect(simulation.snapshot.projectiles.contains { $0.hostile })
+
+        var landingCount = 0
+        for _ in 0..<8 {
+            landingCount += simulation.update(delta: 0.05).count {
+                if case .characterAbilityEffect(.galeLanding(_, _)) = $0 {
+                    return true
+                }
+                return false
+            }
+        }
+        let centeredLaunchXs = simulation.snapshot.galeBounces.map(\.position.x)
+        #expect(centeredLaunchXs.allSatisfy { abs($0) < 0.20 })
+        #expect((centeredLaunchXs.max() ?? 0) - (centeredLaunchXs.min() ?? 0) > 0.20)
+        for _ in 0..<80 {
+            let events = simulation.update(delta: 0.05)
+            landingCount += events.count {
+                if case .characterAbilityEffect(.galeLanding(_, _)) = $0 {
+                    return true
+                }
+                return false
+            }
+        }
+
+        #expect(landingCount == 20)
+        #expect(simulation.snapshot.galeBounces.isEmpty)
+        for enemy in enemies {
+            let updated = simulation.snapshot.targets.first {
+                $0.id == enemy.id
+            }
+            #expect((updated?.hitPoints ?? 500) < 500)
+            #expect((updated?.position.y ?? 0) >= 0.42)
+        }
+
+        simulation.fullyChargeCharacterAbilityForTesting()
+        _ = simulation.activateCharacterAbility()
+        #expect(simulation.snapshot.galeOrbitCount == 3)
+        #expect(simulation.snapshot.galeBounces.count == 5)
+    }
+
+    @Test func haloSweepsTheArenaAsOneProjectileClearingRing() {
+        var progress = PlayerProgress.newPlayer
+        progress.selectedCharacter = .halo
+        progress.unlockedCharacters.insert(.halo)
+        let simulation = GameSimulation(
+            level: GameContent.level(41),
+            progress: progress,
+            assistMode: false,
+            seed: 862
+        )
+        simulation.replaceTargetsForTesting([])
+        simulation.setPlayerTarget(x: -0.78)
+        for _ in 0..<20 {
+            _ = simulation.update(delta: 0.05)
+        }
+        #expect(simulation.snapshot.playerX < -0.65)
+        let robots = [-0.72, 0.0, 0.72].enumerated().map { index, x in
+            TargetState(
+                id: 9_201 + index,
+                kind: .enemy(.ringRunner),
+                position: .init(x: x, y: 0.52),
+                hitPoints: 1_000,
+                maximumHitPoints: 1_000,
+                phase: 0,
+                freezeRemaining: 20
+            )
+        }
+        simulation.replaceTargetsForTesting(robots)
+        simulation.fullyChargeCharacterAbilityForTesting()
+
+        _ = simulation.activateCharacterAbility()
+
+        #expect(simulation.snapshot.haloRings.count == 1)
+        #expect(simulation.snapshot.haloRings.first?.radius == 0.80)
+        #expect((simulation.snapshot.haloRings.first?.startX ?? 0) < -0.65)
+        for _ in 0..<60 {
+            _ = simulation.update(delta: 0.05)
+        }
+        let ring = simulation.snapshot.haloRings.first
+        #expect(abs(ring?.center.x ?? 1) < 0.02)
+        for robot in robots {
+            #expect((ring?.targetHitCounts[robot.id] ?? 0) >= 1)
+            #expect(
+                (simulation.snapshot.targets.first(where: { $0.id == robot.id })?
+                    .hitPoints ?? 1_000) < 1_000
+            )
+        }
+    }
+
+    @Test func fluxThrowsSixTrapsThatPinAndDamageSeparateEnemies() {
+        var progress = PlayerProgress.newPlayer
+        progress.selectedCharacter = .flux
+        progress.unlockedCharacters.insert(.flux)
+        let simulation = GameSimulation(
+            level: GameContent.level(51),
+            progress: progress,
+            assistMode: false,
+            seed: 863
+        )
+        let positions: [Vector2] = [
+            .init(x: -0.06, y: 0.48),
+            .init(x: -0.03, y: 0.50),
+            .init(x: 0, y: 0.52),
+            .init(x: 0.03, y: 0.88),
+            .init(x: 0.06, y: 0.90),
+            .init(x: 0, y: 0.92),
+        ]
+        let enemies = positions.enumerated().map { index, position in
+            TargetState(
+                id: 9_300 + index,
+                kind: .enemy(.frostSprinter),
+                position: position,
+                hitPoints: 500,
+                maximumHitPoints: 500,
+                phase: 0,
+                freezeRemaining: 20
+            )
+        }
+        simulation.replaceTargetsForTesting(enemies)
+        simulation.spawnHostileProjectileForTesting(x: 0.82, y: 0.82)
+        let projectileIDs = simulation.snapshot.projectiles.map(\.id)
+        simulation.fullyChargeCharacterAbilityForTesting()
+
+        _ = simulation.activateCharacterAbility()
+
+        #expect(simulation.snapshot.magneticTraps.count == 6)
+        #expect(simulation.snapshot.projectiles.map(\.id) == projectileIDs)
+        #expect(
+            Set(simulation.snapshot.magneticTraps.compactMap(\.targetID))
+                == Set(enemies.map(\.id))
+        )
+        let landingPositions = simulation.snapshot.magneticTraps.map(\.landingPosition)
+        #expect((landingPositions.map(\.x).min() ?? 0) <= -0.75)
+        #expect((landingPositions.map(\.x).max() ?? 0) >= 0.75)
+        let pairwiseDistances = landingPositions.indices.flatMap { first in
+            landingPositions.indices.compactMap { second -> Double? in
+                guard first < second else { return nil }
+                return hypot(
+                    landingPositions[first].x - landingPositions[second].x,
+                    landingPositions[first].y - landingPositions[second].y
+                )
+            }
+        }
+        #expect((pairwiseDistances.min() ?? 0) >= 0.36)
+
+        var snapCount = 0
+        for _ in 0..<22 {
+            snapCount += simulation.update(delta: 0.05).count {
+                if case .characterAbilityEffect(.magneticTrapSnap(_)) = $0 {
+                    return true
+                }
+                return false
+            }
+        }
+        let visiblyPullingEnemy = simulation.snapshot.targets.first {
+            $0.id == enemies[0].id
+        }
+        #expect((visiblyPullingEnemy?.position.x ?? 0) < -0.20)
+        #expect((visiblyPullingEnemy?.position.x ?? -1) > -0.70)
+        #expect(
+            simulation.snapshot.magneticTraps.first {
+                $0.targetID == enemies[0].id
+            }?.captureRemaining == 0
+        )
+        for _ in 0..<120 {
+            if snapCount == 6 { break }
+            snapCount += simulation.update(delta: 0.05).count {
+                if case .characterAbilityEffect(.magneticTrapSnap(_)) = $0 {
+                    return true
+                }
+                return false
+            }
+        }
+        #expect(snapCount == 6)
+        for _ in 0..<10 {
+            _ = simulation.update(delta: 0.05)
+        }
+        for enemy in enemies {
+            #expect(
+                (simulation.snapshot.targets.first(where: { $0.id == enemy.id })?
+                    .hitPoints ?? 500) < 500
+            )
+        }
+    }
+
+    @Test func fluxTrapRejectsPassedEnemyAndCompletesAForwardPull() {
+        var progress = PlayerProgress.newPlayer
+        progress.selectedCharacter = .flux
+        progress.unlockedCharacters.insert(.flux)
+        let simulation = GameSimulation(
+            level: GameContent.level(51),
+            progress: progress,
+            assistMode: false,
+            seed: 865
+        )
+        let passedEnemy = TargetState(
+            id: 9_400,
+            kind: .enemy(.frostSprinter),
+            position: .init(x: 0, y: 0.34),
+            hitPoints: 10_000,
+            maximumHitPoints: 10_000,
+            phase: 0
+        )
+        let forwardEnemy = TargetState(
+            id: 9_401,
+            kind: .enemy(.frostSprinter),
+            position: .init(x: 0, y: 0.72),
+            hitPoints: 10_000,
+            maximumHitPoints: 10_000,
+            phase: 0
+        )
+        simulation.replaceTargetsForTesting([passedEnemy, forwardEnemy])
+        simulation.fullyChargeCharacterAbilityForTesting()
+
+        _ = simulation.activateCharacterAbility()
+
+        #expect(
+            !simulation.snapshot.magneticTraps
+                .compactMap(\.targetID)
+                .contains(passedEnemy.id)
+        )
+
+        var snappedForwardEnemy = false
+        for _ in 0..<80 {
+            let events = simulation.update(delta: 0.05)
+            snappedForwardEnemy = snappedForwardEnemy || events.contains {
+                if case .characterAbilityEffect(.magneticTrapSnap(_)) = $0 {
+                    return true
+                }
+                return false
+            }
+            if snappedForwardEnemy { break }
+        }
+
+        #expect(snappedForwardEnemy)
+        #expect(
+            simulation.snapshot.magneticTraps.contains {
+                $0.targetID == forwardEnemy.id && $0.captureRemaining > 0
+            }
+        )
+        #expect(
+            !simulation.snapshot.magneticTraps
+                .compactMap(\.targetID)
+                .contains(passedEnemy.id)
+        )
+    }
+
+    @Test func surgeLaunchesThreeFullFieldTsunamisInOrder() {
+        var progress = PlayerProgress.newPlayer
+        progress.selectedCharacter = .surge
+        progress.unlockedCharacters.insert(.surge)
+        let simulation = GameSimulation(
+            level: GameContent.level(61),
+            progress: progress,
+            assistMode: false,
+            seed: 864
+        )
+        let enemies = [-0.60, 0.0, 0.60].enumerated().map { index, x in
+            TargetState(
+                id: 9_400 + index,
+                kind: .enemy(.mistRunner),
+                position: .init(x: x, y: 0.50),
+                hitPoints: 500,
+                maximumHitPoints: 500,
+                phase: 0,
+                freezeRemaining: 20
+            )
+        }
+        simulation.replaceTargetsForTesting(enemies)
+        for x in [-0.60, 0.0, 0.60] {
+            simulation.spawnHostileProjectileForTesting(x: x, y: 0.50)
+        }
+        simulation.fullyChargeCharacterAbilityForTesting()
+
+        _ = simulation.activateCharacterAbility()
+
+        #expect(simulation.snapshot.tidalWaves.count == 3)
+        #expect(simulation.snapshot.tidalWaves.map(\.lane)
+            == [.middle, .middle, .middle])
+        #expect(simulation.snapshot.tidalWaves.map(\.round)
+            == [1, 2, 3])
+        #expect(simulation.snapshot.tidalWaves.allSatisfy {
+            $0.halfWidth >= 0.90
+        })
+
+        var launches: [(TidalLane, Int)] = []
+        for _ in 0..<56 {
+            let events = simulation.update(delta: 0.05)
+            for event in events {
+                if case .characterAbilityEffect(
+                    .tidalLaunch(let lane, let round, _)
+                ) = event {
+                    launches.append((lane, round))
+                }
+            }
+        }
+
+        #expect(launches.map(\.0) == [.middle, .middle, .middle])
+        #expect(launches.map(\.1) == [1, 2, 3])
+        #expect(!simulation.snapshot.projectiles.contains { $0.hostile })
+        for enemy in enemies {
+            let updated = simulation.snapshot.targets.first {
+                $0.id == enemy.id
+            }
+            #expect((updated?.hitPoints ?? 500) < 500)
+            #expect((updated?.position.y ?? 0.50) > 0.50)
+        }
+    }
+
     @Test func pinballProjectileHasDistinctHighEnergyPresentation() {
         let node = GameNodeFactory.projectile(hostile: false)
         GameNodeFactory.configureProjectile(
@@ -1752,6 +3279,41 @@ struct GameSimulationTests {
         let halo = node.childNode(withName: "ball-halo") as? SKShapeNode
         #expect(ball?.size.width == 39)
         #expect((halo?.glowWidth ?? 0) > 0)
+    }
+
+    @Test func campaignOnlyBallsHaveDistinctProjectileSignatures() {
+        let cases: [(TemporaryBallAbility, String)] = [
+            (.heatSeeking, "heat-seeking-signature"),
+            (.orbitShot, "orbit-shot-signature"),
+            (.solarPierce, "solar-pierce-signature"),
+        ]
+
+        for (ability, signatureName) in cases {
+            let node = GameNodeFactory.projectile(hostile: false)
+            GameNodeFactory.configureProjectile(
+                node,
+                hostile: false,
+                critical: false,
+                temporaryAbility: ability
+            )
+            #expect(node.childNode(withName: "//\(signatureName)") != nil)
+        }
+    }
+
+    @Test func endlessBallDisplaysEveryTriggeredEffectMarker() {
+        let node = GameNodeFactory.projectile(hostile: false)
+        let effects = Set(EndlessSpecialBallRules.abilities)
+        GameNodeFactory.configureProjectile(
+            node,
+            hostile: false,
+            critical: false,
+            temporaryAbility: nil,
+            endlessEffects: effects
+        )
+
+        for ability in EndlessSpecialBallRules.abilities {
+            #expect(node.childNode(withName: "//effect-\(ability.rawValue)") != nil)
+        }
     }
 
     @Test func everyEnemyHasAMotionPresentationRigMatchingItsAssetType() {
@@ -1956,6 +3518,42 @@ struct GameSimulationTests {
         #expect(node.childNode(withName: "//status-frost-glaze")?.action(forKey: "frost-shimmer") != nil)
     }
 
+    @Test func overlappingStatusesRenderAllEffectLayersTogether() {
+        var target = TargetState(
+            id: 2,
+            kind: .enemy(.titanKeeper),
+            position: .init(x: 0, y: 0.5),
+            hitPoints: 10,
+            maximumHitPoints: 10,
+            phase: 0
+        )
+        target.burnRemaining = 3
+        target.freezeRemaining = 2
+        target.reverseRemaining = 2.5
+        target.stunRemaining = 1
+        target.magnetRemaining = 1.4
+        target.undertowSlowRemaining = 0.55
+        let node = GameNodeFactory.target(target)
+
+        GameNodeFactory.updateStatus(
+            on: node,
+            target: target,
+            reducedMotion: false
+        )
+
+        #expect(node.childNode(withName: "//status-fire-front")?.alpha == 1)
+        #expect(node.childNode(withName: "//status-ice-crystals")?.alpha == 1)
+        #expect(
+            abs(
+                (node.childNode(withName: "//status-reverse-trail")?.alpha ?? 0)
+                    - 0.88
+            ) < 0.001
+        )
+        #expect(node.childNode(withName: "//status-stun-arcs")?.alpha == 1)
+        #expect(node.childNode(withName: "//status-magnet-mark")?.alpha == 1)
+        #expect(node.childNode(withName: "//status-undertow")?.alpha == 1)
+    }
+
     @Test func burningTargetsRunLayeredFlamesAndResetCleanlyForPooling() {
         var target = TargetState(
             id: 1,
@@ -2065,19 +3663,43 @@ struct GameSimulationTests {
         #expect(simulation.snapshot.wave == 2)
     }
 
-    @Test func completionBonusesSupportUpgradesWithoutFundingAStraightWalkthrough() {
-        let earthCampaign = GameContent.levels(in: .earth).reduce(0) { $0 + $1.firstClearBonus }
-        let moonCampaign = GameContent.levels(in: .moon).reduce(0) { $0 + $1.firstClearBonus }
-        let marsCampaign = GameContent.levels(in: .mars).reduce(0) { $0 + $1.firstClearBonus }
-        let firstTwoRanksAcrossAllTracks = UpgradeTrack.allCases.count * (UpgradeRules.costs[0] + UpgradeRules.costs[1])
-        let masteryBuild = UpgradeTrack.allCases.count * UpgradeRules.costs.reduce(0, +)
+    @Test func completionBonusesAndEndlessRunsCreateTheIntendedProgressionGap() {
+        let expectedFirstClearTotals = [
+            1_310, 2_030, 3_140, 4_865, 7_545, 11_705, 18_145,
+        ]
         #expect(GameContent.level(1).firstClearBonus >= UpgradeRules.cost(forNextRank: 0))
-        #expect(earthCampaign == 1_725)
-        #expect(moonCampaign == 3_450)
-        #expect(marsCampaign == 6_405)
-        #expect(earthCampaign < firstTwoRanksAcrossAllTracks)
-        #expect(earthCampaign < masteryBuild)
         #expect(GameContent.levels.allSatisfy { $0.replayBonus < $0.firstClearBonus })
+
+        for (worldIndex, world) in WorldID.allCases.enumerated() {
+            let worldBonus = GameContent.levels(in: world).reduce(0) {
+                $0 + $1.firstClearBonus
+            }
+            #expect(worldBonus == expectedFirstClearTotals[worldIndex])
+
+            let finalLevel = GameContent.world(world).finalLevel
+            let targetRank = Int(
+                CampaignBalance.targetPermanentRank(
+                    for: GameContent.level(finalLevel)
+                )
+            )
+            let targetBalancedBuild = UpgradeTrack.allCases.count
+                * UpgradePrestigeRules.totalInvestment(toReachRank: targetRank)
+            let expectedCampaignIncome = EconomyBalance.expectedCampaignTokens(
+                throughLevel: finalLevel
+            )
+
+            if world == .earth {
+                #expect(expectedCampaignIncome >= Double(targetBalancedBuild))
+            } else {
+                let gap = Double(targetBalancedBuild) - expectedCampaignIncome
+                let reachableEndlessWave = worldIndex * EndlessRules.wavesPerWorld
+                let expectedEndlessRun = EconomyBalance.expectedEndlessTokens(
+                    throughWave: reachableEndlessWave
+                )
+                #expect(gap > expectedEndlessRun)
+                #expect(gap < expectedEndlessRun * 4)
+            }
+        }
     }
 
     @Test func comboResetsWhenStaminaTakesDamage() {
@@ -2091,6 +3713,81 @@ struct GameSimulationTests {
         #expect(simulation.snapshot.combo == 0)
         #expect(simulation.snapshot.comboFraction == 0)
         #expect(events.contains(.comboChanged(0)))
+    }
+
+    @Test func incomingDamageUsesASmoothBaselineStaminaAsymptote() {
+        let smallHit = CombatBalance.effectiveIncomingDamage(
+            rawDamage: 1,
+            maxStamina: 100
+        )
+        let mediumHit = CombatBalance.effectiveIncomingDamage(
+            rawDamage: 25,
+            maxStamina: 100
+        )
+        let hugeHit = CombatBalance.effectiveIncomingDamage(
+            rawDamage: 10_000,
+            maxStamina: 100
+        )
+        #expect(smallHit > 0.98 && smallHit < 1)
+        #expect(mediumHit > smallHit && mediumHit < 25)
+        #expect(hugeHit == 25)
+        #expect(
+            CombatBalance.effectiveIncomingDamage(
+                rawDamage: 10_000,
+                maxStamina: 200
+            ) == 25
+        )
+
+        func simulation(isEndless: Bool, seed: UInt64) -> GameSimulation {
+            if isEndless {
+                GameSimulation(
+                    mode: .endless,
+                    progress: .newPlayer,
+                    assistMode: false,
+                    seed: seed
+                )
+            } else {
+                GameSimulation(
+                    level: GameContent.level(1),
+                    progress: .newPlayer,
+                    assistMode: false,
+                    seed: seed
+                )
+            }
+        }
+
+        for (index, isEndless) in [false, true].enumerated() {
+            let singleHit = simulation(
+                isEndless: isEndless,
+                seed: 5_001 + UInt64(index)
+            )
+            singleHit.spawnHostileProjectileForTesting(
+                x: singleHit.snapshot.playerX,
+                y: 0.16,
+                damage: 10_000
+            )
+            _ = singleHit.update(delta: 0.05)
+            #expect(
+                singleHit.snapshot.stamina
+                    == singleHit.snapshot.maxStamina * 0.75
+            )
+
+            let fourHits = simulation(
+                isEndless: isEndless,
+                seed: 5_101 + UInt64(index)
+            )
+            var events: [SimulationEvent] = []
+            for _ in 0..<4 {
+                fourHits.spawnHostileProjectileForTesting(
+                    x: fourHits.snapshot.playerX,
+                    y: 0.16,
+                    damage: 10_000
+                )
+                events += fourHits.update(delta: 0.05)
+            }
+            #expect(fourHits.snapshot.stamina == 0)
+            #expect(events.contains(.finished(false)))
+        }
     }
 
     @Test func comboPersistsAsTimePassesWithoutStaminaLoss() {
@@ -2163,8 +3860,10 @@ struct GameSimulationTests {
             .filter { if case .enemy = $0.kind { $0.bossTier == .standard } else { false } }
             .map(\.maximumHitPoints)
             .max() ?? 0
+        let expectedForgivingHP = CombatBalance.baseHealth(.coneRunner)
+            * CampaignBalance.wave(1, for: GameContent.level(1)).healthMultiplier
         #expect(forgivingHP < standardHP)
-        #expect(abs(forgivingHP - 7.8) < 0.0001)
+        #expect(abs(forgivingHP - expectedForgivingHP) < 0.0001)
     }
 
     @Test func levelOneEnemiesAdvanceMoreSlowly() {
@@ -2304,6 +4003,7 @@ struct GameSimulationTests {
 
         for world in WorldID.allCases {
             let powers = GameContent.world(world).temporaryPowers
+            #expect(!powers.contains(.volt))
             #expect(TemporaryAbilityRules.spawnedAbility(
                 worldPowers: powers,
                 universalRoll: 0.149,
@@ -2417,10 +4117,65 @@ struct GameSimulationTests {
         #expect(chain.arcs[5].source == chain.arcs[2].destination)
         #expect(chain.arcs[6].source == chain.arcs[2].destination)
         for (offset, arc) in chain.arcs.enumerated() {
-            let expectedDamage = 10 * (0.15 + Double(offset) * 0.05)
+            let reverseOffset = chain.arcs.count - offset - 1
+            let expectedDamage = 10
+                * (0.15 + Double(reverseOffset) * 0.05)
             #expect(abs(arc.damage - expectedDamage) < 0.000_001)
         }
+        #expect(
+            zip(chain.arcs.map(\.damage), chain.arcs.map(\.damage).dropFirst())
+                .allSatisfy { $0 > $1 }
+        )
         #expect(Set(chain.arcs.map(\.targetID)).isDisjoint(with: excluded.map(\.id)))
+    }
+
+    @Test func voltChainHasNoRecipientCap() throws {
+        let simulation = GameSimulation(
+            level: GameContent.level(10),
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 608
+        )
+        let origin = TargetState(
+            id: 10_200,
+            kind: .enemy(.dummyDefender),
+            position: .init(x: 0, y: 0.18),
+            hitPoints: 1_000,
+            maximumHitPoints: 1_000,
+            phase: 0
+        )
+        let recipients = (0..<40).map { offset in
+            TargetState(
+                id: 10_201 + offset,
+                kind: .enemy(.tackleBot),
+                position: .init(
+                    x: Double((offset % 9) - 4) * 0.09,
+                    y: 0.28 + Double(offset) * 0.012
+                ),
+                hitPoints: 1_000,
+                maximumHitPoints: 1_000,
+                phase: 0
+            )
+        }
+        simulation.replaceTargetsForTesting([origin] + recipients)
+        simulation.spawnFriendlyProjectileForTesting(
+            pierce: 0,
+            temporaryAbility: .volt
+        )
+
+        let events = simulation.update(delta: 0.01)
+        let chain = try #require(events.compactMap { event -> VoltChainEvent? in
+            if case .voltChain(let chain) = event { return chain }
+            return nil
+        }.first)
+
+        #expect(chain.arcs.count == recipients.count)
+        #expect(Set(chain.arcs.map(\.targetID)) == Set(recipients.map(\.id)))
+        #expect(chain.arcs.allSatisfy { $0.damage > 0 })
+        #expect(
+            zip(chain.arcs.map(\.damage), chain.arcs.map(\.damage).dropFirst())
+                .allSatisfy { $0 > $1 }
+        )
     }
 
     @Test func onePiercingVoltBallTriggersOnlyOneChainButSeparateBallsEachTrigger() {
@@ -2578,7 +4333,9 @@ struct GameSimulationTests {
 
         for (ability, flavor) in cases {
             let simulation = GameSimulation(
-                level: GameContent.level(4),
+                // The landmark health wall keeps status-bearing targets alive
+                // long enough to observe the effect after the direct hit.
+                level: GameContent.level(5),
                 progress: .newPlayer,
                 assistMode: true,
                 seed: 31
@@ -2612,6 +4369,155 @@ struct GameSimulationTests {
         }
     }
 
+    @Test func freezeAndReverseControlFieldObjectMovement() {
+        let frozen = GameSimulation(
+            level: GameContent.level(4),
+            progress: .newPlayer,
+            assistMode: true,
+            seed: 309
+        )
+        var frozenObject = TargetState(
+            id: 9_800,
+            kind: .fieldObject(.ballCart),
+            position: .init(x: 0, y: 0.50),
+            hitPoints: 100,
+            maximumHitPoints: 100,
+            phase: 0
+        )
+        frozenObject.freezeRemaining = 1
+        frozen.replaceTargetsForTesting([frozenObject])
+        _ = frozen.update(delta: 0.10)
+
+        let reversed = GameSimulation(
+            level: GameContent.level(4),
+            progress: .newPlayer,
+            assistMode: true,
+            seed: 310
+        )
+        var reversedObject = TargetState(
+            id: 9_801,
+            kind: .fieldObject(.ballCart),
+            position: .init(x: 0, y: 0.50),
+            hitPoints: 100,
+            maximumHitPoints: 100,
+            phase: 0
+        )
+        reversedObject.reverseRemaining = 1
+        reversed.replaceTargetsForTesting([reversedObject])
+        _ = reversed.update(delta: 0.10)
+
+        #expect(abs((frozen.snapshot.targets.first?.position.y ?? 0) - 0.50) < 0.000_001)
+        #expect((reversed.snapshot.targets.first?.position.y ?? 0) > 0.50)
+    }
+
+    @Test func campaignAndEndlessFireScaleBurnFromDeliveredBallDamage() {
+        for isEndless in [false, true] {
+            let simulation = isEndless
+                ? GameSimulation(
+                    mode: .endless,
+                    progress: .newPlayer,
+                    assistMode: true,
+                    seed: 312
+                )
+                : GameSimulation(
+                    level: GameContent.level(4),
+                    progress: .newPlayer,
+                    assistMode: true,
+                    seed: 312
+                )
+            if isEndless {
+                for _ in 0..<5 {
+                    simulation.apply(.specialBall(.fire))
+                }
+            }
+            simulation.replaceTargetsForTesting([
+                TargetState(
+                    id: isEndless ? 9_811 : 9_810,
+                    kind: .enemy(.dummyDefender),
+                    position: .init(x: 0, y: 0.18),
+                    hitPoints: 1_000,
+                    maximumHitPoints: 1_000,
+                    phase: 0
+                )
+            ])
+            simulation.spawnFriendlyProjectileForTesting(
+                pierce: 0,
+                damage: 50,
+                temporaryAbility: isEndless ? nil : .fire,
+                endlessEffects: isEndless ? [.fire] : []
+            )
+            _ = simulation.update(delta: 0.01)
+
+            #expect(
+                abs(
+                    (simulation.snapshot.targets.first?.burnTickDamage ?? 0)
+                        - 9
+                ) < 0.000_001
+            )
+        }
+    }
+
+    @Test func orbitAndSolarBallsEmitTheirOwnImpactFeedback() {
+        let orbit = GameSimulation(
+            level: GameContent.level(4),
+            progress: .newPlayer,
+            assistMode: true,
+            seed: 313
+        )
+        orbit.replaceTargetsForTesting([
+            TargetState(
+                id: 9_820,
+                kind: .enemy(.dummyDefender),
+                position: .init(x: 0, y: 0.18),
+                hitPoints: 1_000,
+                maximumHitPoints: 1_000,
+                phase: 0
+            ),
+            TargetState(
+                id: 9_821,
+                kind: .enemy(.dummyDefender),
+                position: .init(x: 0.24, y: 0.32),
+                hitPoints: 1_000,
+                maximumHitPoints: 1_000,
+                phase: 0
+            ),
+        ])
+        orbit.spawnFriendlyProjectileForTesting(
+            pierce: 0,
+            temporaryAbility: .orbitShot
+        )
+        let orbitEvents = orbit.update(delta: 0.01)
+
+        let solar = GameSimulation(
+            level: GameContent.level(4),
+            progress: .newPlayer,
+            assistMode: true,
+            seed: 314
+        )
+        solar.replaceTargetsForTesting([
+            TargetState(
+                id: 9_822,
+                kind: .enemy(.dummyDefender),
+                position: .init(x: 0, y: 0.18),
+                hitPoints: 1_000,
+                maximumHitPoints: 1_000,
+                phase: 0
+            )
+        ])
+        solar.spawnFriendlyProjectileForTesting(
+            pierce: 0,
+            temporaryAbility: .solarPierce
+        )
+        let solarEvents = solar.update(delta: 0.01)
+
+        #expect(orbitEvents.contains {
+            if case .specialBallEffect(.orbitRedirect) = $0 { true } else { false }
+        })
+        #expect(solarEvents.contains {
+            if case .specialBallEffect(.solarPierce) = $0 { true } else { false }
+        })
+    }
+
     @Test func burningTicksPublishNonRecoilImpactMetadata() {
         let simulation = GameSimulation(
             level: GameContent.level(4),
@@ -2622,6 +4528,7 @@ struct GameSimulationTests {
         simulation.activateTemporaryAbility(.fire)
         var directImpact: ImpactEvent?
         var damageOverTimeImpact: ImpactEvent?
+        var directImpactsByTarget: [Int: ImpactEvent] = [:]
 
         for _ in 0..<600 where directImpact == nil || damageOverTimeImpact == nil {
             if let target = simulation.snapshot.targets.first {
@@ -2630,9 +4537,11 @@ struct GameSimulationTests {
             for event in simulation.update(delta: 0.05) {
                 guard case .impact(let impact) = event, impact.flavor == .fire else { continue }
                 if impact.delivery == .direct {
-                    directImpact = directImpact ?? impact
-                } else if impact.delivery == .damageOverTime {
-                    damageOverTimeImpact = damageOverTimeImpact ?? impact
+                    directImpactsByTarget[impact.targetID] = impact
+                } else if impact.delivery == .damageOverTime,
+                          let matchingDirectImpact = directImpactsByTarget[impact.targetID] {
+                    directImpact = matchingDirectImpact
+                    damageOverTimeImpact = impact
                 }
             }
         }
@@ -2644,43 +4553,347 @@ struct GameSimulationTests {
         #expect(damageOverTimeImpact?.targetID == directImpact?.targetID)
     }
 
-    @Test func fireAndIceReplaceEachOtherWithAReactionInsteadOfStacking() {
+    @Test func fireIceAndReverseRemainStackedWhileVoltStrikes() {
         let simulation = GameSimulation(
             level: GameContent.level(4),
             progress: .newPlayer,
             assistMode: true,
             seed: 47
         )
-        simulation.activateTemporaryAbility(.fire)
-        var burningTargetID: Int?
-        for _ in 0..<600 where burningTargetID == nil {
-            if let target = simulation.snapshot.targets.first {
-                simulation.setPlayerTarget(x: target.position.x)
+        simulation.replaceTargetsForTesting([
+            TargetState(
+                id: 9_910,
+                kind: .enemy(.titanKeeper),
+                position: .init(x: 0, y: 0.28),
+                hitPoints: 1_000_000,
+                maximumHitPoints: 1_000_000,
+                phase: 0
+            ),
+            TargetState(
+                id: 9_911,
+                kind: .enemy(.dummyDefender),
+                position: .init(x: 0.35, y: 0.40),
+                hitPoints: 1_000_000,
+                maximumHitPoints: 1_000_000,
+                phase: 0
+            )
+        ])
+
+        for ability in [
+            TemporaryBallAbility.fire,
+            .ice,
+            .reverse,
+        ] {
+            simulation.spawnFriendlyProjectileForTesting(
+                pierce: 0,
+                temporaryAbility: ability
+            )
+            for _ in 0..<5 {
+                _ = simulation.update(delta: 0.05)
             }
+        }
+
+        guard let stacked = simulation.snapshot.targets.first(where: {
+            $0.id == 9_910
+        }) else {
+            Issue.record("Expected the stacked target to remain alive")
+            return
+        }
+        #expect(stacked.burnRemaining > 0)
+        #expect(stacked.freezeRemaining > 0)
+        #expect(stacked.reverseRemaining > 0)
+
+        simulation.spawnFriendlyProjectileForTesting(
+            pierce: 0,
+            temporaryAbility: .volt
+        )
+        var sawVolt = false
+        for _ in 0..<5 where !sawVolt {
+            sawVolt = simulation.update(delta: 0.05).contains {
+                if case .voltChain = $0 { true } else { false }
+            }
+        }
+
+        #expect(sawVolt)
+        let afterVolt = simulation.snapshot.targets.first(where: {
+            $0.id == 9_910
+        })
+        #expect((afterVolt?.burnRemaining ?? 0) > 0)
+        #expect((afterVolt?.freezeRemaining ?? 0) > 0)
+        #expect((afterVolt?.reverseRemaining ?? 0) > 0)
+    }
+
+    @Test func oneEndlessBallCanApplyMultipleElementalStatuses() {
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: true,
+            seed: 481
+        )
+        for ability in [
+            TemporaryBallAbility.fire,
+            .ice,
+            .reverse,
+        ] {
+            for _ in 0..<5 {
+                simulation.apply(.specialBall(ability))
+            }
+        }
+        simulation.replaceTargetsForTesting([
+            TargetState(
+                id: 9_920,
+                kind: .enemy(.dummyDefender),
+                position: .init(x: 0, y: 0.30),
+                hitPoints: 1_000_000,
+                maximumHitPoints: 1_000_000,
+                phase: 0
+            )
+        ])
+        simulation.spawnFriendlyProjectileForTesting(
+            pierce: 0,
+            endlessEffects: [.fire, .ice, .reverse]
+        )
+
+        for _ in 0..<12 {
             _ = simulation.update(delta: 0.05)
-            burningTargetID = simulation.snapshot.targets.first { $0.burnRemaining > 0 }?.id
-        }
-        #expect(burningTargetID != nil)
-
-        simulation.activateTemporaryAbility(.ice)
-        var sawReaction = false
-        var everStacked = false
-        for _ in 0..<600 where !sawReaction {
-            if let target = simulation.snapshot.targets.first(where: { $0.id == burningTargetID })
-                ?? simulation.snapshot.targets.first {
-                simulation.setPlayerTarget(x: target.position.x)
-            }
-            let events = simulation.update(delta: 0.05)
-            sawReaction = events.contains {
-                if case .elementalReaction = $0 { true } else { false }
-            }
-            everStacked = everStacked || simulation.snapshot.targets.contains {
-                $0.burnRemaining > 0 && $0.freezeRemaining > 0
-            }
         }
 
-        #expect(sawReaction)
-        #expect(!everStacked)
+        guard let target = simulation.snapshot.targets.first else {
+            Issue.record("Expected the multi-effect target to remain alive")
+            return
+        }
+        #expect(target.burnRemaining > 0)
+        #expect(target.freezeRemaining > 0)
+        #expect(target.reverseRemaining > 0)
+    }
+
+    @Test func gravityVortexPullsDamagesAndEmitsDedicatedFeedback() {
+        for isEndless in [false, true] {
+            let simulation = isEndless
+                ? GameSimulation(
+                    mode: .endless,
+                    progress: .newPlayer,
+                    assistMode: true,
+                    seed: 482
+                )
+                : GameSimulation(
+                    level: GameContent.level(4),
+                    progress: .newPlayer,
+                    assistMode: true,
+                    seed: 482
+                )
+            if isEndless {
+                for _ in 0..<5 {
+                    simulation.apply(.specialBall(.gravityWell))
+                }
+            }
+            simulation.replaceTargetsForTesting([
+                TargetState(
+                    id: 9_930,
+                    kind: .enemy(.dummyDefender),
+                    position: .init(x: 0, y: 0.30),
+                    hitPoints: 1_000_000,
+                    maximumHitPoints: 1_000_000,
+                    phase: 0
+                ),
+                TargetState(
+                    id: 9_931,
+                    kind: .enemy(.dummyDefender),
+                    position: .init(x: 0.36, y: 0.30),
+                    hitPoints: 1_000_000,
+                    maximumHitPoints: 1_000_000,
+                    phase: 0
+                ),
+            ])
+            simulation.spawnFriendlyProjectileForTesting(
+                pierce: 0,
+                temporaryAbility: isEndless ? nil : .gravityWell,
+                endlessEffects: isEndless ? [.gravityWell] : []
+            )
+
+            var sawVortex = false
+            for _ in 0..<12 where !sawVortex {
+                sawVortex = simulation.update(delta: 0.05).contains {
+                    if case .specialBallEffect(.gravityVortex) = $0 {
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+            let pullWasScheduled = simulation.snapshot.targets.first {
+                $0.id == 9_931
+            }?.gravityPullRemaining ?? 0
+            for _ in 0..<9 {
+                _ = simulation.update(delta: 0.05)
+            }
+
+            let secondary = simulation.snapshot.targets.first {
+                $0.id == 9_931
+            }
+            #expect(sawVortex)
+            #expect(pullWasScheduled > 0)
+            #expect(abs(secondary?.position.x ?? 1) < 0.08)
+            #expect((secondary?.hitPoints ?? 1_000_000) < 1_000_000)
+        }
+    }
+
+    @Test func magnetMarkPersistsAndGuidesFollowingBalls() {
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: true,
+            seed: 483
+        )
+        for _ in 0..<5 {
+            simulation.apply(.specialBall(.polarLink))
+        }
+        simulation.replaceTargetsForTesting([
+            TargetState(
+                id: 9_940,
+                kind: .enemy(.dummyDefender),
+                position: .init(x: 0, y: 0.30),
+                hitPoints: 1_000_000,
+                maximumHitPoints: 1_000_000,
+                phase: 0
+            )
+        ])
+        simulation.spawnFriendlyProjectileForTesting(
+            pierce: 0,
+            endlessEffects: [.polarLink]
+        )
+
+        var sawMark = false
+        for _ in 0..<12 where !sawMark {
+            sawMark = simulation.update(delta: 0.05).contains {
+                if case .specialBallEffect(.magnetMark) = $0 {
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        guard var markedTarget = simulation.snapshot.targets.first else {
+            Issue.record("Expected the marked target to remain alive")
+            return
+        }
+        #expect(sawMark)
+        #expect(markedTarget.magnetRemaining > 0)
+
+        markedTarget.position = .init(x: 0.52, y: 0.72)
+        simulation.replaceTargetsForTesting([markedTarget])
+        simulation.spawnFriendlyProjectileForTesting(pierce: 0)
+        _ = simulation.update(delta: 0.05)
+
+        let followingBall = simulation.snapshot.projectiles.first {
+            !$0.hostile && $0.endlessEffects.isEmpty
+        }
+        #expect((followingBall?.velocity.x ?? 0) > 0)
+    }
+
+    @Test func tidalPushSlowsWithoutFreezingRegularEnemies() {
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: true,
+            seed: 484
+        )
+        for _ in 0..<5 {
+            simulation.apply(.specialBall(.undertow))
+        }
+        simulation.replaceTargetsForTesting([
+            TargetState(
+                id: 9_950,
+                kind: .enemy(.dummyDefender),
+                position: .init(x: 0, y: 0.30),
+                hitPoints: 1_000_000,
+                maximumHitPoints: 1_000_000,
+                phase: 0
+            )
+        ])
+        simulation.spawnFriendlyProjectileForTesting(
+            pierce: 0,
+            endlessEffects: [.undertow]
+        )
+
+        var sawPush = false
+        for _ in 0..<12 where !sawPush {
+            sawPush = simulation.update(delta: 0.05).contains {
+                if case .specialBallEffect(.tidalPush) = $0 {
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+
+        guard let target = simulation.snapshot.targets.first else {
+            Issue.record("Expected the pushed target to remain alive")
+            return
+        }
+        #expect(sawPush)
+        #expect(target.position.y > 0.30)
+        #expect(target.undertowSlowRemaining > 0)
+        #expect(target.freezeRemaining == 0)
+    }
+
+    @Test func returnShotSurvivesImpactTurnsAndHitsAgain() {
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: true,
+            seed: 485
+        )
+        for _ in 0..<5 {
+            simulation.apply(.specialBall(.ringReturn))
+        }
+        simulation.replaceTargetsForTesting([
+            TargetState(
+                id: 9_960,
+                kind: .enemy(.dummyDefender),
+                position: .init(x: 0, y: 0.58),
+                hitPoints: 1_000_000,
+                maximumHitPoints: 1_000_000,
+                phase: 0
+            )
+        ])
+        simulation.spawnFriendlyProjectileForTesting(
+            pierce: 0,
+            endlessEffects: [.ringReturn]
+        )
+
+        var directHits = 0
+        var sawReturn = false
+        for _ in 0..<90 where directHits < 2 || !sawReturn {
+            for event in simulation.update(delta: 0.05) {
+                if case .impact(let impact) = event,
+                   impact.targetID == 9_960,
+                   impact.delivery == .direct {
+                    directHits += 1
+                }
+                if case .specialBallEffect(.returnShot) = event {
+                    sawReturn = true
+                }
+            }
+        }
+
+        #expect(sawReturn)
+        #expect(directHits >= 2)
+    }
+
+    @Test func auditedSpecialBallsHaveUniqueArtAndPlainLanguageNames() {
+        let presentations = EndlessSpecialBallRules.abilities.map {
+            SpecialBallPresentation.presentation(for: $0, currentRank: 0)
+        }
+        #expect(Set(presentations.map(\.artAsset)).count == presentations.count)
+        #expect(TemporaryAbilityRules.title(for: .gravityWell) == "Gravity Vortex")
+        #expect(TemporaryAbilityRules.title(for: .ringReturn) == "Return Shot")
+        #expect(TemporaryAbilityRules.title(for: .polarLink) == "Magnet Mark")
+        #expect(TemporaryAbilityRules.title(for: .undertow) == "Tidal Push")
+        #expect(presentations.allSatisfy {
+            $0.effect.chanceCurrent == "Off"
+                && $0.effect.chanceNext == "10%"
+        })
     }
 
     @Test func bossMovementIsDeliberatelySlowAndMegaBossesAreLargest() {
@@ -2691,16 +4904,58 @@ struct GameSimulationTests {
         #expect(CampaignBalance.bossScale(tier: .megaBoss)
                 > CampaignBalance.bossScale(tier: .miniBoss))
         #expect(CampaignBalance.bossScale(tier: .miniBoss) >= 1.5)
-        #expect(CampaignBalance.bossHealthMultiplier(tier: .miniBoss, wave: 5, world: .earth)
-                > CampaignBalance.bossHealthMultiplier(tier: .miniBoss, wave: 1, world: .earth))
-        let earthBossHealth = 720 * (1 + 9.0 * 0.025)
-            * CampaignBalance.bossHealthMultiplier(tier: .megaBoss, wave: 5, world: .earth)
-        let moonBossHealth = 820 * (1 + 19.0 * 0.025)
-            * CampaignBalance.bossHealthMultiplier(tier: .megaBoss, wave: 5, world: .moon)
-        let marsBossHealth = 900 * (1 + 29.0 * 0.025)
-            * CampaignBalance.bossHealthMultiplier(tier: .megaBoss, wave: 5, world: .mars)
-        #expect(moonBossHealth > earthBossHealth)
-        #expect(marsBossHealth > moonBossHealth)
+        var previousBossHealth = 0.0
+        for world in WorldID.allCases {
+            let level = GameContent.level(GameContent.world(world).finalLevel)
+            let bossHealth = CampaignBalance.bossHitPoints(
+                tier: .megaBoss,
+                wave: level.waveCount,
+                for: level
+            )
+            #expect(bossHealth > previousBossHealth)
+            previousBossHealth = bossHealth
+        }
+    }
+
+    @Test func frozenBossesHoldTheirWorldPositionInCampaignAndEndless() {
+        let campaignLevel = GameContent.level(10)
+        let campaign = GameSimulation(
+            level: campaignLevel,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 4_010
+        )
+        campaign.setCampaignWaveForTesting(campaignLevel.waveCount)
+
+        let endless = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 4_011
+        )
+        endless.setEndlessWaveForTesting(5)
+
+        for simulation in [campaign, endless] {
+            _ = simulation.update(delta: 0.05)
+            _ = simulation.update(delta: 0.05)
+            guard var boss = simulation.snapshot.targets.first(where: {
+                $0.waveRole == .boss
+            }) else {
+                Issue.record("Expected a boss")
+                continue
+            }
+            boss.freezeRemaining = 0.60
+            simulation.replaceTargetsForTesting([boss])
+            let frozenPosition = boss.position
+
+            for _ in 0..<10 {
+                _ = simulation.update(delta: 0.05)
+                let currentPosition = simulation.snapshot.targets.first(where: {
+                    $0.id == boss.id
+                })?.position
+                #expect(currentPosition == frozenPosition)
+            }
+        }
     }
 
     @Test func bossTargetsUseARedSigilHealthPlateThatResetsWhenPooled() {

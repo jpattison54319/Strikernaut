@@ -14,7 +14,11 @@ enum GameNodeFactory {
             "SoccerBallIce",
             "SoccerBallReverse",
             "SoccerBallSplit",
-            "SoccerBallVolt"
+            "SoccerBallVolt",
+            "SoccerBallGravityVortex",
+            "SoccerBallReturn",
+            "SoccerBallMagnet",
+            "SoccerBallTidal"
         ]
         return Dictionary(uniqueKeysWithValues: names.map { name in
             let texture = SKTexture(imageNamed: name)
@@ -47,7 +51,31 @@ enum GameNodeFactory {
         .craterCrawler: "MarsCraterCrawler",
         .saucerKeeper: "MarsSaucerKeeper",
         .plasmaStriker: "MarsPlasmaStriker",
-        .marsColossus: "MarsColossus"
+        .marsColossus: "MarsColossus",
+        .cloudRunner: "EarthScoutRunner",
+        .pressureBrute: "EarthBlockerDefender",
+        .vortexSkimmer: "MarsCraterCrawler",
+        .stormKeeper: "EarthAegisKeeper",
+        .boltStriker: "EarthBallLauncher",
+        .tempestRegent: "EarthTitanKeeper",
+        .ringRunner: "MoonRegolithRunner",
+        .iceMason: "MoonEclipseKeeper",
+        .shepherdDrone: "MoonLunarHopper",
+        .haloKeeper: "MoonOrbitDrone",
+        .shardStriker: "MoonGravityStriker",
+        .crownSovereign: "MoonLunarWarden",
+        .frostSprinter: "MoonRegolithRunner",
+        .tiltBrute: "MoonEclipseKeeper",
+        .auroraDrifter: "MoonLunarHopper",
+        .polarKeeper: "MoonOrbitDrone",
+        .magnetStriker: "MoonGravityStriker",
+        .axisPrime: "MoonLunarWarden",
+        .mistRunner: "MarsDustSprite",
+        .currentBrute: "MarsRoverRaider",
+        .squallRay: "MarsCraterCrawler",
+        .tridentKeeper: "MarsSaucerKeeper",
+        .pressureStriker: "MarsPlasmaStriker",
+        .abyssalMonarch: "MarsColossus"
     ]
     private static let renderedEnemyTextures: [EnemyKind: SKTexture] = {
         renderedEnemyAssetNames.mapValues { name in
@@ -72,7 +100,27 @@ enum GameNodeFactory {
             .meteorCrate: "MarsMeteorCrate",
             .holoGate: "MarsHoloGate",
             .crystalBarricade: "MarsCrystalBarricade",
-            .artifactVault: "MarsArtifactVault"
+            .artifactVault: "MarsArtifactVault",
+            .pressureCell: "EarthBallCart",
+            .cloudCondenser: "EarthWaterCooler",
+            .windGate: "EarthConeBarricade",
+            .lightningMast: "EarthTacticsBoard",
+            .stormVault: "EarthEquipmentTrunk",
+            .ringShardCrate: "MarsMeteorCrate",
+            .thermalPod: "EarthWaterCooler",
+            .shepherdBeacon: "EarthTacticsBoard",
+            .iceBarricade: "EarthConeBarricade",
+            .crownVault: "EarthEquipmentTrunk",
+            .magneticCoil: "MarsMeteorCrate",
+            .cryoCanister: "MarsOxygenPod",
+            .auroraRelay: "MarsHoloGate",
+            .frostBarricade: "MarsCrystalBarricade",
+            .polarVault: "MarsArtifactVault",
+            .stormBattery: "MarsMeteorCrate",
+            .oxygenBell: "MarsOxygenPod",
+            .currentGate: "MarsHoloGate",
+            .coralBarricade: "MarsCrystalBarricade",
+            .trenchVault: "MarsArtifactVault"
         ]
         return assets.mapValues { name in
             let texture = SKTexture(imageNamed: name)
@@ -91,17 +139,6 @@ enum GameNodeFactory {
             return (name, texture)
         })
     }()
-    private static let aceRigBaseTexture: SKTexture = {
-        let texture = SKTexture(imageNamed: "CharacterAceRigBase")
-        texture.filteringMode = .linear
-        return texture
-    }()
-    private static let aceRigRightLegTexture: SKTexture = {
-        let texture = SKTexture(imageNamed: "CharacterAceRigRightLeg")
-        texture.filteringMode = .linear
-        return texture
-    }()
-    private static let aceRightHipPosition = CGPoint(x: 5, y: -4)
     private static let standardRightHipPosition = CGPoint(x: 7.04, y: -5.28)
     private static let gameplaySpriteSize = CGSize(width: 88, height: 88)
 
@@ -131,22 +168,8 @@ enum GameNodeFactory {
         body.name = "body"
         let definition = CharacterCatalog.character(character)
         let suffix = isGameplay ? "Gameplay" : "Roster"
-        let usesAceGameplayRig = isGameplay && character == .ace
-        if usesAceGameplayRig {
-            let sprite = SKSpriteNode(texture: aceRigBaseTexture)
-            sprite.name = "character-sprite"
-            sprite.size = gameplaySpriteSize
-            body.addChild(sprite)
-
-            let rightLeg = SKSpriteNode(texture: aceRigRightLegTexture)
-            rightLeg.name = "kicking-leg"
-            rightLeg.size = .init(width: 50, height: 50)
-            rightLeg.anchorPoint = .init(x: 0.53, y: 0.87)
-            rightLeg.position = aceRightHipPosition
-            rightLeg.zPosition = -1
-            body.addChild(rightLeg)
-        } else if isGameplay,
-                  let texture = characterTextures["\(definition.assetStem)\(suffix)"] {
+        if isGameplay,
+           let texture = characterTextures["\(definition.assetStem)\(suffix)"] {
             addSegmentedCharacterRig(texture: texture, to: body)
         } else {
             let sprite = SKSpriteNode(texture: characterTextures["\(definition.assetStem)\(suffix)"])
@@ -160,16 +183,6 @@ enum GameNodeFactory {
 
     static func animateKick(on player: SKNode, reducedMotion: Bool) {
         guard let body = player.childNode(withName: "body") else { return }
-        if player.userData?["characterID"] as? String == CharacterID.ace.rawValue,
-           let rightLeg = body.childNode(withName: "kicking-leg") as? SKSpriteNode {
-            animateLegKick(
-                rightLeg: rightLeg,
-                restingPosition: aceRightHipPosition,
-                body: body,
-                reducedMotion: reducedMotion
-            )
-            return
-        }
         guard let legs = body.childNode(withName: "slot-legs"),
               let kickingLeg = legs.childNode(withName: "kicking-leg") as? SKSpriteNode else {
             body.removeAction(forKey: "kick-body")
@@ -307,8 +320,6 @@ enum GameNodeFactory {
     static func prewarmKickActions() {
         _ = standardKickActions
         _ = reducedKickActions
-        _ = aceRigBaseTexture
-        _ = aceRigRightLegTexture
     }
 
     /// Resolves the full projectile atlas before the first live kick.
@@ -518,6 +529,8 @@ enum GameNodeFactory {
             (3.5, 0.15, 2.8, 0.014)
         case .coneRunner, .saucerKeeper:
             (6, 0.2, 2, 0.02)
+        default:
+            (6.8, 0.28, 2.8, 0.028)
         }
 
         let step = sin(time * movement.cadence)
@@ -546,6 +559,10 @@ enum GameNodeFactory {
         halo.lineWidth = 2
         halo.zPosition = -1
         root.addChild(halo)
+        let effectOrbit = SKNode()
+        effectOrbit.name = "effect-orbit"
+        effectOrbit.zPosition = 2
+        root.addChild(effectOrbit)
         let ball = SKSpriteNode(texture: projectileTextures["SoccerBall"])
         ball.size = CGSize(width: hostile ? 25 : 27, height: hostile ? 25 : 27)
         ball.color = hostile ? color(1, 0.20, 0.04) : .white
@@ -560,11 +577,14 @@ enum GameNodeFactory {
         hostile: Bool,
         critical: Bool,
         temporaryAbility: TemporaryBallAbility?,
+        endlessEffects: Set<TemporaryBallAbility> = [],
         characterProjectile: CharacterProjectileKind? = nil
     ) {
         guard let ball = node.childNode(withName: "ball") as? SKSpriteNode,
               let trail = node.childNode(withName: "trail") as? SKShapeNode,
-              let halo = node.childNode(withName: "ball-halo") as? SKShapeNode else { return }
+              let halo = node.childNode(withName: "ball-halo") as? SKShapeNode,
+              let effectOrbit = node.childNode(withName: "effect-orbit") else { return }
+        effectOrbit.removeAllChildren()
         if hostile {
             ball.texture = projectileTextures["SoccerBall"]
             ball.size = CGSize(width: 25, height: 25)
@@ -585,7 +605,15 @@ enum GameNodeFactory {
             trail.fillColor = color(1, 0.72, 0.08).withAlphaComponent(0.74)
             return
         }
-        let presentation: (asset: String, accent: SKColor, size: CGFloat) = switch temporaryAbility {
+        var effects = endlessEffects
+        if let temporaryAbility {
+            effects.insert(temporaryAbility)
+        }
+        let orderedEffects = TemporaryBallAbility.allCases.filter(effects.contains)
+        let visualAbility = orderedEffects.count == 1
+            ? orderedEffects.first
+            : nil
+        let presentation: (asset: String, accent: SKColor, size: CGFloat) = switch visualAbility {
         case .rapidFire: ("SoccerBallRapidFire", color(1, 0.58, 0.03), 34)
         case .explosive: ("SoccerBallExplosive", color(0.92, 0.04, 0.02), 34)
         case .fire: ("SoccerBallFire", color(1, 0.28, 0.02), 36)
@@ -596,19 +624,127 @@ enum GameNodeFactory {
         case .orbitShot: ("SoccerBallReverse", color(0.55, 0.48, 1), 36)
         case .solarPierce: ("SoccerBallFire", color(1, 0.72, 0.08), 36)
         case .volt: ("SoccerBallVolt", color(0.06, 0.82, 1), 38)
-        case nil: ("SoccerBall", color(0.05, 0.30, 0.78), 27)
+        case .gravityWell: ("SoccerBallGravityVortex", color(0.80, 0.42, 1), 38)
+        case .ringReturn: ("SoccerBallReturn", color(1, 0.78, 0.22), 37)
+        case .polarLink: ("SoccerBallMagnet", color(0.26, 0.96, 0.82), 37)
+        case .undertow: ("SoccerBallTidal", color(0.08, 0.62, 1), 38)
+        case nil:
+            effects.isEmpty
+                ? ("SoccerBall", color(0.05, 0.30, 0.78), 27)
+                : ("SoccerBall", color(0.92, 0.96, 1), 34)
         }
         ball.texture = projectileTextures[presentation.asset]
+            ?? projectileTextures["SoccerBall"]
         ball.size = CGSize(width: presentation.size, height: presentation.size)
         ball.color = .white
         ball.colorBlendFactor = 0
-        halo.strokeColor = temporaryAbility == .heatSeeking || temporaryAbility == .volt
+        halo.strokeColor = effects.count > 1
+            ? .white
+            : (visualAbility == .heatSeeking || visualAbility == .volt
             ? color(0.10, 0.86, 1)
-            : (critical ? color(1, 0.78, 0.12) : .clear)
-        halo.glowWidth = temporaryAbility == .volt
+            : (critical ? color(1, 0.78, 0.12) : .clear))
+        halo.glowWidth = effects.count > 1
+            ? 10
+            : (visualAbility == .volt
             ? 12
-            : (temporaryAbility == .heatSeeking ? 7 : (critical ? 7 : 0))
+            : (visualAbility == .heatSeeking ? 7 : (critical ? 7 : 0)))
         trail.fillColor = presentation.accent.withAlphaComponent(0.46)
+        if let visualAbility {
+            addProjectileSignature(
+                to: effectOrbit,
+                ability: visualAbility
+            )
+        }
+        if effects.count > 1 {
+            addEffectOrbit(
+                to: effectOrbit,
+                abilities: orderedEffects
+            )
+        }
+    }
+
+    private static func addEffectOrbit(
+        to parent: SKNode,
+        abilities: [TemporaryBallAbility]
+    ) {
+        let visible = abilities
+        guard !visible.isEmpty else { return }
+        let radius: CGFloat = visible.count > 8 ? 20 : 18
+        let markerRadius: CGFloat = visible.count > 8 ? 2.7 : 3.2
+        for (index, ability) in visible.enumerated() {
+            let angle = CGFloat(index) / CGFloat(visible.count) * .pi * 2
+            let marker = circle(
+                radius: markerRadius,
+                color: powerColor(ability)
+            )
+            marker.name = "effect-\(ability.rawValue)"
+            marker.position = .init(
+                x: cos(angle) * radius,
+                y: sin(angle) * radius
+            )
+            marker.strokeColor = .white
+            marker.lineWidth = 1
+            marker.glowWidth = 3
+            parent.addChild(marker)
+        }
+    }
+
+    private static func addProjectileSignature(
+        to parent: SKNode,
+        ability: TemporaryBallAbility
+    ) {
+        switch ability {
+        case .heatSeeking:
+            let scope = circle(radius: 15, color: .clear)
+            scope.name = "heat-seeking-signature"
+            scope.strokeColor = color(0.10, 0.90, 1)
+            scope.lineWidth = 2
+            scope.glowWidth = 5
+            parent.addChild(scope)
+            for rotation in [CGFloat(0), .pi / 2] {
+                parent.addChild(rect(
+                    size: .init(width: 2, height: 36),
+                    color: .white.withAlphaComponent(0.82),
+                    radius: 1,
+                    rotation: rotation
+                ))
+            }
+        case .orbitShot:
+            let ring = circle(radius: 17, color: .clear)
+            ring.name = "orbit-shot-signature"
+            ring.strokeColor = color(0.62, 0.42, 1)
+            ring.lineWidth = 2
+            ring.glowWidth = 5
+            parent.addChild(ring)
+            for side in [CGFloat(-1), 1] {
+                let satellite = circle(
+                    radius: 3.5,
+                    color: side < 0 ? .white : color(0.62, 0.42, 1)
+                )
+                satellite.position.x = side * 17
+                parent.addChild(satellite)
+            }
+        case .solarPierce:
+            let core = circle(radius: 15, color: .clear)
+            core.name = "solar-pierce-signature"
+            core.strokeColor = color(1, 0.72, 0.08)
+            core.lineWidth = 2
+            core.glowWidth = 6
+            parent.addChild(core)
+            for index in 0..<8 {
+                parent.addChild(rect(
+                    size: .init(width: 2.5, height: 8),
+                    color: index.isMultiple(of: 2)
+                        ? .white
+                        : color(1, 0.58, 0.03),
+                    radius: 1.25,
+                    y: 21,
+                    rotation: CGFloat(index) * .pi / 4
+                ))
+            }
+        default:
+            break
+        }
     }
 
     static func rewardToken() -> SKNode {
@@ -676,6 +812,11 @@ enum GameNodeFactory {
         underlay.addChild(reverseBack)
         addReverseStreaks(to: reverseBack, profile: profile)
 
+        let undertow = SKNode()
+        undertow.name = "status-undertow"
+        underlay.addChild(undertow)
+        addUndertowWaves(to: undertow, profile: profile)
+
         let overlay = SKNode()
         overlay.name = "status-overlay"
         overlay.zPosition = 30
@@ -710,6 +851,11 @@ enum GameNodeFactory {
         stunArcs.name = "status-stun-arcs"
         overlay.addChild(stunArcs)
         addStunArcs(to: stunArcs, profile: profile)
+
+        let magnetMark = SKNode()
+        magnetMark.name = "status-magnet-mark"
+        overlay.addChild(magnetMark)
+        addMagnetMark(to: magnetMark, profile: profile)
     }
 
     private struct StatusProfile {
@@ -740,6 +886,7 @@ enum GameNodeFactory {
             case .saucerKeeper: .init(width: 82, height: 84, centerY: 6)
             case .plasmaStriker: .init(width: 78, height: 90, centerY: 8)
             case .marsColossus: .init(width: 98, height: 104, centerY: 12)
+            default: .init(width: 84, height: 88, centerY: 8)
             }
         case .fieldObject(let object):
             return switch object {
@@ -758,6 +905,7 @@ enum GameNodeFactory {
             case .holoGate: .init(width: 98, height: 58, centerY: 0)
             case .crystalBarricade: .init(width: 86, height: 92, centerY: 12)
             case .artifactVault: .init(width: 86, height: 94, centerY: 12)
+            default: .init(width: 86, height: 72, centerY: 6)
             }
         case .powerUp:
             return .init(width: 58, height: 64, centerY: 2)
@@ -938,6 +1086,74 @@ enum GameNodeFactory {
         }
     }
 
+    private static func addMagnetMark(
+        to parent: SKNode,
+        profile: StatusProfile
+    ) {
+        let radius = profile.width * 0.48
+        let path = CGMutablePath()
+        path.addArc(
+            center: .init(x: 0, y: profile.centerY + profile.height * 0.06),
+            radius: radius,
+            startAngle: .pi * 0.08,
+            endAngle: .pi * 0.92,
+            clockwise: false
+        )
+        let field = SKShapeNode(path: path)
+        field.name = "status-magnet-field"
+        field.fillColor = .clear
+        field.strokeColor = color(0.16, 0.96, 0.82)
+        field.lineWidth = 3
+        field.glowWidth = 7
+        parent.addChild(field)
+
+        for (x, poleColor) in [
+            (-radius * 0.96, color(0.08, 0.72, 1)),
+            (radius * 0.96, color(1, 0.18, 0.62)),
+        ] {
+            let pole = circle(radius: 4.5, color: poleColor)
+            pole.name = "status-magnet-pole"
+            pole.position = .init(
+                x: x,
+                y: profile.centerY + profile.height * 0.11
+            )
+            pole.strokeColor = .white
+            pole.lineWidth = 1.2
+            pole.glowWidth = 4
+            parent.addChild(pole)
+        }
+    }
+
+    private static func addUndertowWaves(
+        to parent: SKNode,
+        profile: StatusProfile
+    ) {
+        for index in 0..<3 {
+            let width = profile.width * (0.78 + CGFloat(index) * 0.12)
+            let path = CGMutablePath()
+            path.move(to: .init(x: -width * 0.5, y: 0))
+            path.addQuadCurve(
+                to: .init(x: 0, y: 0),
+                control: .init(x: -width * 0.25, y: 7)
+            )
+            path.addQuadCurve(
+                to: .init(x: width * 0.5, y: 0),
+                control: .init(x: width * 0.25, y: -7)
+            )
+            let wave = SKShapeNode(path: path)
+            wave.name = "status-undertow-wave"
+            wave.position.y = profile.centerY
+                - profile.height * (0.34 + CGFloat(index) * 0.08)
+            wave.fillColor = .clear
+            wave.strokeColor = index.isMultiple(of: 2)
+                ? color(0.10, 0.70, 1)
+                : .white.withAlphaComponent(0.88)
+            wave.lineWidth = 2.4
+            wave.glowWidth = 4
+            parent.addChild(wave)
+        }
+    }
+
     private static func decoratePowerUp(_ root: SKNode, ability: TemporaryBallAbility) {
         root.addChild(ellipse(size: .init(width: 54, height: 14), color: .black.withAlphaComponent(0.24), y: -31))
 
@@ -997,6 +1213,10 @@ enum GameNodeFactory {
         case .orbitShot: color(0.58, 0.48, 1)
         case .solarPierce: color(1, 0.72, 0.08)
         case .volt: color(0.08, 0.84, 1)
+        case .gravityWell: color(0.76, 0.34, 1)
+        case .ringReturn: color(1, 0.78, 0.22)
+        case .polarLink: color(0.26, 0.96, 0.82)
+        case .undertow: color(0.08, 0.62, 1)
         }
     }
 
@@ -1012,6 +1232,10 @@ enum GameNodeFactory {
         case .orbitShot: "◉"
         case .solarPierce: "☀"
         case .volt: "ϟ"
+        case .gravityWell: "●"
+        case .ringReturn: "↻"
+        case .polarLink: "⌁"
+        case .undertow: "≈"
         }
     }
 
@@ -1054,6 +1278,8 @@ enum GameNodeFactory {
             renderedEnemySprite(root, enemy: enemy, size: 98)
         case .marsColossus:
             renderedEnemySprite(root, enemy: enemy, size: 110)
+        default:
+            renderedEnemySprite(root, enemy: enemy, size: enemy.isOuterBoss ? 110 : 92)
         }
     }
 
@@ -1069,6 +1295,10 @@ enum GameNodeFactory {
         sprite.name = "body-sprite"
         sprite.size = CGSize(width: size, height: size)
         sprite.position.y = enemySpriteVerticalOffset(for: enemy)
+        if let tint = enemy.outerWorldTint {
+            sprite.color = tint
+            sprite.colorBlendFactor = 0.46
+        }
         rig.addChild(sprite)
         return rig
     }
@@ -1093,6 +1323,7 @@ enum GameNodeFactory {
         case .saucerKeeper: 6
         case .plasmaStriker: 8
         case .marsColossus: 12
+        default: enemy.isOuterBoss ? 12 : 7
         }
     }
 
@@ -1116,6 +1347,7 @@ enum GameNodeFactory {
         case .saucerKeeper: .init(width: 64, height: 12)
         case .plasmaStriker: .init(width: 58, height: 11)
         case .marsColossus: .init(width: 78, height: 15)
+        default: enemy.isOuterBoss ? .init(width: 78, height: 15) : .init(width: 56, height: 11)
         }
         let shadow = ellipse(
             size: size,
@@ -1157,6 +1389,7 @@ enum GameNodeFactory {
             case .waterCooler, .tacticsBoard, .roverBattery, .satelliteRelay, .gravityCell: 61
             case .oxygenPod: 64
             case .meteorCrate, .crystalBarricade, .artifactVault: 68
+            default: 58
             }
         case .powerUp:
             return 43
@@ -1169,6 +1402,10 @@ enum GameNodeFactory {
         guard case .enemy(let enemy) = kind else { return .earth }
         if enemy.isLunar { return .moon }
         if enemy.isMartian { return .mars }
+        if enemy.isJovian { return .jupiter }
+        if enemy.isSaturnian { return .saturn }
+        if enemy.isUranian { return .uranus }
+        if enemy.isNeptunian { return .neptune }
         return .earth
     }
 
@@ -1325,6 +1562,9 @@ enum GameNodeFactory {
         if object.isLunar {
             sprite.color = color(0.58, 0.72, 1)
             sprite.colorBlendFactor = 0.42
+        } else if let tint = object.outerWorldTint {
+            sprite.color = tint
+            sprite.colorBlendFactor = 0.48
         }
         rig.addChild(sprite)
     }
@@ -1350,6 +1590,7 @@ enum GameNodeFactory {
         case .holoGate: (106, 0, .init(width: 90, height: 13), marsShadow)
         case .crystalBarricade: (102, 19, .init(width: 76, height: 13), marsShadow)
         case .artifactVault: (104, 20, .init(width: 76, height: 14), marsShadow)
+        default: (98, 10, .init(width: 66, height: 12), marsShadow)
         }
     }
 
@@ -1539,6 +1780,23 @@ enum GameNodeFactory {
 }
 
 private extension EnemyKind {
+    var outerWorldTint: SKColor? {
+        if isJovian { return SKColor(red: 0.96, green: 0.55, blue: 0.12, alpha: 1) }
+        if isSaturnian { return SKColor(red: 0.93, green: 0.78, blue: 0.34, alpha: 1) }
+        if isUranian { return SKColor(red: 0.28, green: 0.91, blue: 0.88, alpha: 1) }
+        if isNeptunian { return SKColor(red: 0.10, green: 0.42, blue: 0.96, alpha: 1) }
+        return nil
+    }
+
+    var isOuterBoss: Bool {
+        switch self {
+        case .tempestRegent, .crownSovereign, .axisPrime, .abyssalMonarch:
+            true
+        default:
+            false
+        }
+    }
+
     var isLunar: Bool {
         switch self {
         case .regolithRunner, .lunarHopper, .orbitDrone, .eclipseKeeper, .gravityStriker, .lunarWarden:
@@ -1556,9 +1814,64 @@ private extension EnemyKind {
             false
         }
     }
+
+    var isJovian: Bool {
+        switch self {
+        case .cloudRunner, .pressureBrute, .vortexSkimmer, .stormKeeper,
+             .boltStriker, .tempestRegent:
+            true
+        default:
+            false
+        }
+    }
+
+    var isSaturnian: Bool {
+        switch self {
+        case .ringRunner, .iceMason, .shepherdDrone, .haloKeeper,
+             .shardStriker, .crownSovereign:
+            true
+        default:
+            false
+        }
+    }
+
+    var isUranian: Bool {
+        switch self {
+        case .frostSprinter, .tiltBrute, .auroraDrifter, .polarKeeper,
+             .magnetStriker, .axisPrime:
+            true
+        default:
+            false
+        }
+    }
+
+    var isNeptunian: Bool {
+        switch self {
+        case .mistRunner, .currentBrute, .squallRay, .tridentKeeper,
+             .pressureStriker, .abyssalMonarch:
+            true
+        default:
+            false
+        }
+    }
 }
 
 private extension FieldObjectKind {
+    var outerWorldTint: SKColor? {
+        switch self {
+        case .pressureCell, .cloudCondenser, .windGate, .lightningMast, .stormVault:
+            SKColor(red: 0.96, green: 0.55, blue: 0.12, alpha: 1)
+        case .ringShardCrate, .thermalPod, .shepherdBeacon, .iceBarricade, .crownVault:
+            SKColor(red: 0.93, green: 0.78, blue: 0.34, alpha: 1)
+        case .magneticCoil, .cryoCanister, .auroraRelay, .frostBarricade, .polarVault:
+            SKColor(red: 0.28, green: 0.91, blue: 0.88, alpha: 1)
+        case .stormBattery, .oxygenBell, .currentGate, .coralBarricade, .trenchVault:
+            SKColor(red: 0.10, green: 0.42, blue: 0.96, alpha: 1)
+        default:
+            nil
+        }
+    }
+
     var isLunar: Bool {
         switch self {
         case .roverBattery, .satelliteRelay, .regolithBarricade, .gravityCell, .lunarVault:

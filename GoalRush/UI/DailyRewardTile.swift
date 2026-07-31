@@ -69,7 +69,7 @@ struct DailyRewardTile: View {
             }
             HStack(spacing: 4) {
                 TrainingTokenIcon(size: 20)
-                Text(reward.formatted())
+                Text(GameNumberFormatter.compact(reward))
                     .monospacedDigit()
             }
                 .font(GoalRushTheme.Typography.metric(size: 18))
@@ -85,7 +85,7 @@ struct DailyRewardTile: View {
                 .font(GoalRushTheme.Typography.headline)
             HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
                 TrainingTokenIcon(size: 27)
-                Text(reward.formatted())
+                Text(GameNumberFormatter.compact(reward))
                     .monospacedDigit()
             }
                 .font(GoalRushTheme.Typography.metric(size: 24, relativeTo: .title2))

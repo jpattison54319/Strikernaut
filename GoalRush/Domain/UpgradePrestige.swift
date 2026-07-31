@@ -44,6 +44,20 @@ enum UpgradePrestigeRules {
         return UpgradePrestigeTier.allCases[index]
     }
 
+    static func currentTier(prestigeCount: Int) -> UpgradePrestigeTier? {
+        earnedTiers(prestigeCount: prestigeCount).last
+    }
+
+    /// The level shown inside the currently earned badge.
+    ///
+    /// Global rank remains the permanent combat value. The badge threshold is
+    /// only subtracted for presentation, so rank 10 with Bronze earned is
+    /// "Bronze 0", rank 20 with Silver earned is "Silver 0", and so on.
+    static func localLevel(level: Int, prestigeCount: Int) -> Int {
+        let badgeStart = currentTier(prestigeCount: prestigeCount)?.threshold ?? 0
+        return max(0, level - badgeStart)
+    }
+
     static func requiresPrestige(level: Int, prestigeCount: Int) -> Bool {
         guard let nextTier = nextTier(prestigeCount: prestigeCount) else { return false }
         return level >= nextTier.threshold
@@ -59,16 +73,30 @@ enum UpgradePrestigeRules {
         UpgradePrestigeTier.allCases.filter { level > $0.threshold }.count
     }
 
-    static func segment(level: Int, prestigeCount: Int) -> (filled: Int, start: Int, end: Int?) {
-        guard let nextTier = nextTier(prestigeCount: prestigeCount) else {
-            return (10, UpgradePrestigeTier.diamond.threshold, nil)
+    /// Total tokens needed to take one track from rank zero to `rank`,
+    /// including every prestige payment required to cross a threshold.
+    static func totalInvestment(toReachRank rank: Int) -> Int {
+        let safeRank = max(0, rank)
+        let upgradeSpend = (0..<safeRank).reduce(0) {
+            $0 + UpgradeRules.cost(forNextRank: $1)
         }
-        let start = prestigeCount == 0
-            ? 0
-            : UpgradePrestigeTier.allCases[prestigeCount - 1].threshold
-        let span = max(1, nextTier.threshold - start)
-        let progress = min(span, max(0, level - start))
-        let filled = progress == 0 ? 0 : Int(ceil(Double(progress) / Double(span) * 10))
-        return (min(10, filled), start, nextTier.threshold)
+        let prestigeSpend = UpgradePrestigeTier.allCases.count {
+            $0.threshold < safeRank
+        } * prestigeCost
+        return upgradeSpend + prestigeSpend
+    }
+
+    /// One progress marker represents one real level toward the next badge.
+    static func segment(
+        level: Int,
+        prestigeCount: Int
+    ) -> (filled: Int, total: Int, start: Int, end: Int?) {
+        guard let nextTier = nextTier(prestigeCount: prestigeCount) else {
+            return (0, 0, UpgradePrestigeTier.diamond.threshold, nil)
+        }
+        let start = currentTier(prestigeCount: prestigeCount)?.threshold ?? 0
+        let total = max(1, nextTier.threshold - start)
+        let filled = min(total, max(0, level - start))
+        return (filled, total, start, nextTier.threshold)
     }
 }

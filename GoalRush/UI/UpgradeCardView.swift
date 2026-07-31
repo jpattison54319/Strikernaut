@@ -19,7 +19,14 @@ struct UpgradeCardView: View {
             prestigeCount: prestigeCount
         )
         let progressSegment = UpgradePrestigeRules.segment(level: rank, prestigeCount: prestigeCount)
-        let earnedTiers = Array(UpgradePrestigeRules.earnedTiers(prestigeCount: prestigeCount))
+        let earnedTier = UpgradePrestigeRules.currentTier(prestigeCount: prestigeCount)
+        let localLevel = UpgradePrestigeRules.localLevel(level: rank, prestigeCount: prestigeCount)
+        let displayedLevel = earnedTier.map {
+            "\($0.title.uppercased()) \(localLevel)"
+        } ?? "LEVEL \(localLevel)"
+        let accessibleLevel = earnedTier.map {
+            "\($0.title) level \(localLevel)"
+        } ?? "Level \(localLevel)"
         let cost = UpgradePrestigeRules.purchaseCost(
             level: rank,
             prestigeCount: prestigeCount
@@ -53,10 +60,6 @@ struct UpgradeCardView: View {
                     }
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(UpgradePresentation.systemLabel(for: track))
-                        .font(GoalRushTheme.Typography.captionEmphasized)
-                        .tracking(0.8)
-                        .foregroundStyle(accent)
                     Text(UpgradeRules.title(for: track))
                         .font(GoalRushTheme.Typography.title3)
                         .foregroundStyle(.white)
@@ -73,41 +76,32 @@ struct UpgradeCardView: View {
             controlLayout {
                 VStack(alignment: .leading, spacing: 9) {
                     HStack(spacing: 8) {
-                        Text("LEVEL \(rank)")
+                        if let earnedTier {
+                            UpgradePrestigeBadge(tier: earnedTier, compact: true)
+                        }
+
+                        Text(displayedLevel)
                             .font(GoalRushTheme.Typography.metric(size: 25, relativeTo: .title3))
                             .foregroundStyle(accent)
                             .monospacedDigit()
-                            .accessibilityLabel("Current level \(rank)")
+                            .accessibilityLabel(accessibleLevel)
                             .accessibilityIdentifier("upgrade-rank-\(track.rawValue)")
 
                         if let nextTier = UpgradePrestigeRules.nextTier(prestigeCount: prestigeCount) {
                             Text(isPrestigePurchase ? "\(nextTier.title.uppercased()) READY" : "TO \(nextTier.title.uppercased())")
                                 .font(GoalRushTheme.Typography.metric(size: 10, relativeTo: .caption2))
                                 .foregroundStyle(isPrestigePurchase ? nextTier.badgeColor : .white.opacity(0.55))
-                        } else {
-                            Text("MAX PRESTIGE")
-                                .font(GoalRushTheme.Typography.metric(size: 10, relativeTo: .caption2))
-                                .foregroundStyle(UpgradePrestigeTier.diamond.badgeColor)
                         }
                     }
 
-                    UpgradeLevelPips(
-                        filledCount: progressSegment.filled,
-                        accent: accent,
-                        rangeStart: progressSegment.start,
-                        rangeEnd: progressSegment.end
-                    )
-
-                    if let highestTier = earnedTiers.last {
-                        HStack(spacing: 6) {
-                            ForEach(earnedTiers) { tier in
-                                UpgradePrestigeBadge(tier: tier, compact: true)
-                            }
-                            Text(highestTier.title.uppercased())
-                                .font(GoalRushTheme.Typography.metric(size: 10, relativeTo: .caption2))
-                                .foregroundStyle(highestTier.badgeColor)
-                                .accessibilityIdentifier("upgrade-prestige-\(highestTier.title.lowercased())")
-                        }
+                    if progressSegment.total > 0 {
+                        UpgradeLevelPips(
+                            filledCount: progressSegment.filled,
+                            totalCount: progressSegment.total,
+                            accent: accent,
+                            rangeStart: progressSegment.start,
+                            rangeEnd: progressSegment.end
+                        )
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -139,24 +133,19 @@ struct UpgradeCardView: View {
                 .accessibilityIdentifier("upgrade-purchase-\(track.rawValue)")
             }
 
-            effectLayout {
-                Image(systemName: isPrestigePurchase ? "medal.fill" : "arrow.up.right.circle.fill")
-                    .foregroundStyle(accent)
-                    .accessibilityHidden(true)
-                if isPrestigePurchase,
-                   let nextTier = UpgradePrestigeRules.nextTier(prestigeCount: prestigeCount) {
-                    Text("Prestige now to add the \(nextTier.title) badge")
-                    Text("Unlocks Level \(rank + 1)")
-                        .foregroundStyle(nextTier.badgeColor)
-                } else {
+            if !isPrestigePurchase {
+                effectLayout {
+                    Image(systemName: "arrow.up.right.circle.fill")
+                        .foregroundStyle(accent)
+                        .accessibilityHidden(true)
                     Text("\(effect.current) → \(effect.next)")
                     Text(effect.improvement)
                         .foregroundStyle(accent)
                 }
+                .font(GoalRushTheme.Typography.metric(size: 12, relativeTo: .caption))
+                .foregroundStyle(.white.opacity(0.74))
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .font(GoalRushTheme.Typography.metric(size: 12, relativeTo: .caption))
-            .foregroundStyle(.white.opacity(0.74))
-            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(GoalRushTheme.Metrics.standardSpacing)
         .background {
@@ -225,38 +214,74 @@ struct UpgradeCardView: View {
     }
 
     private func buttonTitle(affordable: Bool, cost: Int, isPrestige: Bool) -> String {
-        guard affordable else { return "Need \(cost.formatted())" }
-        return isPrestige ? "Prestige \(cost.formatted())" : cost.formatted()
+        if isPrestige { return "Prestige" }
+        guard affordable else { return "Need \(GameNumberFormatter.compact(cost))" }
+        return GameNumberFormatter.compact(cost)
     }
 }
 
 private struct UpgradeLevelPips: View {
     let filledCount: Int
+    let totalCount: Int
     let accent: Color
     let rangeStart: Int
     let rangeEnd: Int?
 
     var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<10, id: \.self) { index in
-                Circle()
-                    .fill(index < filledCount ? accent : .white.opacity(0.10))
-                    .frame(width: 11, height: 11)
-                    .overlay {
-                        Circle().stroke(
-                            index < filledCount ? .white.opacity(0.52) : .white.opacity(0.22),
-                            lineWidth: 1
-                        )
-                    }
-                    .shadow(color: index < filledCount ? accent.opacity(0.55) : .clear, radius: 3)
+        Canvas { context, size in
+            let rows = totalCount > 10 ? 2 : 1
+            let columns = Int(ceil(Double(totalCount) / Double(rows)))
+            let spec = markerSpec(for: totalCount)
+            let nominalWidth =
+                (CGFloat(columns) * spec.diameter)
+                + (CGFloat(max(0, columns - 1)) * spec.spacing)
+            let scale = min(1, size.width / max(1, nominalWidth))
+            let diameter = spec.diameter * scale
+            let spacing = spec.spacing * scale
+            let contentHeight =
+                (CGFloat(rows) * diameter)
+                + (CGFloat(max(0, rows - 1)) * spacing)
+            let originY = max(0, (size.height - contentHeight) / 2)
+
+            for index in 0..<totalCount {
+                let row = index / columns
+                let column = index % columns
+                let rect = CGRect(
+                    x: CGFloat(column) * (diameter + spacing),
+                    y: originY + CGFloat(row) * (diameter + spacing),
+                    width: diameter,
+                    height: diameter
+                )
+                let path = Path(ellipseIn: rect)
+                let isFilled = index < filledCount
+                context.fill(
+                    path,
+                    with: .color(isFilled ? accent : .white.opacity(0.10))
+                )
+                context.stroke(
+                    path,
+                    with: .color(isFilled ? .white.opacity(0.58) : .white.opacity(0.24)),
+                    lineWidth: max(0.45, diameter * 0.10)
+                )
             }
         }
+        .frame(height: totalCount > 10 ? 22 : 13)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             rangeEnd.map {
-                "\(filledCount) of 10 progress circles filled for levels \(rangeStart) through \($0)"
-            } ?? "All prestige progress circles filled"
+                "\(filledCount) of \(totalCount) levels complete from global level \(rangeStart) toward the badge at level \($0)"
+            } ?? "\(filledCount) of \(totalCount) badge levels complete"
         )
+    }
+
+    private func markerSpec(for count: Int) -> (diameter: CGFloat, spacing: CGFloat) {
+        switch count {
+        case ...10: (11, 5)
+        case ...20: (9, 4)
+        case ...30: (7, 3)
+        case ...50: (4.5, 2.5)
+        default: (2.75, 1.5)
+        }
     }
 }
 

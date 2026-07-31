@@ -3,7 +3,9 @@ import SwiftUI
 struct ResultView: View {
     @Environment(GameStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var appeared = false
+
     let result: RunResult
 
     var body: some View {
@@ -13,25 +15,49 @@ struct ResultView: View {
                     .ignoresSafeArea()
                     .accessibilityHidden(true)
 
-                if celebrationEffectsAllowed && isNotableRun {
+                if celebrationEffectsAllowed && isNotableRun && result.relicEarned == nil {
                     ResultBurst(accent: result.world.accentColor)
                         .scaleEffect(appeared ? 1 : 0.35)
                         .opacity(appeared ? 1 : 0)
-                        .animation(.spring(duration: 0.75, bounce: 0.26), value: appeared)
+                        .animation(
+                            .spring(duration: 0.75, bounce: 0.26),
+                            value: appeared
+                        )
                         .accessibilityHidden(true)
                     ConfettiBurst(accent: result.world.accentColor)
                 }
 
                 ScrollView {
-                    VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
-                        Spacer(minLength: GoalRushTheme.Metrics.sectionSpacing)
-                        hero
-                        newBestStatus
-                        stars
-                        resultStats
+                    LazyVStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
+                        Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
+
+                        ResultHeroCard(
+                            icon: heroIcon,
+                            iconColor: heroColor,
+                            title: heroTitle,
+                            accessibilityTitle: heroAccessibilityTitle,
+                            subtitle: heroSubtitle,
+                            isNewBest: result.newBestWave || result.newBestScore,
+                            starCount: starCount,
+                            appeared: appeared
+                        )
+
+                        ResultStatsCard(result: result)
+
+                        if result.mode.isEndless {
+                            if let relic = result.relicEarned {
+                                EndlessRelicRewardCard(relic: relic)
+                            } else if EndlessRelicRules.rewardMilestone(
+                                forWaveReached: result.wave
+                            ) == nil {
+                                EndlessRelicProgressHint()
+                            }
+                        }
+
                         if result.characterEarned != nil {
                             characterReward
                         }
+
                         actions
                         Spacer(minLength: GoalRushTheme.Metrics.sectionSpacing)
                     }
@@ -42,6 +68,7 @@ struct ResultView: View {
         }
         .onAppear {
             appeared = true
+            guard result.relicEarned == nil else { return }
             if isNotableRun {
                 store.uiAudio.play(.fanfare, feedback: nil)
             } else {
@@ -49,141 +76,83 @@ struct ResultView: View {
             }
         }
         .sensoryFeedback(trigger: appeared) { _, isVisible in
-            guard isVisible, store.settings.hapticsEnabled else { return nil }
+            guard isVisible,
+                  result.relicEarned == nil,
+                  store.settings.hapticsEnabled else {
+                return nil
+            }
             return isNotableRun ? .success : .warning
         }
     }
 
-    private var hero: some View {
-        VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
-            Image(systemName: heroIcon)
-                .font(.system(size: 64, weight: .bold))
-                .foregroundStyle(heroColor)
-                .symbolEffect(.bounce, value: appeared && !reduceMotion)
-                .shadow(color: heroColor.opacity(0.40), radius: 18)
-                .accessibilityHidden(true)
-            VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
-                Text(heroTitle)
-                    .font(GoalRushTheme.Typography.display)
-                    .multilineTextAlignment(.center)
-                    .accessibilityIdentifier("result-title")
-                Text(heroSubtitle)
-                    .font(GoalRushTheme.Typography.headline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .padding(GoalRushTheme.Metrics.sectionSpacing)
-        .frame(maxWidth: .infinity)
-        .gameSurface(.modal)
-    }
-
-    @ViewBuilder
-    private var newBestStatus: some View {
-        if result.newBestWave || result.newBestScore {
-            GameStatusBadge(text: "NEW BEST!", tone: .attention)
-                .scaleEffect(appeared ? 1 : 0.4)
-                .animation(reduceMotion ? nil : .spring(duration: 0.5, bounce: 0.5).delay(0.35), value: appeared)
-                .accessibilityIdentifier("result-new-best")
-        }
-    }
-
-    @ViewBuilder
-    private var stars: some View {
-        if result.didWin && !result.mode.isEndless {
-            HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
-                ForEach(0..<3, id: \.self) { index in
-                    Image(systemName: index < StarRating.stars(staminaFraction: result.staminaFraction) ? "star.fill" : "star")
-                        .font(GoalRushTheme.Typography.title)
-                        .foregroundStyle(GoalRushTheme.gold)
-                        .scaleEffect(appeared ? 1 : 0.2)
-                        .animation(
-                            reduceMotion ? nil : .spring(duration: 0.4, bounce: 0.55).delay(0.25 + Double(index) * 0.14),
-                            value: appeared
-                        )
-                }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(StarRating.stars(staminaFraction: result.staminaFraction)) of 3 stars")
-            .accessibilityIdentifier("result-stars")
-        }
-    }
-
-    private var resultStats: some View {
-        VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
-            HStack {
-                HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
-                    TrainingTokenIcon(size: 23)
-                    Text("Training Tokens")
-                }
-                    .foregroundStyle(GoalRushTheme.gold)
-                Spacer()
-                HStack(spacing: 4) {
-                    Text("+")
-                        .font(GoalRushTheme.Typography.title2)
-                        .foregroundStyle(GoalRushTheme.gold)
-                    CountUpText(value: result.tokensEarned, color: GoalRushTheme.gold)
-                }
-            }
-            Divider().overlay(.white.opacity(0.12))
-            if result.mode.isEndless {
-                statRow(label: "Wave reached", value: "\(result.wave)", icon: "flag.checkered")
-                statRow(label: "Final score", icon: "trophy.fill") {
-                    CountUpText(value: result.score, font: .body.bold(), color: .primary)
-                }
-                let best = store.progress.endlessRecord
-                statRow(label: "Personal best", value: "Wave \(best.bestWave)", icon: "crown.fill")
-            } else {
-                LabeledContent("Stamina remaining", value: "\(Int(result.remainingStamina))")
-            }
-        }
-        .padding(GoalRushTheme.Metrics.standardSpacing)
-        .gameSurface(.panel)
-    }
-
     private var characterReward: some View {
         let character = result.characterEarned.map(CharacterCatalog.character)
-        return VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
-            Label("NEW CHARACTER UNLOCKED", systemImage: "sparkles")
-                .font(GoalRushTheme.Typography.captionEmphasized)
-                .tracking(1.1)
-                .foregroundStyle(GoalRushTheme.gold)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(
+                VStackLayout(
+                    alignment: .leading,
+                    spacing: GoalRushTheme.Metrics.standardSpacing
+                )
+            )
+            : AnyLayout(
+                HStackLayout(
+                    alignment: .center,
+                    spacing: GoalRushTheme.Metrics.standardSpacing
+                )
+            )
+
+        return layout {
             if let character {
                 Image(character.assetStem + "Roster")
                     .resizable()
                     .scaledToFit()
-                    .frame(height: 180)
+                    .frame(width: 76, height: 84)
                     .accessibilityHidden(true)
             }
-            Text(character?.name ?? "New Hero")
-                .font(GoalRushTheme.Typography.title2)
-            Text(character?.abilityName ?? "Unique ability unlocked")
-                .font(GoalRushTheme.Typography.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Label("New hero", systemImage: "sparkles")
+                    .font(GoalRushTheme.Typography.captionEmphasized)
+                    .foregroundStyle(GoalRushTheme.gold)
+                Text(character?.name ?? "New Hero")
+                    .font(GoalRushTheme.Typography.title2)
+                Text(character?.abilityName ?? "Unique ability")
+                    .font(GoalRushTheme.Typography.subheadline)
+                    .foregroundStyle(.white.opacity(0.62))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(GoalRushTheme.Metrics.sectionSpacing)
-        .gameSurface(.modal)
-        .overlay {
-            ComicPanelShape(cut: GoalRushTheme.Metrics.panelRadius)
-                .stroke(GoalRushTheme.gold.opacity(0.38))
-        }
+        .padding(GoalRushTheme.Metrics.standardSpacing)
+        .gameSurface(.panel)
         .accessibilityElement(children: .contain)
     }
 
     private var actions: some View {
-        VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
+        let destinationLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(
+                VStackLayout(spacing: GoalRushTheme.Metrics.standardSpacing)
+            )
+            : AnyLayout(
+                HStackLayout(
+                    alignment: .top,
+                    spacing: GoalRushTheme.Metrics.standardSpacing
+                )
+            )
+
+        return VStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
             Button(primaryTitle, systemImage: "play.fill", action: primaryAction)
                 .buttonStyle(GameLaunchButtonStyle())
                 .accessibilityIdentifier("result-primary")
 
-            HStack(alignment: .top, spacing: GoalRushTheme.Metrics.sectionSpacing) {
+            destinationLayout {
                 resultDestination(
-                    title: "Upgrades",
-                    systemImage: "arrow.up",
+                    title: result.mode.isEndless ? "Relics" : "Upgrades",
+                    systemImage: result.mode.isEndless ? "diamond.fill" : "arrow.up",
                     accent: GoalRushTheme.cyan,
-                    identifier: "result-more-upgrades",
-                    action: openUpgrades
+                    identifier: result.mode.isEndless
+                        ? "result-more-relics"
+                        : "result-more-upgrades",
+                    action: result.mode.isEndless ? openRelics : openUpgrades
                 )
                 resultDestination(
                     title: result.mode.isEndless ? "Endless" : "Map",
@@ -212,22 +181,22 @@ struct ResultView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
+            VStack(spacing: 5) {
                 Image(systemName: systemImage)
-                    .font(GoalRushTheme.Typography.title2)
+                    .font(GoalRushTheme.Typography.title3)
                     .foregroundStyle(.white)
-                    .frame(width: 64, height: 64)
+                    .frame(width: 52, height: 52)
                     .background(.black.opacity(0.56), in: .circle)
                     .overlay {
                         Circle().stroke(accent.opacity(0.82), lineWidth: 2)
                     }
-                    .shadow(color: accent.opacity(0.34), radius: 12, y: 5)
+                    .shadow(color: accent.opacity(0.30), radius: 8, y: 4)
 
                 Text(title)
                     .font(GoalRushTheme.Typography.captionEmphasized)
                     .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
             }
             .frame(maxWidth: .infinity)
             .contentShape(.rect)
@@ -235,18 +204,6 @@ struct ResultView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(title)
         .accessibilityIdentifier(identifier)
-    }
-
-    private func statRow(label: String, value: String, icon: String) -> some View {
-        statRow(label: label, icon: icon) { Text(value).bold().monospacedDigit() }
-    }
-
-    private func statRow<Value: View>(label: String, icon: String, @ViewBuilder value: () -> Value) -> some View {
-        HStack {
-            Label(label, systemImage: icon).foregroundStyle(.secondary)
-            Spacer()
-            value()
-        }
     }
 
     private var isNotableRun: Bool {
@@ -264,7 +221,9 @@ struct ResultView: View {
     private var heroIcon: String {
         if result.isFirstClear { return "star.circle.fill" }
         if result.mode.isEndless { return "infinity.circle.fill" }
-        return result.didWin ? "trophy.fill" : "arrow.counterclockwise.circle.fill"
+        return result.didWin
+            ? "trophy.fill"
+            : "arrow.counterclockwise.circle.fill"
     }
 
     private var heroColor: Color {
@@ -274,33 +233,49 @@ struct ResultView: View {
 
     private var heroTitle: String {
         if result.isFirstClear { return "FIRST CLEAR!" }
-        if result.mode.isEndless { return "WAVE \(result.wave)" }
+        if result.mode.isEndless {
+            return "WAVE \(GameNumberFormatter.compact(result.wave))"
+        }
         return result.didWin ? "LEVEL CLEAR" : "GAME OVER"
     }
 
     private var heroSubtitle: String {
         switch result.mode {
-        case .endless: "\(GameContent.world(result.world).name) • Powers reset"
-        case .campaign(let level): result.didWin ? GameContent.level(level).name : "Tokens kept • Upgrade and retry"
+        case .endless:
+            "\(GameContent.world(result.world).name) • Powers reset"
+        case .campaign(let level):
+            result.didWin
+                ? GameContent.level(level).name
+                : "Tokens kept • Upgrade and retry"
         }
+    }
+
+    private var heroAccessibilityTitle: String {
+        if result.mode.isEndless {
+            return "Wave \(GameNumberFormatter.exact(result.wave))"
+        }
+        return heroTitle
+    }
+
+    private var starCount: Int? {
+        guard result.didWin, !result.mode.isEndless else { return nil }
+        return StarRating.stars(staminaFraction: result.staminaFraction)
     }
 
     private var primaryTitle: String {
         if !result.didWin { return "Retry" }
 
         return switch result.mode {
-        case .endless: "Run It Back"
-        case .campaign(let level): level < GameContent.levels.count ? "Play Next Level" : "Play Again"
+        case .endless:
+            "Run It Back"
+        case .campaign(let level):
+            level < GameContent.levels.count ? "Play Next Level" : "Play Again"
         }
     }
 
     private func primaryAction() {
         store.uiAudio.play(.tap)
-        switch result.mode {
-        case .endless: store.startEndless()
-        case .campaign(let level):
-            store.start(level: result.didWin ? min(level + 1, GameContent.levels.count) : level)
-        }
+        store.continueAfterResult(result)
     }
 
     private func openUpgrades() {
@@ -311,6 +286,11 @@ struct ResultView: View {
     private func openHome() {
         store.uiAudio.play(.tap)
         store.route = .home
+    }
+
+    private func openRelics() {
+        store.uiAudio.play(.tap)
+        store.route = .relics
     }
 
     private func openModeSelection() {
@@ -332,10 +312,14 @@ private struct ResultBurst: View {
             ForEach(0..<18, id: \.self) { index in
                 Capsule()
                     .fill(index.isMultiple(of: 2) ? GoalRushTheme.gold : accent)
-                    .frame(width: 5, height: index.isMultiple(of: 3) ? 34 : 22)
+                    .frame(
+                        width: 5,
+                        height: index.isMultiple(of: 3) ? 34 : 22
+                    )
                     .offset(y: -130)
                     .rotationEffect(.degrees(Double(index) * 20))
             }
+
             Circle()
                 .stroke(accent.opacity(0.32), lineWidth: 2)
                 .frame(width: 230, height: 230)

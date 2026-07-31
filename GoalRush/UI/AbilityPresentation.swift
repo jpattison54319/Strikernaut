@@ -40,8 +40,8 @@ enum AbilityPresentation {
         case .oneTwo: "Cover more lanes."
         case .cleanSheet: "Block one hit."
         case .secondWind: "Heal now and after waves."
-        case .gravityBoots: "Slow every threat."
-        case .meteorStrike: "Periodic critical power shot."
+        case .gravityBoots: "Slow regular enemies and field objects."
+        case .meteorStrike: "Drops a targeted damage meteor."
         case .goldenGoal: "Earn more Training Tokens."
         }
     }
@@ -55,11 +55,16 @@ enum AbilityPresentation {
         let nextRank = isEndless ? currentRank + 1 : min(3, currentRank + 1)
         switch ability {
         case .powerDrive:
-            let base = isEndless ? 1.25 : 1.35
+            let currentMultiplier = isEndless
+                ? EndlessAbilityRules.powerDriveMultiplier(rank: currentRank)
+                : pow(1.35, Double(currentRank))
+            let nextMultiplier = isEndless
+                ? EndlessAbilityRules.powerDriveMultiplier(rank: nextRank)
+                : pow(1.35, Double(nextRank))
             return .init(
                 metric: "Ball damage bonus",
-                current: percentBonus(multiplier: pow(base, Double(currentRank))),
-                next: percentBonus(multiplier: pow(base, Double(nextRank))),
+                current: percentBonus(multiplier: currentMultiplier),
+                next: percentBonus(multiplier: nextMultiplier),
                 accent: GoalRushTheme.orange
             )
         case .quickRelease:
@@ -80,8 +85,8 @@ enum AbilityPresentation {
         case .throughBall:
             return .init(
                 metric: "Targets hit per ball",
-                current: "\(currentRank + 1)",
-                next: "\(nextRank + 1)",
+                current: GameNumberFormatter.compact(currentRank + 1),
+                next: GameNumberFormatter.compact(nextRank + 1),
                 accent: GoalRushTheme.positive
             )
         case .curler:
@@ -94,24 +99,28 @@ enum AbilityPresentation {
         case .oneTwo:
             return .init(
                 metric: "Kick pattern",
-                current: volleyLabel(rank: currentRank),
-                next: volleyLabel(rank: nextRank),
+                current: volleyLabel(rank: currentRank, isEndless: isEndless),
+                next: volleyLabel(rank: nextRank, isEndless: isEndless),
                 accent: GoalRushTheme.gold
             )
         case .cleanSheet:
             return .init(
-                metric: "Blocks earned this run",
-                current: "\(currentRank)",
-                next: "\(nextRank)",
+                metric: "Block gained now",
+                current: "None",
+                next: "+1 hit",
                 accent: GoalRushTheme.blue
             )
         case .secondWind:
             return .init(
                 metric: "Stamina now / each wave",
-                current: currentRank == 0
-                    ? "None"
-                    : "+\(10 + currentRank * 4) / +\(4 + currentRank * 3)",
-                next: "+\(10 + nextRank * 4) / +\(4 + nextRank * 3)",
+                current: recoveryLabel(
+                    rank: currentRank,
+                    isEndless: isEndless
+                ),
+                next: recoveryLabel(
+                    rank: nextRank,
+                    isEndless: isEndless
+                ),
                 accent: GoalRushTheme.positive
             )
         case .gravityBoots:
@@ -123,23 +132,33 @@ enum AbilityPresentation {
             )
         case .meteorStrike:
             return .init(
-                metric: "Meteor kick",
-                current: meteorLabel(rank: currentRank),
-                next: meteorLabel(rank: nextRank),
+                metric: "Targeted meteor",
+                current: meteorLabel(
+                    rank: currentRank,
+                    isEndless: isEndless
+                ),
+                next: meteorLabel(
+                    rank: nextRank,
+                    isEndless: isEndless
+                ),
                 accent: GoalRushTheme.orange
             )
         case .goldenGoal:
             return .init(
                 metric: "Token rewards",
-                current: "+\(currentRank * 15)%",
-                next: "+\(nextRank * 15)%",
+                current: percentBonus(
+                    multiplier: EconomyBalance.goldenGoalMultiplier(rank: currentRank)
+                ),
+                next: percentBonus(
+                    multiplier: EconomyBalance.goldenGoalMultiplier(rank: nextRank)
+                ),
                 accent: GoalRushTheme.gold
             )
         }
     }
 
     private static func percentBonus(multiplier: Double) -> String {
-        "+\(Int(((multiplier - 1) * 100).rounded()))%"
+        "+\(GameNumberFormatter.compact(Int(((multiplier - 1) * 100).rounded())))%"
     }
 
     private static func intervalLabel(
@@ -171,12 +190,17 @@ enum AbilityPresentation {
         guard rank > 0 else { return "Off" }
         if isEndless {
             let rate = EndlessAbilityRules.curlerTurnRate(rank: rank)
-            return "\(rate.formatted(.number.precision(.fractionLength(1)))) steering"
+            return "\(displayNumber(rate, fractionLength: 1)) steering"
         }
         return ["Off", "Light", "Strong", "Elite"][min(rank, 3)]
     }
 
-    private static func volleyLabel(rank: Int) -> String {
+    private static func volleyLabel(rank: Int, isEndless: Bool) -> String {
+        if isEndless {
+            return rank == 0
+                ? "1 straight ball"
+                : "\(GameNumberFormatter.compact(rank + 1))-ball spread"
+        }
         if rank <= 3 {
             return [
                 "1 straight ball",
@@ -185,7 +209,7 @@ enum AbilityPresentation {
                 "4-ball wide spread",
             ][max(rank, 0)]
         }
-        return "4 balls • +\((rank - 3) * 12)% side damage"
+        return "4-ball wide spread"
     }
 
     private static func slowLabel(rank: Int, isEndless: Bool) -> String {
@@ -199,9 +223,50 @@ enum AbilityPresentation {
         return "\(Int(percentage.rounded()))% slower"
     }
 
-    private static func meteorLabel(rank: Int) -> String {
+    private static func recoveryLabel(
+        rank: Int,
+        isEndless: Bool
+    ) -> String {
+        guard rank > 0 else { return "None" }
+        if isEndless {
+            let immediate = displayNumber(
+                EndlessAbilityRules.secondWindImmediateRecovery(rank: rank),
+                fractionLength: 1
+            )
+            let eachWave = displayNumber(
+                EndlessAbilityRules.secondWindWaveRecovery(rank: rank),
+                fractionLength: 1
+            )
+            return "+\(immediate) / +\(eachWave)"
+        }
+        return "+\(10 + rank * 4) / +\(4 + rank * 3)"
+    }
+
+    private static func meteorLabel(rank: Int, isEndless: Bool) -> String {
         guard rank > 0 else { return "Off" }
         let interval = max(2, 7 - min(rank, 5))
-        return "Every \(interval) kicks • +\(rank * 55)%"
+        if isEndless {
+            let percentage = displayNumber(
+                (EndlessAbilityRules.meteorDamageMultiplier(rank: rank) - 1)
+                    * 100,
+                fractionLength: 1
+            )
+            return "Every \(interval) kicks • +\(percentage)%"
+        }
+        return "Every \(interval) kicks • +\(GameNumberFormatter.compact(rank * 55))%"
+    }
+
+    private static func displayNumber(
+        _ value: Double,
+        fractionLength: Int
+    ) -> String {
+        if value.magnitude >= 1_000,
+           value > Double(Int.min),
+           value < Double(Int.max) {
+            return GameNumberFormatter.compact(Int(value.rounded()))
+        }
+        return value.formatted(
+            .number.precision(.fractionLength(fractionLength))
+        )
     }
 }

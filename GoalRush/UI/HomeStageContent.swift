@@ -32,6 +32,8 @@ struct HomeStageContent {
         missionsSubtitle = completedMissions > 0 ? "\(completedMissions) ready to claim" : "View objectives"
         missionBadge = completedMissions > 0 ? "\(completedMissions)" : nil
         campaignStatus = "\(completedLevels)/\(GameContent.levels.count) cleared"
-        endlessStatus = endlessRecord.bestWave > 0 ? "Best wave \(endlessRecord.bestWave)" : "New run ready"
+        endlessStatus = endlessRecord.bestWave > 0
+            ? "Best wave \(GameNumberFormatter.exact(endlessRecord.bestWave))"
+            : "New run ready"
     }
 }

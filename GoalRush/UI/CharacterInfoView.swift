@@ -7,9 +7,10 @@ struct CharacterInfoView: View {
             subtitle: "Pick a hero whose super ability matches your play style."
         ) {
             VStack(alignment: .leading, spacing: GoalRushTheme.Metrics.standardSpacing) {
-                Label("Defeat five enemies to fully charge your ability.", systemImage: "bolt.fill")
+                Label("Defeats build about one full charge per wave.", systemImage: "bolt.fill")
+                Label("Boss damage can build half a charge.", systemImage: "target")
                 Label("Tap the glowing ability button during live play.", systemImage: "hand.tap.fill")
-                Label("Charge resets after use and builds again immediately.", systemImage: "arrow.clockwise")
+                Label("Supers and reinforcements do not recharge it.", systemImage: "arrow.clockwise")
                 Label("Characters change abilities, not permanent Training upgrades.", systemImage: "arrow.up.circle.fill")
             }
             .font(GoalRushTheme.Typography.headline)

@@ -10,10 +10,14 @@ final class GameSessionModel {
         case briefing([CampaignDiscovery])
         case draft([RunUpgradeChoice])
         case worldTransition(from: WorldID, to: WorldID, draft: [RunUpgradeChoice])
+        case deathSaveOffer
+        case deathSaveCountdown
         case finished
     }
 
     let mode: RunMode
+    let runID: UUID
+    let activeRelic: EndlessRelic?
     let level: LevelDefinition?
     let simulation: GameSimulation
     let character: CharacterDefinition
@@ -24,10 +28,15 @@ final class GameSessionModel {
     @ObservationIgnored private(set) var lastEvent: SimulationEvent?
     @ObservationIgnored private(set) var recentEvents: [SimulationEvent] = []
     private(set) var didFinish = false
+    private(set) var deathSaveWasUsed = false
+    private(set) var deathSaveCountdownSeconds = 0
     private(set) var draftsChosen = 0
     private var random: SeededGenerator
     private var lastTime: TimeInterval?
     private var lastHUDPublishTime: TimeInterval = 0
+    private var abilityCinematicRemaining: TimeInterval = 0
+    @ObservationIgnored private var deathSaveCountdownRemaining: TimeInterval = 0
+    private let allowsDebugAbilityCinematic: Bool
 #if DEBUG
     private var debugAutoCharacterAbilityTime: TimeInterval?
     private var debugDidAutoActivateCharacterAbility = false
@@ -37,40 +46,69 @@ final class GameSessionModel {
         self.init(mode: .campaign(level: levelNumber), progress: progress, settings: settings)
     }
 
-    init(mode: RunMode, progress: PlayerProgress, settings: GameSettings) {
+    init(
+        mode: RunMode,
+        progress: PlayerProgress,
+        settings: GameSettings,
+        checkpoint: RunCheckpoint? = nil
+    ) {
         self.mode = mode
+        self.runID = checkpoint?.runID ?? UUID()
+        self.activeRelic = checkpoint?.activeRelic
+            ?? (mode.isEndless ? progress.endlessRecord.equippedRelic : nil)
         self.level = mode.campaignLevel.map(GameContent.level)
-        self.character = CharacterCatalog.character(progress.selectedCharacter)
+        self.character = CharacterCatalog.character(
+            checkpoint?.simulation.characterID ?? progress.selectedCharacter
+        )
         let argumentSeed = ProcessInfo.processInfo.arguments.value(after: "--fixed-seed").flatMap(UInt64.init)
         let modeSeed: UInt64 = switch mode {
         case .campaign(let level): UInt64(level * 10_007 + progress.trainingTokens)
         case .endless: UInt64(progress.trainingTokens + 77)
         }
         let seed = argumentSeed ?? modeSeed
-        self.simulation = GameSimulation(mode: mode, progress: progress, assistMode: settings.assistMode, seed: seed)
+        self.simulation = GameSimulation(
+            mode: mode,
+            progress: progress,
+            assistMode: settings.assistMode,
+            seed: seed,
+            checkpoint: checkpoint?.simulation
+        )
         self.snapshot = simulation.snapshot
         self.hudState = HUDState(snapshot: simulation.snapshot)
-        self.random = SeededGenerator(seed: seed ^ 0xA11B1E)
+        self.random = checkpoint?.sessionRandom
+            ?? SeededGenerator(seed: seed ^ 0xA11B1E)
+        self.allowsDebugAbilityCinematic = !settings.reducedFlashes
+        self.deathSaveWasUsed = checkpoint?.deathSaveWasUsed ?? false
+        self.draftsChosen = checkpoint?.draftsChosen ?? 0
 
 #if DEBUG
-        if let rawAbility = ProcessInfo.processInfo.arguments.value(after: "--temporary-ability"),
-           let ability = TemporaryBallAbility(rawValue: rawAbility) {
-            simulation.activateTemporaryAbility(ability)
-            snapshot = simulation.snapshot
-            hudState = HUDState(snapshot: simulation.snapshot)
-        }
-        if ProcessInfo.processInfo.arguments.contains("--character-ability-ready") {
-            simulation.fullyChargeCharacterAbilityForTesting()
-            snapshot = simulation.snapshot
-            hudState = HUDState(snapshot: simulation.snapshot)
-        }
-        if let rawDelay = ProcessInfo.processInfo.arguments.value(after: "--auto-character-ability-after"),
-           let delay = TimeInterval(rawDelay) {
-            debugAutoCharacterAbilityTime = max(0, delay)
+        if checkpoint == nil {
+            if let rawAbility = ProcessInfo.processInfo.arguments.value(after: "--temporary-ability"),
+               let ability = TemporaryBallAbility(rawValue: rawAbility) {
+                simulation.activateTemporaryAbility(ability)
+                snapshot = simulation.snapshot
+                hudState = HUDState(snapshot: simulation.snapshot)
+            }
+            if ProcessInfo.processInfo.arguments.contains("--character-ability-ready") {
+                simulation.fullyChargeCharacterAbilityForTesting()
+                snapshot = simulation.snapshot
+                hudState = HUDState(snapshot: simulation.snapshot)
+            }
+            if let rawDelay = ProcessInfo.processInfo.arguments.value(after: "--auto-character-ability-after"),
+               let delay = TimeInterval(rawDelay) {
+                debugAutoCharacterAbilityTime = max(0, delay)
+            }
         }
 #endif
 
-        if mode.isEndless {
+        if let checkpoint {
+            switch checkpoint.intermission {
+            case .draft(let choices):
+                phase = .draft(choices)
+            case .worldTransition(let from, let to, let draft):
+                phase = .worldTransition(from: from, to: to, draft: draft)
+            }
+        } else if mode.isEndless {
             phase = .draft(makeDraft())
         } else if let level, !progress.seenCampaignBriefingLevels.contains(level.number) {
             let discoveries = CampaignBriefingCatalog.discoveries(for: level)
@@ -79,31 +117,45 @@ final class GameSessionModel {
             }
         }
 #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--show-draft") {
-            phase = .draft(
-                mode.isEndless
-                    ? [.specialBall(.volt), .specialBall(.ice), .specialBall(.split)]
-                    : [.ability(.oneTwo), .ability(.quickRelease), .ability(.powerDrive)]
-            )
-        }
-        if ProcessInfo.processInfo.arguments.contains("--auto-kick-off") {
-            if case .briefing = phase {
-                phase = .playing
-            } else if case .draft(let choices) = phase, let choice = choices.first {
-                simulation.apply(choice)
-                snapshot = simulation.snapshot
-                hudState = HUDState(snapshot: simulation.snapshot)
-                phase = .playing
+        if checkpoint == nil {
+            if ProcessInfo.processInfo.arguments.contains("--show-draft") {
+                phase = .draft(
+                    mode.isEndless
+                        ? [.specialBall(.volt), .specialBall(.ice), .specialBall(.split)]
+                        : [.ability(.oneTwo), .ability(.quickRelease), .ability(.powerDrive)]
+                )
             }
-        }
-        if mode.isEndless,
-           ProcessInfo.processInfo.arguments.contains("--world-transition-preview") {
-            let fromWave = max(1, snapshot.wave - 1)
-            phase = .worldTransition(
-                from: EndlessRules.world(for: fromWave),
-                to: snapshot.world,
-                draft: makeDraft()
-            )
+            if mode.isEndless,
+               ProcessInfo.processInfo.arguments.contains("--audit-draft") {
+                phase = .draft([
+                    .specialBall(.ice),
+                    .specialBall(.polarLink),
+                    .specialBall(.gravityWell),
+                ])
+            }
+            if ProcessInfo.processInfo.arguments.contains("--auto-kick-off") {
+                if case .briefing = phase {
+                    phase = .playing
+                } else if case .draft(let choices) = phase, let choice = choices.first {
+                    simulation.apply(choice)
+                    snapshot = simulation.snapshot
+                    hudState = HUDState(snapshot: simulation.snapshot)
+                    phase = .playing
+                }
+            }
+            if mode.isEndless,
+               ProcessInfo.processInfo.arguments.contains("--world-transition-preview") {
+                let fromWave = max(1, snapshot.wave - 1)
+                phase = .worldTransition(
+                    from: EndlessRules.world(for: fromWave),
+                    to: snapshot.world,
+                    draft: makeDraft()
+                )
+            }
+            if ProcessInfo.processInfo.arguments.contains("--death-save-preview") {
+                simulation.setTokensForTesting(100)
+                handleForcedDefeatForTesting()
+            }
         }
 #endif
     }
@@ -112,17 +164,76 @@ final class GameSessionModel {
     var isStarterDraft: Bool { mode.isEndless && snapshot.elapsed == 0 }
     var world: WorldDefinition { GameContent.world(snapshot.world) }
 
+    func makeRunCheckpoint(
+        creditedRunTokens: Int,
+        previous: RunCheckpoint?,
+        savedAt: Date = .now
+    ) -> RunCheckpoint? {
+        guard snapshot.wave > 1 else { return nil }
+
+        let intermission: RunCheckpointIntermission
+        switch phase {
+        case .draft(let choices):
+            intermission = .draft(choices)
+        case .worldTransition(let from, let to, let draft):
+            intermission = .worldTransition(
+                from: from,
+                to: to,
+                draft: draft
+            )
+        default:
+            return nil
+        }
+
+        return RunCheckpoint(
+            schemaVersion: RunCheckpoint.currentSchemaVersion,
+            runID: runID,
+            mode: mode,
+            activeRelic: activeRelic,
+            savedAt: savedAt,
+            revision: (previous?.revision ?? 0) + 1,
+            simulation: simulation.makeRunCheckpoint(),
+            intermission: intermission,
+            sessionRandom: random,
+            draftsChosen: draftsChosen,
+            deathSaveWasUsed: deathSaveWasUsed,
+            creditedRunTokens: max(
+                previous?.creditedRunTokens ?? 0,
+                creditedRunTokens
+            )
+        )
+    }
+
     func update(currentTime: TimeInterval) {
-        guard phase == .playing else { lastTime = currentTime; return }
-        let delta = lastTime.map { currentTime - $0 } ?? 1.0 / 60.0
+        let realDelta = max(
+            0,
+            lastTime.map { currentTime - $0 } ?? 1.0 / 60.0
+        )
         lastTime = currentTime
+        if phase == .deathSaveCountdown {
+            updateDeathSaveCountdown(
+                delta: min(realDelta, 1.0 / 20.0)
+            )
+            return
+        }
+        guard phase == .playing else { return }
+        let isPlayingAbilityCinematic = abilityCinematicRemaining > 0
+        abilityCinematicRemaining = max(
+            0,
+            abilityCinematicRemaining - realDelta
+        )
+        let delta = isPlayingAbilityCinematic ? realDelta * 0.22 : realDelta
         var events = simulation.update(delta: delta)
 #if DEBUG
         if !debugDidAutoActivateCharacterAbility,
            let activationTime = debugAutoCharacterAbilityTime,
            simulation.snapshot.elapsed >= activationTime {
             debugDidAutoActivateCharacterAbility = true
-            events.append(contentsOf: simulation.activateCharacterAbility())
+            let abilityEvents = simulation.activateCharacterAbility()
+            if !abilityEvents.isEmpty, allowsDebugAbilityCinematic {
+                abilityCinematicRemaining = 0.18
+            }
+            events.append(contentsOf: abilityEvents)
         }
 #endif
         snapshot = simulation.snapshot
@@ -155,10 +266,13 @@ final class GameSessionModel {
 
     func setPlayerTarget(_ x: Double) { simulation.setPlayerTarget(x: x) }
 
-    func activateCharacterAbility() {
+    func activateCharacterAbility(cinematic: Bool) {
         guard phase == .playing else { return }
         let events = simulation.activateCharacterAbility()
         guard !events.isEmpty else { return }
+        if cinematic {
+            abilityCinematicRemaining = 0.18
+        }
         snapshot = simulation.snapshot
         hudState = HUDState(snapshot: snapshot)
         recentEvents = events
@@ -189,7 +303,14 @@ final class GameSessionModel {
     }
 
     func togglePause() {
-        phase = phase == .paused ? .playing : .paused
+        switch phase {
+        case .playing:
+            phase = .paused
+        case .paused:
+            phase = .playing
+        default:
+            return
+        }
         lastTime = nil
     }
 
@@ -199,6 +320,57 @@ final class GameSessionModel {
         lastTime = nil
     }
 
+    @discardableResult
+    func continueAfterDeathSave() -> Bool {
+        guard phase == .deathSaveOffer,
+              !deathSaveWasUsed,
+              let restoredStamina = simulation.reviveAfterDeathSave() else {
+            return false
+        }
+
+        deathSaveWasUsed = true
+        snapshot = simulation.snapshot
+        hudState = HUDState(snapshot: snapshot)
+        recentEvents = [
+            .heal(
+                restoredStamina,
+                .init(x: snapshot.playerX, y: 0.16)
+            ),
+        ]
+        lastEvent = recentEvents.last
+        eventPulse += 1
+        deathSaveCountdownRemaining = DeathSaveRules.resumeCountdownDuration
+        deathSaveCountdownSeconds = Int(
+            ceil(DeathSaveRules.resumeCountdownDuration)
+        )
+        phase = .deathSaveCountdown
+        lastTime = nil
+        return true
+    }
+
+    func declineDeathSave() {
+        guard phase == .deathSaveOffer else { return }
+        phase = .finished
+        didFinish = true
+    }
+
+#if DEBUG
+    func forceDefeatForTesting() {
+        handleForcedDefeatForTesting()
+    }
+
+    func completeCurrentWaveForTesting() {
+        let events = simulation.completeCurrentWaveForTesting()
+        snapshot = simulation.snapshot
+        hudState = HUDState(snapshot: snapshot)
+        recentEvents = events
+        if !events.isEmpty { eventPulse += 1 }
+        for event in events {
+            handle(event)
+        }
+    }
+#endif
+
     private func handle(_ event: SimulationEvent) {
         lastEvent = event
         switch event {
@@ -206,13 +378,47 @@ final class GameSessionModel {
             phase = .draft(makeDraft())
         case .worldTransitioned(let from, let to):
             phase = .worldTransition(from: from, to: to, draft: makeDraft())
-        case .finished:
-            phase = .finished
-            didFinish = true
+        case .finished(let didWin):
+            if !didWin && !deathSaveWasUsed {
+                phase = .deathSaveOffer
+            } else {
+                phase = .finished
+                didFinish = true
+            }
         default:
             break
         }
     }
+
+    private func updateDeathSaveCountdown(delta: TimeInterval) {
+        deathSaveCountdownRemaining = max(
+            0,
+            deathSaveCountdownRemaining - delta
+        )
+        let secondsRemaining = Int(
+            ceil(deathSaveCountdownRemaining)
+        )
+        if secondsRemaining != deathSaveCountdownSeconds {
+            deathSaveCountdownSeconds = secondsRemaining
+        }
+        guard deathSaveCountdownRemaining == 0 else { return }
+
+        phase = .playing
+        lastTime = nil
+    }
+
+#if DEBUG
+    private func handleForcedDefeatForTesting() {
+        let events = simulation.forceDefeatForTesting()
+        snapshot = simulation.snapshot
+        hudState = HUDState(snapshot: snapshot)
+        recentEvents = events
+        if !events.isEmpty { eventPulse += 1 }
+        for event in events {
+            handle(event)
+        }
+    }
+#endif
 
     private func makeDraft() -> [RunUpgradeChoice] {
         var pool: [RunUpgradeChoice]

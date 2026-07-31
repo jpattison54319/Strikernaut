@@ -2,7 +2,10 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(GameStore.self) private var store
+    @Environment(RewardedAdService.self) private var rewardedAds
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var shouldResetRewardAfterBackground = false
 
     var body: some View {
         ZStack {
@@ -14,11 +17,20 @@ struct RootView: View {
                     CampaignNavigationView(route: campaignRoute)
                 case .endless: EndlessHubView()
                 case .characters: CharacterRosterView()
+                case .relics: RelicsView()
+                case .relicForge: RelicForgeView()
                 case .upgrades: UpgradesView()
                 case .settings: SettingsView()
                 case .onboarding: OnboardingView()
                 case .trophies: TrophiesView()
-                case .playing(let mode): GameContainerView(mode: mode, progress: store.progress, settings: store.settings)
+                case .playing(let mode):
+                    RunLaunchView(
+                        mode: mode,
+                        progress: store.progress,
+                        settings: store.settings
+                    )
+                case .relicDrop(let result):
+                    RelicDropRevealView(result: result)
                 case .result(let result): ResultView(result: result)
                 }
             }
@@ -45,6 +57,19 @@ struct RootView: View {
         .task {
             await Task.yield()
             await store.uiAudio.prepare()
+            rewardedAds.configure()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            handleScenePhaseChange(newPhase)
+        }
+    }
+
+    private func handleScenePhaseChange(_ newPhase: ScenePhase) {
+        if newPhase == .background, !rewardedAds.isPresenting {
+            shouldResetRewardAfterBackground = true
+        } else if newPhase == .active, shouldResetRewardAfterBackground {
+            shouldResetRewardAfterBackground = false
+            store.resetRewardedTokenBonusEligibility()
         }
     }
 }
@@ -56,11 +81,14 @@ private extension GameStore.Route {
         case .campaign(let route): "campaign-\(route.transitionIdentity)"
         case .endless: "endless"
         case .characters: "characters"
+        case .relics: "relics"
+        case .relicForge: "relic-forge"
         case .upgrades: "upgrades"
         case .settings: "settings"
         case .onboarding: "onboarding"
         case .trophies: "trophies"
         case .playing(let mode): "playing-\(mode.transitionIdentity)"
+        case .relicDrop(let result): "relic-drop-\(result.runID.uuidString)"
         case .result(let result): "result-\(result.mode.transitionIdentity)-\(result.didWin)-\(result.wave)"
         }
     }

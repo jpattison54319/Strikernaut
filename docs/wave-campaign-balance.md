@@ -12,8 +12,8 @@ Campaign and Endless waves end from combat outcomes, never elapsed time.
   reinforcements never increment the regular quota.
 - Campaign keeps three waves in world levels 1–3, four in 4–7, and five in
   8–10. Only the final wave is a boss wave.
-- A non-world-final level ends with a mini-boss. Levels 10, 20, and 30 end with
-  the current world's mega-boss.
+- A non-world-final level ends with a mini-boss. Levels 10, 20, 30, 40, 50,
+  60, and 70 end with the current world's mega-boss.
 - Endless has no maximum wave. Every fifth wave is a boss wave; the HUD shows
   only the current wave number.
 
@@ -26,14 +26,14 @@ target. It is not read by the runtime completion path.
 wave:
 
 ```text
-worldIndex = Earth 0, Moon 1, Mars 2
-base = 18 + round(0.9 × (globalLevel - 1)) + 3 × worldIndex
-quota = round(base × (1 + 0.12 × (wave - 1)))
+worldIndex = position in GameContent.worlds (Earth 0 through Neptune 6)
+base = 18 + 2 × (globalLevel - 1) + 3 × worldIndex
+quota = round(base × (1 + 0.18 × (wave - 1)))
 ```
 
-This produces an 18-enemy opening on Earth Level 1, 30 on Moon Level 11, 42 on
-Mars Level 21, and 50 on Mars Level 30. Each later regular wave in a level adds
-12% before rounding. The final boss objective is always one.
+This produces opening quotas of 18 on Earth Level 1, 41 on Moon Level 11, 64 on
+Mars Level 21, 82 on Mars Level 30, and 174 on Neptune Level 70. Every later
+regular wave adds 18% before rounding. The final boss objective is always one.
 
 `EndlessRules` uses:
 
@@ -55,7 +55,11 @@ Endless is a single run, not a per-world selection:
 Waves  1–10  Earth
 Waves 11–20  Moon
 Waves 21–30  Mars
-Wave      31 Earth again, with all absolute-wave scaling preserved
+Waves 31–40  Jupiter
+Waves 41–50  Saturn
+Waves 51–60  Uranus
+Waves 61–70  Neptune
+Wave      71 Earth again, with all absolute-wave scaling preserved
 ```
 
 `EndlessRules.worldSequence` is derived from `GameContent.worlds`; a future
@@ -68,63 +72,96 @@ SpriteKit field is rebuilt underneath.
 
 ## Crowd and spawn safety
 
-Counts can rise indefinitely while active enemies remain bounded:
+Campaign crowd size grows aggressively but remains explicitly bounded:
 
 ```text
-Campaign cap = min(8, 4 + worldIndex + floor((wave - 1) / 2))
-Endless cap = min(10, 5 + chapterIndex)
+Campaign pack =
+    min(
+        16,
+        1
+        + floor((globalLevel - 1) / 9)
+        + landmarkTier
+        + (wave - 1)
+    )
+
+Campaign enemy cap =
+    min(
+        48,
+        6
+        + floor((globalLevel - 1) / 2)
+        + landmarkTier
+        + 2 × (wave - 1)
+    )
+
+Campaign hostile-projectile cap =
+    min(
+        10,
+        3
+        + floor((globalLevel - 1) / 15)
+        + landmarkTier
+        + floor((wave - 1) / 2)
+    )
+
+Endless cap = min(18, 6 + floor((wave - 1) / 4))
 ```
 
-Campaign spawn cadence is:
+Campaign calculates a continuously shrinking per-enemy interval, then releases
+that workload in pulses:
 
 ```text
-1.55 × 0.985^(globalLevel - 1)
-     × 0.90^worldIndex
-     × 0.96^landmarkTier
-     × 0.91^(wave - 1)
+pressureIndex =
+    (globalLevel - 1) + 1.5 × cumulativeLandmarks
+
+perEnemyInterval =
+    max(
+        1.55 × 0.9745^pressureIndex,
+        0.60 × 0.9965^pressureIndex
+    )
+    × 0.91^(wave - 1)
+
+pulseInterval = max(0.32, perEnemyInterval × packSize)
 ```
 
-It has a 0.60-second safety floor. Endless cadence approaches a 0.32-second
-floor and its pack size tops out at four. A spawn is allowed only when both an
-active slot and an unspawned quota slot remain, preventing over-spawn at the end
-of a wave.
+The pack multiplier changes presentation, not average workload. Level 1 opens
+with one enemy per pulse, Level 20 with five, Uranus with six, and Neptune's
+fourth regular wave with thirteen. An underpowered late-game build can fill the
+48-enemy field; a prepared build destroys the same pulses before that backlog
+forms. Endless cadence still approaches a 0.25-second floor and its pack size
+tops out at five. All spawning respects the remaining active and quota slots,
+preventing over-spawn at the end of a wave.
 
 ## Strength and upgrade budget
 
-Enemy count is only one axis. Campaign health uses:
+Enemy count is only one axis. Campaign regular health is derived from the
+player-independent reference build:
 
 ```text
-world health base = Earth 0.92, Moon 1.60, Mars 2.80
-level health      = world base × 1.03^(worldLevel - 1)
-landmark tier     = 0 on 1–4, 1 on 5–7, 2 on 8–10
-wave health       = level health × 1.08^landmarkTier × 1.15^(wave - 1)
+averageEnemyHP =
+    referenceBallDamage
+    × authoredLevelFraction
+    × 1.14^(wave - 1)
 ```
 
-Level 1 keeps a separate forgiving `0.78` opening multiplier. Campaign damage
-uses:
+The authored reference finale ranks are 3, 5, 7, 9, 11, 13, and 15. World
+Levels 5 and 8 jump toward the next reference rank, and Level 10 derives boss
+health from reference DPS and an increasing 50-to-59-second target. Incoming
+damage, movement speed, attack cadence, hostile projectile speed, quota,
+per-enemy arrival pressure, and average enemy health all increase independently
+from one level to the next. The complete formulas and numerical economy outcomes
+are maintained in `docs/balancing.md`.
 
-```text
-world damage base = Earth 1.00, Moon 1.34, Mars 1.75
-wave damage       = world base
-                  × (1 + 0.015 × (worldLevel - 1))
-                  × 1.025^landmarkTier
-                  × 1.07^(wave - 1)
-```
-
-The same landmark tiers also make spawn cadence 4% faster. This makes World
-Levels 5 and 8 persistent steps instead of one-level spikes; World Level 10
-adds the mega-boss. The Moon and Mars entries each jump opening-wave health by
-more than 14%, damage by roughly 10% or more, speed by at least 8%, and cadence
-again. Their harmful world rules add another pressure axis.
-
-- A wave raises health by 15%, slightly ahead of the 14% expected offensive
-  value of one average draft choice. Damage rises 7%, speed rises 5%, and spawn
-  cadence contracts 9%.
+- Expected Campaign draft offense grows by `1.14^(draft count)`.
 - Permanent Impact, Tempo, Flight, and Spin continue changing damage, cadence,
-  travel time, and critical tiers.
+  travel time, and critical tiers without loadout-based rubber-banding.
+- Conditioning increases real hit capacity because the smooth single-source
+  ceiling stays at 25 baseline stamina instead of rising with upgraded stamina.
 - Endless health and damage are uncapped functions of wave number. Quick
   Release approaches its 0.14-second safety floor asymptotically, so additional
   ranks still improve an advanced build.
+- Boss reinforcements grant combat feedback and score but no Training Tokens,
+  preventing infinite boss-stalling income.
+- Campaign enemies retain full token rewards. Higher permanent-upgrade prices
+  absorb the extra horde income.
 
 The fixed authored quota deliberately does not inspect the player's actual
 loadout. Strong builds clear faster; weaker builds face more escape pressure.
@@ -133,7 +170,8 @@ purchase.
 
 ## Harmful world cadence
 
-Earth has no world hazard. Moon and Mars effects are strictly negative:
+Earth has no world hazard. Every later world's effect is strictly negative.
+Moon and Mars establish the cadence contract:
 
 - Moon schedules its first orbital-debris strike after ten seconds of active
   play. A second strike follows three seconds later; the pair repeats every
@@ -204,8 +242,8 @@ Endless:    12 | [world enemy emblem] 31
 Boss:      5/5 | [world boss emblem]   1
 ```
 
-Earth, Moon, and Mars each have an original image-generated abstract faction
-sigil and a more imposing boss-faction variant. The whole plate is one
+Every authored world has an original abstract faction sigil and a more imposing
+boss-faction variant. The whole plate is one
 accessibility element, announcing the current wave and remaining enemy count.
 Enemy-count decrements use a rolling numeric transition, direction-aware
 movement, a short scale punch, glow, and spring settle. The advanced wave value
@@ -233,9 +271,11 @@ power and resets the circular HUD timer.
 Unit coverage pins the formulas, active caps, kill-only completion, escape
 replacement, objective-role exclusions, final-wave bosses, Endless fifth-wave
 bosses, reinforcement gaps, power-target timing, signature telegraphs, one-hit
-hazards, and HUD values. A deterministic seeded playtest compares under-budget
-and recovered builds at World Levels 5, 8, and 10 in all three worlds. UI
-coverage asserts the combined Campaign, boss, and Endless objective labels and
-the absence of a persistent world-effect HUD. Simulator and physical-device play
-remain necessary for visual readability, real frame pacing, and final retry/fun
-tuning.
+hazards, strict level-to-level pressure growth, horde pulse sizes, hostile
+projectile limits, and HUD values. Deterministic seeded playtests compare
+under-budget and recovered builds at every world finale and prove that a
+Moon-ready rank-5 build cannot skip to Uranus while a recovered build can win.
+UI coverage asserts the combined Campaign, boss, and Endless objective labels
+and the absence of a persistent world-effect HUD. Simulator and physical-device
+play remain necessary for visual readability, real frame pacing with 48 active
+enemies, and final retry/fun tuning.

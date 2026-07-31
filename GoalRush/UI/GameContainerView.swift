@@ -3,25 +3,49 @@ import SwiftUI
 
 struct GameContainerView: View {
     @Environment(GameStore.self) private var store
+    @Environment(RewardedAdService.self) private var rewardedAds
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var session: GameSessionModel
     @State private var scene: GoalRushScene
     @State private var audio: GameAudio
     @State private var creditedRunTokens = 0
+    @State private var lastCheckpoint: RunCheckpoint?
+    @State private var checkpointWriteTask: Task<Void, Never>?
+    @State private var isRestarting = false
+    @State private var isFinalizing = false
 
-    init(mode: RunMode, progress: PlayerProgress, settings: GameSettings) {
-        let session = GameSessionModel(mode: mode, progress: progress, settings: settings)
+    init(
+        mode: RunMode,
+        progress: PlayerProgress,
+        settings: GameSettings,
+        checkpoint: RunCheckpoint? = nil
+    ) {
+        let session = GameSessionModel(
+            mode: mode,
+            progress: progress,
+            settings: settings,
+            checkpoint: checkpoint
+        )
         _session = State(initialValue: session)
         _scene = State(initialValue: GoalRushScene(session: session, reducedEffects: settings.reducedFlashes))
         _audio = State(initialValue: GameAudio(settings: settings))
+        _creditedRunTokens = State(
+            initialValue: checkpoint?.creditedRunTokens ?? 0
+        )
+        _lastCheckpoint = State(initialValue: checkpoint)
     }
 
     var body: some View {
         ZStack {
-            SpriteView(scene: scene, isPaused: session.phase == .paused, preferredFramesPerSecond: 60)
+            SpriteView(
+                scene: scene,
+                isPaused: shouldPauseScene,
+                preferredFramesPerSecond: 60
+            )
                 .ignoresSafeArea()
                 .accessibilityLabel("Active soccer training run")
+                .accessibilityHidden(session.phase != .playing)
             VStack(spacing: 6) {
                 GameplayStatusBar(
                     world: session.world.id,
@@ -29,9 +53,13 @@ struct GameContainerView: View {
                     maxStamina: session.hudState.maxStamina,
                     staminaTint: staminaColor,
                     tokens: session.hudState.tokens,
+                    endlessScore: session.mode.isEndless
+                        ? session.hudState.score
+                        : nil,
                     shieldCharges: session.hudState.shieldCharges,
                     pause: pauseRun
                 )
+                .allowsHitTesting(session.phase == .playing)
 
                 HStack(alignment: .center, spacing: GoalRushTheme.Metrics.compactSpacing) {
                     WaveObjectiveHUD(
@@ -88,6 +116,7 @@ struct GameContainerView: View {
                 reduceMotion ? .easeOut(duration: 0.16) : .snappy(duration: 0.20),
                 value: session.hudState.combo > 0
             )
+            .accessibilityHidden(session.phase != .playing)
 
             VStack {
                 Spacer()
@@ -104,6 +133,7 @@ struct GameContainerView: View {
             .padding(.trailing, 18)
             .padding(.bottom, 116)
             .allowsHitTesting(session.phase == .playing)
+            .accessibilityHidden(session.phase != .playing)
 
             if case .briefing(let discoveries) = session.phase, let level = session.level {
                 CampaignBriefingView(level: level, discoveries: discoveries, session: session)
@@ -117,6 +147,23 @@ struct GameContainerView: View {
                 pauseOverlay
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
+            if session.phase == .deathSaveOffer {
+                DeathSaveOfferView(
+                    mode: session.mode,
+                    wave: session.hudState.wave,
+                    continueRun: continueAfterDeathSave,
+                    finishRun: finishWithoutDeathSave
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .zIndex(30)
+            }
+            if session.phase == .deathSaveCountdown {
+                DeathSaveCountdownView(
+                    secondsRemaining: session.deathSaveCountdownSeconds
+                )
+                .transition(.opacity)
+                .zIndex(30)
+            }
             if case .worldTransition(let from, let to, _) = session.phase {
                 EndlessWorldTransitionView(
                     from: from,
@@ -127,30 +174,58 @@ struct GameContainerView: View {
                 .transition(.opacity)
                 .zIndex(20)
             }
+#if DEBUG
+            if ProcessInfo.processInfo.arguments.contains(
+                "--gameplay-runtime-probe"
+            ) {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .accessibilityElement()
+                    .accessibilityLabel("Gameplay runtime")
+                    .accessibilityValue(
+                        "\(Int(session.hudState.elapsed * 10))"
+                    )
+                    .accessibilityIdentifier("gameplay-runtime-probe")
+            }
+#endif
         }
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: session.phase)
         .onChange(of: session.phase) { _, phase in
-            if phase == .paused || phase.isDraft { checkpointRunTokens() }
+            synchronizeScenePlayback()
+            if phase.isRunCheckpointBoundary {
+                checkpointRunTokens()
+                persistWaveCheckpoint()
+            } else if phase == .paused || phase == .deathSaveOffer {
+                checkpointRunTokens()
+                persistCheckpointMetadata()
+            }
             if phase == .finished { finishRun() }
         }
+        .onAppear(perform: handleContainerAppearance)
         .task {
-            scene.eventHandler = handleSimulationEvents
             if case .briefing = session.phase, let levelNumber = session.levelNumber {
                 store.markCampaignBriefingSeen(level: levelNumber)
             }
             await Task.yield()
             await audio.prepare()
         }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            synchronizeScenePlayback()
+            await audio.resumeHaptics()
+        }
+        .task(id: rewardedAds.isPresenting) {
+            await handleRewardedAdPresentationChange()
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active {
                 if session.phase == .playing { session.togglePause() }
                 checkpointRunTokens()
+                persistCheckpointMetadata()
             }
+            synchronizeScenePlayback()
         }
-        .onDisappear {
-            scene.eventHandler = nil
-            audio.stop()
-        }
+        .onDisappear(perform: handleContainerDisappearance)
     }
 
     private var pauseOverlay: some View {
@@ -171,6 +246,7 @@ struct GameContainerView: View {
 
                         Button("Retry", action: retryRun)
                             .buttonStyle(SecondaryGameButton())
+                            .disabled(isRestarting)
                             .accessibilityIdentifier("pause-retry")
                     }
                 }
@@ -184,43 +260,114 @@ struct GameContainerView: View {
     private func continueRun() {
         store.uiAudio.play(.tap)
         session.togglePause()
+        synchronizeScenePlayback()
     }
 
     private func pauseRun() {
         store.uiAudio.play(.whoosh, volume: 0.4)
         session.togglePause()
+        synchronizeScenePlayback()
+    }
+
+    private func continueAfterDeathSave() {
+        guard session.continueAfterDeathSave() else { return }
+        synchronizeScenePlayback()
+        persistCheckpointMetadata()
+        store.uiAudio.play(.fanfare, volume: 0.7)
+    }
+
+    private func finishWithoutDeathSave() {
+        store.uiAudio.play(.locked, volume: 0.65)
+        session.declineDeathSave()
     }
 
     private func activateCharacterAbility() {
         guard session.hudState.characterAbilityReady else { return }
         store.uiAudio.play(.fanfare, volume: 0.75, feedback: nil)
-        session.activateCharacterAbility()
+        session.activateCharacterAbility(
+            cinematic: !reduceMotion && !store.settings.reducedFlashes
+        )
     }
 
     private func leaveForHome() {
         store.uiAudio.play(.tap)
         checkpointRunTokens()
+        persistCheckpointMetadata()
+        scene.prepareForRemoval()
         store.route = .home
     }
 
     private func retryRun() {
+        guard !isRestarting else { return }
         store.uiAudio.play(.tap)
         checkpointRunTokens()
-        scene.eventHandler = nil
+        scene.prepareForRemoval()
+        checkpointWriteTask?.cancel()
+        checkpointWriteTask = nil
+        isRestarting = true
 
-        let replacementSession = GameSessionModel(
-            mode: session.mode,
-            progress: store.progress,
-            settings: store.settings
-        )
-        let replacementScene = GoalRushScene(
-            session: replacementSession,
-            reducedEffects: store.settings.reducedFlashes
-        )
-        replacementScene.eventHandler = handleSimulationEvents
-        creditedRunTokens = 0
-        session = replacementSession
-        scene = replacementScene
+        Task {
+            try? await store.runCheckpointStore.delete(for: session.mode)
+            guard !Task.isCancelled else { return }
+
+            let replacementSession = GameSessionModel(
+                mode: session.mode,
+                progress: store.progress,
+                settings: store.settings
+            )
+            let replacementScene = GoalRushScene(
+                session: replacementSession,
+                reducedEffects: store.settings.reducedFlashes
+            )
+            replacementScene.eventHandler = handleSimulationEvents
+            creditedRunTokens = 0
+            lastCheckpoint = nil
+            session = replacementSession
+            scene = replacementScene
+            synchronizeScenePlayback()
+            isRestarting = false
+        }
+    }
+
+    private var shouldPauseScene: Bool {
+        scenePhase != .active
+            || rewardedAds.isPresenting
+            || session.phase.pausesScene
+    }
+
+    private func synchronizeScenePlayback() {
+        scene.synchronizePlayback(isPaused: shouldPauseScene)
+    }
+
+    private func handleContainerAppearance() {
+        scene.eventHandler = handleSimulationEvents
+        synchronizeScenePlayback()
+    }
+
+    private func handleContainerDisappearance() {
+        if rewardedAds.isPresenting {
+            scene.synchronizePlayback(isPaused: true)
+            return
+        }
+        scene.prepareForRemoval()
+        audio.stop()
+    }
+
+    private func handleRewardedAdPresentationChange() async {
+        if rewardedAds.isPresenting {
+            scene.synchronizePlayback(isPaused: true)
+            return
+        }
+
+        // Let the full-screen presenter finish restoring the underlying view
+        // before clearing SpriteKit's own pause state.
+        await Task.yield()
+        guard !Task.isCancelled, !rewardedAds.isPresenting else { return }
+        scene.eventHandler = handleSimulationEvents
+        synchronizeScenePlayback()
+        if scenePhase == .active {
+            await audio.resumeHaptics()
+        }
     }
 
     private var staminaColor: Color {
@@ -232,6 +379,7 @@ struct GameContainerView: View {
 
     private func buildResult(didWin: Bool, bonus: Int = 0) -> RunResult {
         RunResult(
+            runID: session.runID,
             mode: session.mode,
             didWin: didWin,
             tokensEarned: session.snapshot.tokens + bonus,
@@ -242,12 +390,16 @@ struct GameContainerView: View {
             bossesDefeated: session.snapshot.bossesDefeated,
             bestCombo: session.snapshot.bestCombo,
             abilitiesDrafted: session.draftsChosen,
+            character: session.character.id,
+            characterAbilityDefeats: session.snapshot.characterAbilityDefeats,
             staminaFraction: session.snapshot.stamina / max(1, session.snapshot.maxStamina)
         )
     }
 
     private func finishRun() {
+        guard !isFinalizing else { return }
         guard case .finished(let didWin) = session.lastEvent else { return }
+        isFinalizing = true
         let bonus: Int
         if let level = session.level {
             let wasCompleted = store.progress.levelRecords[level.number]?.completed == true
@@ -255,7 +407,19 @@ struct GameContainerView: View {
         } else {
             bonus = 0
         }
-        store.finish(buildResult(didWin: didWin, bonus: bonus), tokensAlreadyCredited: creditedRunTokens)
+        let result = buildResult(didWin: didWin, bonus: bonus)
+        scene.prepareForRemoval()
+        checkpointWriteTask?.cancel()
+        checkpointWriteTask = nil
+        Task {
+            try? await store.runCheckpointStore.delete(for: session.mode)
+            guard !Task.isCancelled else { return }
+            lastCheckpoint = nil
+            store.finish(
+                result,
+                tokensAlreadyCredited: creditedRunTokens
+            )
+        }
     }
 
     private func checkpointRunTokens() {
@@ -267,6 +431,39 @@ struct GameContainerView: View {
         store.creditRunTokens(uncredited)
         creditedRunTokens += uncredited
         store.saveProgress()
+    }
+
+    private func persistWaveCheckpoint() {
+        guard lastCheckpoint?.wave != session.snapshot.wave,
+              let checkpoint = session.makeRunCheckpoint(
+                creditedRunTokens: creditedRunTokens,
+                previous: lastCheckpoint
+              ) else {
+            return
+        }
+        lastCheckpoint = checkpoint
+        enqueueCheckpointWrite(checkpoint)
+    }
+
+    private func persistCheckpointMetadata() {
+        guard let checkpoint = lastCheckpoint else { return }
+        let updated = checkpoint.updatingRunMetadata(
+            creditedRunTokens: creditedRunTokens,
+            deathSaveWasUsed: session.deathSaveWasUsed
+        )
+        guard updated.creditedRunTokens != checkpoint.creditedRunTokens
+                || updated.deathSaveWasUsed != checkpoint.deathSaveWasUsed else {
+            return
+        }
+        lastCheckpoint = updated
+        enqueueCheckpointWrite(updated)
+    }
+
+    private func enqueueCheckpointWrite(_ checkpoint: RunCheckpoint) {
+        checkpointWriteTask?.cancel()
+        checkpointWriteTask = Task {
+            try? await store.runCheckpointStore.save(checkpoint)
+        }
     }
 
     private func handleSimulationEvents(_ events: [SimulationEvent], snapshot: SimulationSnapshot) {
@@ -284,5 +481,23 @@ struct GameContainerView: View {
 private extension GameSessionModel.Phase {
     var isDraft: Bool {
         if case .draft = self { true } else { false }
+    }
+
+    var pausesScene: Bool {
+        switch self {
+        case .paused, .deathSaveOffer, .finished:
+            true
+        default:
+            false
+        }
+    }
+
+    var isRunCheckpointBoundary: Bool {
+        switch self {
+        case .draft, .worldTransition:
+            true
+        default:
+            false
+        }
     }
 }

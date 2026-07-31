@@ -3,15 +3,17 @@
 Strikernaut is a native portrait iPhone arcade game built with SwiftUI and
 SpriteKit. Drag the player horizontally, automatically kick soccer balls into
 approaching opponents, draft temporary techniques during a run, and spend
-Training Tokens on permanent player and ball upgrades. Campaign spans 30
-challenges across Earth, the Moon, and Mars. Each world has a signature field
-rule, an exclusive temporary-power pool, an original arena, and a themed hero
-reward. Endless mode stacks uncapped roguelite powers against waves that keep
-scaling.
+Training Tokens on permanent player and ball upgrades. Campaign spans 70
+challenges across Earth, the Moon, Mars, Jupiter, Saturn, Uranus, and Neptune.
+Each world has a signature field rule, an exclusive temporary-power pool, an
+original arena, and a themed hero reward. Endless mode stacks uncapped
+roguelite powers against waves that keep scaling. Wave milestones also award
+one-slot permanent Endless Relics; see [the relic rules](docs/endless-relics.md).
 
-Campaign navigation follows a planet journey into a tall illustrated landmark
-map. Completed landmarks show up to three stars, locked challenges stay visibly
-disabled, and the planet journey continues toward a future Jupiter chapter.
+Campaign navigation follows a paged planet journey into tall illustrated
+landmark maps. Completed landmarks show up to three stars, locked challenges
+stay visibly disabled, and the route continues toward a future Andromeda
+chapter.
 
 ## Requirements
 
@@ -41,7 +43,8 @@ The default test destination is iPhone 17 Pro on iOS 26.5. Change
 - `--reset-save`: clear local progression before launch
 - `--reset-onboarding`: replay the first-time onboarding
 - `--currency 500`: set starting tokens for the current launch
-- `--screen endless`: open a menu screen directly (`planets`/`levels`, `earth-map`, `moon-map`, `mars-map`, `endless`, `gear`, `upgrades`, `settings`, `onboarding`, or `trophies`)
+- `--screen endless`: open a menu screen directly (`planets`/`levels`, `earth-map`, `moon-map`, `mars-map`, `endless`, `characters`, `relics`, `upgrades`, `settings`, `onboarding`, or `trophies`)
+- `--relic-fixtures`: seed every relic rarity plus Scrap for inventory previews
 - `--level 6`: launch directly into a level
 - `--endless mars`: launch an Endless run directly on an unlocked world
 - `--unlock-worlds`: unlock all current campaign worlds in debug builds

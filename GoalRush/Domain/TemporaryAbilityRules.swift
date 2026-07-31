@@ -15,6 +15,10 @@ enum TemporaryAbilityRules {
         case .orbitShot: 9
         case .solarPierce: 8
         case .volt: 7
+        case .gravityWell: 8
+        case .ringReturn: 9
+        case .polarLink: 8
+        case .undertow: 9
         }
     }
 
@@ -30,6 +34,10 @@ enum TemporaryAbilityRules {
         case .orbitShot: "Orbit Shot"
         case .solarPierce: "Solar Pierce"
         case .volt: "Volt Ball"
+        case .gravityWell: "Gravity Vortex"
+        case .ringReturn: "Return Shot"
+        case .polarLink: "Magnet Mark"
+        case .undertow: "Tidal Push"
         }
     }
 
@@ -45,6 +53,10 @@ enum TemporaryAbilityRules {
         case .orbitShot: "circle.dotted.circle.fill"
         case .solarPierce: "sun.max.trianglebadge.exclamationmark.fill"
         case .volt: "bolt.horizontal.fill"
+        case .gravityWell: "circle.dotted.circle.fill"
+        case .ringReturn: "arrow.trianglehead.2.clockwise.rotate.90"
+        case .polarLink: "point.3.connected.trianglepath.dotted"
+        case .undertow: "water.waves"
         }
     }
 

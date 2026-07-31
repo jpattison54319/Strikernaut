@@ -1,6 +1,6 @@
 import Foundation
 
-enum TemporaryBallAbility: String, CaseIterable, Identifiable, Sendable {
+nonisolated enum TemporaryBallAbility: String, Codable, CaseIterable, Identifiable, Sendable {
     case rapidFire
     case explosive
     case fire
@@ -11,6 +11,10 @@ enum TemporaryBallAbility: String, CaseIterable, Identifiable, Sendable {
     case orbitShot
     case solarPierce
     case volt
+    case gravityWell
+    case ringReturn
+    case polarLink
+    case undertow
 
     var id: String { rawValue }
 }

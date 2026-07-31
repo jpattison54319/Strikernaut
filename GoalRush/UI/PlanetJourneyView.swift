@@ -181,6 +181,14 @@ struct PlanetJourneyView: View {
             "Clear Earth challenge 10 to unlock the Moon."
         case .mars:
             "Clear Moon challenge 10 to unlock Mars."
+        case .jupiter:
+            "Clear Mars challenge 30 to unlock Jupiter."
+        case .saturn:
+            "Clear Jupiter challenge 40 to unlock Saturn."
+        case .uranus:
+            "Clear Saturn challenge 50 to unlock Uranus."
+        case .neptune:
+            "Clear Uranus challenge 60 to unlock Neptune."
         }
     }
 

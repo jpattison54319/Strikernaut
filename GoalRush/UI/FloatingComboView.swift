@@ -7,7 +7,7 @@ struct FloatingComboView: View {
     let combo: Int
 
     var body: some View {
-        Text("\(combo)x")
+        Text("\(GameNumberFormatter.compact(combo))x")
             .font(GoalRushTheme.Typography.metric(size: 28, relativeTo: .title2))
             .italic()
             .monospacedDigit()
@@ -16,7 +16,7 @@ struct FloatingComboView: View {
             .scaleEffect(isPulsing && !reduceMotion ? 1.15 : 1, anchor: .topTrailing)
             .opacity(reducedMotionOpacity)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Combo times \(combo)")
+            .accessibilityLabel("Combo times \(GameNumberFormatter.exact(combo))")
             .accessibilityIdentifier("combo-meter")
             .onChange(of: combo, initial: true) { previous, current in
                 guard current > 0, current >= previous else { return }

@@ -4,12 +4,14 @@ import SpriteKit
 /// search is convenient during construction, but repeating it for every enemy,
 /// limb, and health update adds avoidable traversal work to the hot loop.
 final class TargetRenderNode: SKNode {
-    enum StatusVisual: Equatable {
+    enum StatusVisual: Hashable {
         case none
         case frozen
         case burning
         case stunned
         case reversed
+        case magnetized
+        case undertow
     }
 
     private struct ShapePalette {
@@ -46,11 +48,13 @@ final class TargetRenderNode: SKNode {
     private(set) weak var fireFront: SKNode?
     private(set) weak var stunArcs: SKNode?
     private(set) weak var reverseTrail: SKNode?
+    private(set) weak var magnetMark: SKNode?
+    private(set) weak var undertowWaves: SKNode?
     private(set) var motionLights: [SKNode] = []
     private var tintShapes: [ShapePalette] = []
     private var tintSprites: [SpritePalette] = []
-    private var currentStatus: StatusVisual = .none
-    private var lastStatusRemaining: Double = 0
+    private var currentStatuses: Set<StatusVisual> = []
+    private var lastStatusRemaining: [StatusVisual: Double] = [:]
     private var cachedReducedMotion = false
 
     func cacheRenderNodes() {
@@ -75,6 +79,8 @@ final class TargetRenderNode: SKNode {
         fireFront = childNode(withName: "//status-fire-front")
         stunArcs = childNode(withName: "//status-stun-arcs")
         reverseTrail = childNode(withName: "//status-reverse-trail")
+        magnetMark = childNode(withName: "//status-magnet-mark")
+        undertowWaves = childNode(withName: "//status-undertow")
         motionLights = hitReactionRig?.children.filter { $0.name == "motion-light" } ?? []
         cacheTintableNodes()
         resetStatusEffects()
@@ -90,39 +96,50 @@ final class TargetRenderNode: SKNode {
     }
 
     func applyStatus(from target: TargetState, reducedMotion: Bool) {
-        let next: StatusVisual
-        let remaining: Double
-        if target.freezeRemaining > 0 {
-            next = .frozen
-            remaining = target.freezeRemaining
-        } else if target.stunRemaining > 0 {
-            next = .stunned
-            remaining = target.stunRemaining
-        } else if target.burnRemaining > 0 {
-            next = .burning
-            remaining = target.burnRemaining
-        } else if target.reverseRemaining > 0 {
-            next = .reversed
-            remaining = target.reverseRemaining
-        } else {
-            next = .none
-            remaining = 0
-        }
-
-        let wasReapplied = next == currentStatus && remaining > lastStatusRemaining + 0.25
-        guard next != currentStatus || wasReapplied || reducedMotion != cachedReducedMotion else {
-            lastStatusRemaining = remaining
+        let remainingByStatus: [StatusVisual: Double] = [
+            .frozen: target.freezeRemaining,
+            .stunned: target.stunRemaining,
+            .burning: target.burnRemaining,
+            .reversed: target.reverseRemaining,
+            .magnetized: target.magnetRemaining,
+            .undertow: target.undertowSlowRemaining,
+        ]
+        let nextStatuses = Set(
+            remainingByStatus.compactMap { status, remaining in
+                remaining > 0 ? status : nil
+            }
+        )
+        let reapplied = Set(nextStatuses.filter { status in
+            remainingByStatus[status, default: 0]
+                > lastStatusRemaining[status, default: 0] + 0.25
+        })
+        guard nextStatuses != currentStatuses
+                || !reapplied.isEmpty
+                || reducedMotion != cachedReducedMotion else {
+            lastStatusRemaining = remainingByStatus
             return
         }
 
-        if next != currentStatus {
-            transitionOut(currentStatus, reducedMotion: reducedMotion)
-            restoreModelPalette()
-            currentStatus = next
+        for status in currentStatuses.subtracting(nextStatuses) {
+            transitionOut(status, reducedMotion: reducedMotion)
         }
+        for status in nextStatuses where
+            !currentStatuses.contains(status) || reapplied.contains(status) {
+            transitionIn(
+                status,
+                reducedMotion: reducedMotion,
+                reapplication: reapplied.contains(status)
+            )
+        }
+        currentStatuses = nextStatuses
         cachedReducedMotion = reducedMotion
-        lastStatusRemaining = remaining
-        transitionIn(next, reducedMotion: reducedMotion, reapplication: wasReapplied)
+        lastStatusRemaining = remainingByStatus
+        statusUnderlay?.alpha = nextStatuses.isEmpty ? 0 : 1
+        statusOverlay?.alpha = nextStatuses.isEmpty ? 0 : 1
+        restoreModelPalette()
+        if action(forKey: "hit-flash") == nil {
+            applyActiveStatusTint()
+        }
     }
 
     func resetStatusEffects() {
@@ -136,9 +153,11 @@ final class TargetRenderNode: SKNode {
         fireFront?.alpha = 0
         stunArcs?.alpha = 0
         reverseTrail?.alpha = 0
+        magnetMark?.alpha = 0
+        undertowWaves?.alpha = 0
         restoreModelPalette()
-        currentStatus = .none
-        lastStatusRemaining = 0
+        currentStatuses.removeAll(keepingCapacity: true)
+        lastStatusRemaining.removeAll(keepingCapacity: true)
     }
 
     func playHitReaction(_ impact: ImpactEvent, reducedMotion: Bool) {
@@ -223,48 +242,62 @@ final class TargetRenderNode: SKNode {
             statusOverlay?.alpha = 1
             frostGlaze?.alpha = 0.72
             iceCrystals?.alpha = 1
-            applyStatusTintUnlessFlashing(.frozen)
             animateIce(reducedMotion: reducedMotion, pulse: reapplication)
         case .burning:
             statusUnderlay?.alpha = 1
             statusOverlay?.alpha = 1
             fireBack?.alpha = 0.82
             fireFront?.alpha = 1
-            applyStatusTintUnlessFlashing(.burning)
             animateFire(reducedMotion: reducedMotion, pulse: reapplication)
         case .stunned:
             statusUnderlay?.alpha = 1
             statusOverlay?.alpha = 1
             stunArcs?.alpha = 1
-            applyStatusTintUnlessFlashing(.stunned)
             animateStun(reducedMotion: reducedMotion, pulse: reapplication)
         case .reversed:
             statusUnderlay?.alpha = 1
             statusOverlay?.alpha = 1
             reverseTrail?.alpha = 0.88
-            applyStatusTintUnlessFlashing(.reversed)
             animateReverse(reducedMotion: reducedMotion, pulse: reapplication)
+        case .magnetized:
+            statusOverlay?.alpha = 1
+            magnetMark?.alpha = 1
+            animateMagnet(reducedMotion: reducedMotion, pulse: reapplication)
+        case .undertow:
+            statusUnderlay?.alpha = 1
+            undertowWaves?.alpha = 1
+            animateUndertow(reducedMotion: reducedMotion, pulse: reapplication)
         }
     }
 
     private func transitionOut(_ status: StatusVisual, reducedMotion: Bool) {
-        stopAnimations(in: statusUnderlay)
-        stopAnimations(in: statusOverlay)
         let duration = reducedMotion ? 0.06 : 0.18
         switch status {
         case .frozen:
+            stopAnimations(in: iceCrystals)
+            stopAnimations(in: frostGlaze)
             iceCrystals?.run(.group([
                 .scale(to: 1.16, duration: duration),
                 .fadeOut(withDuration: duration)
             ]))
             frostGlaze?.run(.fadeOut(withDuration: duration))
         case .burning:
+            stopAnimations(in: fireBack)
+            stopAnimations(in: fireFront)
             fireBack?.run(.group([.scaleY(to: 0.35, duration: duration), .fadeOut(withDuration: duration)]))
             fireFront?.run(.group([.scaleY(to: 0.35, duration: duration), .fadeOut(withDuration: duration)]))
         case .stunned:
+            stopAnimations(in: stunArcs)
             stunArcs?.run(.fadeOut(withDuration: duration))
         case .reversed:
+            stopAnimations(in: reverseTrail)
             reverseTrail?.run(.fadeOut(withDuration: duration))
+        case .magnetized:
+            stopAnimations(in: magnetMark)
+            magnetMark?.run(.fadeOut(withDuration: duration))
+        case .undertow:
+            stopAnimations(in: undertowWaves)
+            undertowWaves?.run(.fadeOut(withDuration: duration))
         case .none:
             break
         }
@@ -371,6 +404,45 @@ final class TargetRenderNode: SKNode {
         }
     }
 
+    private func animateMagnet(reducedMotion: Bool, pulse: Bool) {
+        guard let magnetMark else { return }
+        stopAnimations(in: magnetMark)
+        magnetMark.setScale(1)
+        if pulse {
+            magnetMark.run(.sequence([
+                .scale(to: reducedMotion ? 1.04 : 1.18, duration: 0.08),
+                .scale(to: 1, duration: 0.14),
+            ]), withKey: "magnet-pulse")
+        }
+        guard !reducedMotion else { return }
+        magnetMark.run(.repeatForever(.sequence([
+            .rotate(byAngle: 0.045, duration: 0.34),
+            .rotate(byAngle: -0.09, duration: 0.68),
+            .rotate(byAngle: 0.045, duration: 0.34),
+        ])), withKey: "magnet-field")
+    }
+
+    private func animateUndertow(reducedMotion: Bool, pulse: Bool) {
+        guard let undertowWaves else { return }
+        stopAnimations(in: undertowWaves)
+        undertowWaves.setScale(1)
+        if pulse {
+            undertowWaves.run(.sequence([
+                .scaleX(to: reducedMotion ? 1.04 : 1.20, y: 1, duration: 0.08),
+                .scale(to: 1, duration: 0.14),
+            ]), withKey: "undertow-pulse")
+        }
+        guard !reducedMotion else { return }
+        for (index, wave) in undertowWaves.children.enumerated() {
+            let distance: CGFloat = index.isMultiple(of: 2) ? 7 : -7
+            wave.run(.repeatForever(.sequence([
+                .moveBy(x: distance, y: 0, duration: 0.30),
+                .moveBy(x: -distance * 2, y: 0, duration: 0.60),
+                .moveBy(x: distance, y: 0, duration: 0.30),
+            ])), withKey: "undertow-flow")
+        }
+    }
+
     private func cacheTintableNodes() {
         tintShapes.removeAll(keepingCapacity: true)
         tintSprites.removeAll(keepingCapacity: true)
@@ -421,12 +493,21 @@ final class TargetRenderNode: SKNode {
 
     private func restoreActivePalette() {
         restoreModelPalette()
-        applyStatusTint(currentStatus)
+        applyActiveStatusTint()
     }
 
-    private func applyStatusTintUnlessFlashing(_ status: StatusVisual) {
-        guard action(forKey: "hit-flash") == nil else { return }
-        applyStatusTint(status)
+    private func applyActiveStatusTint() {
+        let orderedStatuses: [StatusVisual] = [
+            .burning,
+            .reversed,
+            .stunned,
+            .magnetized,
+            .undertow,
+            .frozen,
+        ]
+        for status in orderedStatuses where currentStatuses.contains(status) {
+            applyStatusTint(status)
+        }
     }
 
     private func applyStatusTint(_ status: StatusVisual) {
@@ -441,6 +522,10 @@ final class TargetRenderNode: SKNode {
             tintModel(toward: SKColor(red: 0.24, green: 0.88, blue: 1, alpha: 1), amount: 0.22)
         case .reversed:
             tintModel(toward: SKColor(red: 0.68, green: 0.20, blue: 1, alpha: 1), amount: 0.18)
+        case .magnetized:
+            tintModel(toward: SKColor(red: 0.16, green: 0.96, blue: 0.82, alpha: 1), amount: 0.14)
+        case .undertow:
+            tintModel(toward: SKColor(red: 0.08, green: 0.62, blue: 1, alpha: 1), amount: 0.16)
         }
     }
 

@@ -18,7 +18,7 @@ struct AbilityChoiceCard: View {
                 Spacer(minLength: 8)
                 chooseStrip
             }
-            .frame(height: usesPortraitDeck ? 356 : nil)
+            .frame(minHeight: usesPortraitDeck ? 408 : nil)
             .frame(maxWidth: .infinity)
             .foregroundStyle(GoalRushTheme.navy)
             .background {
@@ -106,16 +106,27 @@ struct AbilityChoiceCard: View {
     }
 
     private var effectSummary: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 5) {
             Text(presentation.title)
                 .font(GoalRushTheme.Typography.title3)
                 .bold()
                 .lineLimit(2, reservesSpace: usesPortraitDeck)
                 .minimumScaleFactor(0.72)
 
+            if !presentation.benefit.isEmpty {
+                Text(presentation.benefit)
+                    .font(GoalRushTheme.Typography.captionEmphasized)
+                    .foregroundStyle(GoalRushTheme.navy.opacity(0.86))
+                    .lineLimit(2, reservesSpace: usesPortraitDeck)
+                    .minimumScaleFactor(0.72)
+                    .multilineTextAlignment(.center)
+            }
+
+            chanceSummary
+
             Text(presentation.effect.metric.uppercased())
-                .font(GoalRushTheme.Typography.caption2)
-                .foregroundStyle(GoalRushTheme.navy.opacity(0.62))
+                .font(GoalRushTheme.Typography.captionEmphasized)
+                .foregroundStyle(GoalRushTheme.navy.opacity(0.78))
                 .lineLimit(2, reservesSpace: usesPortraitDeck)
                 .minimumScaleFactor(0.72)
 
@@ -128,13 +139,39 @@ struct AbilityChoiceCard: View {
 
             Text("FROM \(presentation.effect.current.uppercased())")
                 .font(GoalRushTheme.Typography.captionEmphasized)
-                .foregroundStyle(GoalRushTheme.navy.opacity(0.58))
+                .foregroundStyle(GoalRushTheme.navy.opacity(0.72))
                 .lineLimit(2, reservesSpace: usesPortraitDeck)
                 .minimumScaleFactor(0.62)
                 .multilineTextAlignment(.center)
         }
         .padding(.horizontal, 8)
         .padding(.top, 7)
+    }
+
+    @ViewBuilder
+    private var chanceSummary: some View {
+        if let current = presentation.effect.chanceCurrent,
+           let next = presentation.effect.chanceNext {
+            VStack(spacing: 1) {
+                Text("CHANCE PER BALL")
+                    .font(GoalRushTheme.Typography.captionEmphasized)
+                Text(current == next ? next : "\(current) → \(next)")
+                    .font(GoalRushTheme.Typography.metric(size: 17))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(GoalRushTheme.navy)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .background(presentation.effect.accent.opacity(0.18))
+            .overlay {
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(
+                        presentation.effect.accent.opacity(0.82),
+                        lineWidth: 1.5
+                    )
+            }
+            .clipShape(.rect(cornerRadius: 5))
+        }
     }
 
     private var chooseStrip: some View {
@@ -165,6 +202,18 @@ struct AbilityChoiceCard: View {
     }
 
     private var accessibilityLabel: String {
-        "\(presentation.title), \(rankLabel). \(presentation.benefit) \(presentation.effect.metric) changes from \(presentation.effect.current) to \(presentation.effect.next)."
+        let chance = if let current = presentation.effect.chanceCurrent,
+                        let next = presentation.effect.chanceNext {
+            " Chance per ball changes from \(current) to \(next)."
+        } else {
+            ""
+        }
+        return "\(presentation.title), \(accessibilityRankLabel). \(presentation.benefit)\(chance) \(presentation.effect.metric) changes from \(presentation.effect.current) to \(presentation.effect.next)."
+    }
+
+    private var accessibilityRankLabel: String {
+        currentRank == 0
+            ? "New, rank 1"
+            : "Rank \(GameNumberFormatter.exact(currentRank)) to \(GameNumberFormatter.exact(currentRank + 1))"
     }
 }

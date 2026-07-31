@@ -1,6 +1,6 @@
 import Foundation
 
-enum RunUpgradeChoice: Hashable, Identifiable, Sendable {
+nonisolated enum RunUpgradeChoice: Codable, Hashable, Identifiable, Sendable {
     case ability(AbilityKind)
     case specialBall(TemporaryBallAbility)
 
@@ -13,6 +13,7 @@ enum RunUpgradeChoice: Hashable, Identifiable, Sendable {
         }
     }
 
+    @MainActor
     static var endlessPool: [RunUpgradeChoice] {
         AbilityKind.allCases.map(Self.ability)
             + EndlessSpecialBallRules.abilities.map(Self.specialBall)

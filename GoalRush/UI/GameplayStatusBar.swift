@@ -6,6 +6,7 @@ struct GameplayStatusBar: View {
     let maxStamina: Double
     let staminaTint: Color
     let tokens: Int
+    let endlessScore: Int?
     let shieldCharges: Int
     let pause: () -> Void
 
@@ -20,9 +21,16 @@ struct GameplayStatusBar: View {
 
             Spacer(minLength: 2)
 
+            if let endlessScore {
+                EndlessLiveScoreView(score: endlessScore)
+                    .layoutPriority(1)
+
+                Spacer(minLength: 2)
+            }
+
             HStack(spacing: 4) {
                 TrainingTokenIcon(size: 18)
-                Text(tokens.formatted())
+                Text(GameNumberFormatter.compact(tokens))
                     .font(GoalRushTheme.Typography.subheadlineEmphasized)
                     .monospacedDigit()
                     .contentTransition(.numericText())
@@ -32,7 +40,8 @@ struct GameplayStatusBar: View {
             .foregroundStyle(GoalRushTheme.gold)
             .animation(.snappy, value: tokens)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(tokens) Training Tokens")
+            .accessibilityLabel("\(GameNumberFormatter.exact(tokens)) Training Tokens")
+            .accessibilityIdentifier("training-token-counter")
 
             if shieldCharges > 0 {
                 Label("\(shieldCharges)", systemImage: "shield.fill")

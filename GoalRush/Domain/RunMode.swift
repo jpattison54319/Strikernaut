@@ -1,6 +1,6 @@
 import Foundation
 
-enum RunMode: Equatable, Sendable {
+nonisolated enum RunMode: Codable, Equatable, Sendable {
     case campaign(level: Int)
     case endless
 
@@ -8,6 +8,7 @@ enum RunMode: Equatable, Sendable {
         if case .endless = self { true } else { false }
     }
 
+    @MainActor
     var world: WorldID {
         switch self {
         case .campaign(let level): GameContent.level(level).world

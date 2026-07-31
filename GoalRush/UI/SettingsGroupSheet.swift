@@ -46,6 +46,9 @@ enum SettingsGroup: String, Identifiable {
 
 struct SettingsGroupSheet: View {
     @Environment(GameStore.self) private var store
+    @Environment(RewardedAdService.self) private var rewardedAds
+    @State private var privacyErrorMessage: String?
+    @State private var isShowingPrivacyError = false
     let group: SettingsGroup
 
     var body: some View {
@@ -76,6 +79,28 @@ struct SettingsGroupSheet: View {
                     .buttonStyle(SecondaryGameButton())
                     .accessibilityIdentifier("settings-replay-onboarding")
 
+                    Link(destination: URL(string: "https://jpattison54319.github.io/support/")!) {
+                        Label("Support Website", systemImage: "safari.fill")
+                    }
+                    .buttonStyle(SecondaryGameButton())
+                    .accessibilityIdentifier("settings-support-website")
+
+                    Link(destination: URL(string: "https://jpattison54319.github.io/privacy/")!) {
+                        Label("Privacy Policy", systemImage: "lock.shield.fill")
+                    }
+                    .buttonStyle(SecondaryGameButton())
+                    .accessibilityIdentifier("settings-privacy-policy")
+
+                    if rewardedAds.isPrivacyOptionsRequired {
+                        Button(
+                            "Privacy Choices",
+                            systemImage: "hand.raised.fill",
+                            action: showPrivacyChoices
+                        )
+                        .buttonStyle(SecondaryGameButton())
+                        .accessibilityIdentifier("settings-privacy-choices")
+                    }
+
 #if DEBUG
                 case .developer:
                     developerActions
@@ -86,6 +111,16 @@ struct SettingsGroupSheet: View {
             .foregroundStyle(.white)
             .padding(GoalRushTheme.Metrics.standardSpacing)
             .gameSurface(.panel)
+        }
+        .alert(
+            "Privacy Choices Unavailable",
+            isPresented: $isShowingPrivacyError
+        ) {
+            Button("OK", role: .cancel) {
+                privacyErrorMessage = nil
+            }
+        } message: {
+            Text(privacyErrorMessage ?? "Please try again later.")
         }
     }
 
@@ -99,19 +134,27 @@ struct SettingsGroupSheet: View {
         }
         .buttonStyle(SecondaryGameButton())
 
-        Button("Unlock All Levels") {
+        Button(
+            isAllTestContentUnlocked
+                ? "All Levels & Characters Unlocked"
+                : "Unlock All Levels & Characters",
+            systemImage: "lock.open.fill"
+        ) {
             store.uiAudio.requestFeedback(.success)
-            store.progress.highestUnlockedLevel = GameContent.levels.count
-            store.saveProgress()
+            store.unlockAllContentForTesting()
         }
         .buttonStyle(SecondaryGameButton())
+        .disabled(isAllTestContentUnlocked)
+        .accessibilityIdentifier("developer-unlock-all-content")
 
-        Button("Unlock All Characters") {
-            store.uiAudio.requestFeedback(.success)
-            store.progress.unlockedCharacters = Set(CharacterID.allCases)
-            store.saveProgress()
-        }
-        .buttonStyle(SecondaryGameButton())
+        Text("Unlocks all \(GameContent.levels.count) levels and every character without completing challenges or granting their rewards.")
+            .font(GoalRushTheme.Typography.caption)
+            .foregroundStyle(.secondary)
+    }
+
+    private var isAllTestContentUnlocked: Bool {
+        store.progress.highestUnlockedLevel >= GameContent.levels.count
+            && store.progress.unlockedCharacters == Set(CharacterID.allCases)
     }
 #endif
 
@@ -119,10 +162,21 @@ struct SettingsGroupSheet: View {
         switch group {
         case .audio: "Music, sound, and tactile feedback."
         case .accessibility: "Comfort and gameplay assistance."
-        case .support: "Replay the introduction whenever you need it."
+        case .support: "Onboarding, support, and privacy."
 #if DEBUG
         case .developer: "Local testing actions."
 #endif
+        }
+    }
+
+    private func showPrivacyChoices() {
+        Task {
+            do {
+                try await rewardedAds.presentPrivacyOptions()
+            } catch {
+                privacyErrorMessage = "The ad privacy form could not be displayed. Please try again later."
+                isShowingPrivacyError = true
+            }
         }
     }
 }

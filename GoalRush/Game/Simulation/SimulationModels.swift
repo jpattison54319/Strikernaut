@@ -5,7 +5,7 @@ struct Vector2: Equatable, Sendable {
     var y: Double
 }
 
-struct PlayerStats: Equatable, Sendable {
+nonisolated struct PlayerStats: Codable, Equatable, Sendable {
     let maxStamina: Double
     let movementResponse: Double
     let kickCooldown: Double
@@ -16,18 +16,68 @@ struct PlayerStats: Equatable, Sendable {
     let startingShields: Int
     let extraPierce: Int
     let tokenMultiplier: Double
+    let characterAbilityChargeMultiplier: Double
 
-    init(progress: PlayerProgress) {
-        maxStamina = 100 * (1 + 0.08 * Double(progress.rank(for: .conditioning)))
-        movementResponse = 8 * (1 + 0.07 * Double(progress.rank(for: .footwork)))
+    @MainActor
+    init(progress: PlayerProgress, mode: RunMode? = nil) {
+        let relic = mode?.isEndless == true
+            ? progress.endlessRecord.equippedRelic
+            : nil
+        maxStamina = 100
+            * (1 + 0.08 * Double(progress.rank(for: .conditioning)))
+            * (1 + (relic?.value(for: .maximumStamina) ?? 0))
+        movementResponse = 8
+            * (1 + 0.07 * Double(progress.rank(for: .footwork)))
+            * (1 + (relic?.value(for: .movementResponse) ?? 0))
         kickCooldown = UpgradeRules.kickCooldown(for: progress.rank(for: .tempo))
-        ballDamage = 10 * (1 + 0.10 * Double(progress.rank(for: .impact)))
-        ballSpeed = 0.88 * (1 + 0.06 * Double(progress.rank(for: .flight)))
-        criticalChance = 0.05 + 0.03 * Double(progress.rank(for: .spin))
+            / (1 + (relic?.value(for: .kickRate) ?? 0))
+        ballDamage = 10
+            * (1 + 0.10 * Double(progress.rank(for: .impact)))
+            * (1 + (relic?.value(for: .attackDamage) ?? 0))
+        ballSpeed = 0.88
+            * (1 + 0.06 * Double(progress.rank(for: .flight)))
+            * (1 + (relic?.value(for: .ballSpeed) ?? 0))
+        criticalChance = 0.05
+            + 0.03 * Double(progress.rank(for: .spin))
+            + (relic?.value(for: .criticalChance) ?? 0)
         homingStrength = 0
         startingShields = 0
         extraPierce = 0
-        tokenMultiplier = 1
+        tokenMultiplier = 1 + (relic?.value(for: .trainingTokenGain) ?? 0)
+        characterAbilityChargeMultiplier =
+            1 + (relic?.value(for: .heroChargeRate) ?? 0)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case maxStamina
+        case movementResponse
+        case kickCooldown
+        case ballDamage
+        case ballSpeed
+        case criticalChance
+        case homingStrength
+        case startingShields
+        case extraPierce
+        case tokenMultiplier
+        case characterAbilityChargeMultiplier
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        maxStamina = try container.decode(Double.self, forKey: .maxStamina)
+        movementResponse = try container.decode(Double.self, forKey: .movementResponse)
+        kickCooldown = try container.decode(Double.self, forKey: .kickCooldown)
+        ballDamage = try container.decode(Double.self, forKey: .ballDamage)
+        ballSpeed = try container.decode(Double.self, forKey: .ballSpeed)
+        criticalChance = try container.decode(Double.self, forKey: .criticalChance)
+        homingStrength = try container.decode(Double.self, forKey: .homingStrength)
+        startingShields = try container.decode(Int.self, forKey: .startingShields)
+        extraPierce = try container.decode(Int.self, forKey: .extraPierce)
+        tokenMultiplier = try container.decode(Double.self, forKey: .tokenMultiplier)
+        characterAbilityChargeMultiplier = try container.decodeIfPresent(
+            Double.self,
+            forKey: .characterAbilityChargeMultiplier
+        ) ?? 1
     }
 }
 
@@ -53,6 +103,13 @@ struct TargetState: Identifiable, Equatable, Sendable {
     var freezeRemaining: Double = 0
     var reverseRemaining: Double = 0
     var stunRemaining: Double = 0
+    var tidalSlowRemaining: Double = 0
+    var undertowSlowRemaining: Double = 0
+    var magnetRemaining: Double = 0
+    var magnetTurnRate: Double = 0
+    var gravityPullCenter: Vector2?
+    var gravityPullRemaining: Double = 0
+    var gravityPullStrength: Double = 0
 }
 
 enum CharacterProjectileKind: Equatable, Sendable {
@@ -72,6 +129,7 @@ struct CharacterAttackState: Identifiable, Equatable, Sendable {
     var destination: Vector2
     let targetID: Int?
     let damage: Double
+    let awardsAbilityCharge: Bool
     var delayRemaining: Double
     var elapsed: Double
     let duration: Double
@@ -94,11 +152,128 @@ struct ProjectileState: Identifiable, Equatable, Sendable {
     var isCritical: Bool
     var temporaryAbility: TemporaryBallAbility?
     var canSplit: Bool
+    var endlessEffects: Set<TemporaryBallAbility> = []
     var characterProjectile: CharacterProjectileKind? = nil
     var remainingLifetime: Double = .infinity
     var contactedTargetIDs: Set<Int> = []
     var orbitChainsRemaining: Int = 0
     var hasTriggeredVoltChain = false
+    var ringReturnDamage: Double? = nil
+
+    var ballEffects: Set<TemporaryBallAbility> {
+        guard let temporaryAbility else { return endlessEffects }
+        return endlessEffects.union([temporaryAbility])
+    }
+
+    func hasEffect(_ ability: TemporaryBallAbility) -> Bool {
+        temporaryAbility == ability || endlessEffects.contains(ability)
+    }
+}
+
+struct GaleBounceState: Identifiable, Equatable, Sendable {
+    let id: Int
+    let activationID: Int
+    let lane: Int
+    let startPosition: Vector2
+    let destinationX: Double
+    var position: Vector2
+    var previousPosition: Vector2
+    var elapsed: Double
+    let duration: Double
+    var completedLandings: Int
+
+    var progress: Double {
+        guard duration > 0 else { return 1 }
+        return min(1, max(0, elapsed / duration))
+    }
+
+    var visualHeight: Double {
+        abs(sin(progress * .pi * 4))
+    }
+}
+
+struct GaleInterceptorState: Identifiable, Equatable, Sendable {
+    let id: Int
+    let targetID: Int
+    let startPosition: Vector2
+    var position: Vector2
+    var elapsed: Double
+    let duration: Double
+    let damage: Double
+
+    var progress: Double {
+        guard duration > 0 else { return 1 }
+        return min(1, max(0, elapsed / duration))
+    }
+}
+
+struct HaloRingState: Identifiable, Equatable, Sendable {
+    let id: Int
+    let startX: Double
+    var center: Vector2
+    var previousCenter: Vector2
+    var elapsed: Double
+    let duration: Double
+    let radius: Double
+    let damage: Double
+    var targetHitCounts: [Int: Int] = [:]
+    var targetContactCooldowns: [Int: Double] = [:]
+
+    var progress: Double {
+        guard duration > 0 else { return 1 }
+        return min(1, max(0, elapsed / duration))
+    }
+}
+
+struct MagneticTrapState: Identifiable, Equatable, Sendable {
+    let id: Int
+    let startPosition: Vector2
+    let landingPosition: Vector2
+    var position: Vector2
+    var targetID: Int?
+    var delayRemaining: Double
+    var flightElapsed: Double
+    let flightDuration: Double
+    var armedRemaining: Double
+    var captureRemaining: Double
+    var tickClock: Double
+    var ticksRemaining: Int
+    let tickDamage: Double
+    var hasLanded: Bool
+
+    var flightProgress: Double {
+        guard flightDuration > 0 else { return 1 }
+        return min(1, max(0, flightElapsed / flightDuration))
+    }
+}
+
+enum TidalLane: Int, CaseIterable, Equatable, Sendable {
+    case left = -1
+    case middle = 0
+    case right = 1
+}
+
+struct TidalWaveState: Identifiable, Equatable, Sendable {
+    let id: Int
+    let lane: TidalLane
+    let round: Int
+    var positionY: Double
+    var previousPositionY: Double
+    var delayRemaining: Double
+    var elapsed: Double
+    var hasLaunched: Bool = false
+    let duration: Double
+    let damage: Double
+    let push: Double
+    var contactedTargetIDs: Set<Int> = []
+
+    var progress: Double {
+        guard duration > 0 else { return 1 }
+        return min(1, max(0, elapsed / duration))
+    }
+
+    var centerX: Double { 0 }
+    var halfWidth: Double { 0.94 }
 }
 
 struct SimulationSnapshot: Equatable, Sendable {
@@ -111,7 +286,13 @@ struct SimulationSnapshot: Equatable, Sendable {
     var targets: [TargetState]
     var projectiles: [ProjectileState]
     var characterAttacks: [CharacterAttackState]
+    var galeBounces: [GaleBounceState]
+    var galeInterceptors: [GaleInterceptorState]
+    var haloRings: [HaloRingState]
+    var magneticTraps: [MagneticTrapState]
+    var tidalWaves: [TidalWaveState]
     var bossHazards: [BossHazardState]
+    var galeOrbitCount: Int
     var shieldCharges: Int
     var wave: Int
     var waveElapsed: Double
@@ -124,6 +305,7 @@ struct SimulationSnapshot: Equatable, Sendable {
     var comboFraction: Double
     var bestCombo: Int
     var targetsDefeated: Int
+    var characterAbilityDefeats: Int
     var bossesDefeated: Int
     var waveCount: Int
     var activeTemporaryAbility: TemporaryBallAbility?
@@ -234,6 +416,25 @@ struct VoltChainEvent: Equatable, Sendable {
     let arcs: [VoltArc]
 }
 
+enum CharacterAbilityEffect: Equatable, Sendable {
+    case timeShatter([Vector2])
+    case galeLanding(Vector2, variant: Int)
+    case galeInterception(Vector2)
+    case haloContact(Vector2)
+    case magneticTrapSnap(Vector2)
+    case tidalLaunch(TidalLane, round: Int, position: Vector2)
+    case tidalHit(Vector2)
+}
+
+enum SpecialBallEffectEvent: Equatable, Sendable {
+    case gravityVortex(position: Vector2, radius: Double)
+    case magnetMark(position: Vector2, duration: TimeInterval)
+    case orbitRedirect(position: Vector2)
+    case returnShot(position: Vector2)
+    case solarPierce(position: Vector2)
+    case tidalPush(position: Vector2)
+}
+
 enum SimulationEvent: Equatable, Sendable {
     case checkpoint(Int)
     case damage
@@ -262,11 +463,13 @@ enum SimulationEvent: Equatable, Sendable {
     case characterMeteorImpact(Vector2)
     case characterShockwaveBurst(Vector2)
     case characterShockwaveHit(Vector2)
+    case characterAbilityEffect(CharacterAbilityEffect)
+    case specialBallEffect(SpecialBallEffectEvent)
     case voltChain(VoltChainEvent)
     case finished(Bool)
 }
 
-struct SeededGenerator: RandomNumberGenerator, Sendable {
+nonisolated struct SeededGenerator: Codable, Equatable, RandomNumberGenerator, Sendable {
     private var state: UInt64
 
     init(seed: UInt64) { state = seed == 0 ? 0x9E3779B97F4A7C15 : seed }

@@ -2,8 +2,8 @@
 
 ## Product contract
 
-- Campaign is organized into authored worlds: Earth contains Levels 1–10, the
-  Moon contains 11–20, and Mars contains 21–30. The content model owns world
+- Campaign is organized into seven authored worlds spanning Levels 1–70. The
+  content model owns world
   membership, theme, background, enemies, objects, boss, rule, and temporary
   powers so another world can be added without rewriting navigation or
   simulation code.
@@ -11,9 +11,9 @@
   world picker. It starts with a run-only power choice, has no victory condition
   or final wave, grants a new choice after every cleared wave, and ends only
   when stamina reaches zero or the player chooses to leave.
-- The circuit uses Earth for waves 1–10, Moon for 11–20, Mars for 21–30, then
-  loops to Earth on wave 31. Its sequence is derived from the authored world
-  catalog so future worlds slot in before the loop automatically.
+- The circuit uses each authored world for ten waves, reaches Neptune on
+  61–70, then loops to Earth on wave 71. Its sequence, enemies, objects, boss,
+  arena, and hazards are derived from the authored world catalog.
 - Permanent stat upgrades and equipped gear apply in Campaign and Endless.
   Run-only abilities reset when either type of run ends.
 - Gear cannot be bought. A complete five-piece set is awarded the first time a
@@ -37,8 +37,9 @@
   and faction emblem beneath that cover before play resumes.
 - Endless power ranks are uncapped. Damage, cadence, pierce, tracking, volley,
   shields, healing, enemy slow, meteor kicks, and reward multipliers support
-  distinct stacking builds. Campaign retains a three-rank cap and the original
-  six-technique pool.
+  distinct stacking builds. Gravity Well, Ring Return, Polar Link, and
+  Undertow add four independently scaling special-ball tracks to the original
+  six.
 - Training Tokens are credited on destruction and checkpointed at every draft,
   pause, background transition, and result. Best wave and best score are stored
   as one record for the continuous mode; legacy per-world records merge by
@@ -67,6 +68,33 @@
 - Every sixth standard defeat and each boss phase arms a Volatile Core. Shooting
   it only neutralizes the threat; ignoring it damages the player.
 - First-clear reward: Mars Pioneer gear set.
+
+### Jupiter — Storm Citadel
+
+- Levels 31–40 introduce wind displacement, charged rails, storm enemies, and
+  the Tempest Regent.
+- Gale unlocks after the finale. Stormbreak anchors the player against wind and
+  launches five seeking counter-shots.
+
+### Saturn — Crown of Rings
+
+- Levels 41–50 turn lane reading into the core skill through sweeping ring
+  segments and the Crown Sovereign.
+- Halo unlocks after the finale. Ring Relay clears hostile shots and releases
+  three ricocheting pinballs.
+
+### Uranus — Tilted Frontier
+
+- Levels 51–60 combine icy momentum with frozen edge rails and Axis Prime.
+- Flux unlocks after the finale. Pole Shift converts hostile projectiles and
+  mirrors every kick for five seconds.
+
+### Neptune — Tempest Deep
+
+- Levels 61–70 compress the available field with pressure walls and culminate
+  in the Abyssal Monarch.
+- Surge unlocks after the finale. Tidal Break clears arena hazards and sends a
+  wide shockwave followed by staggered aftershocks.
 
 ## Gear and effects
 

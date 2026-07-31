@@ -10,7 +10,7 @@ struct PlanetDestinationNode: View {
             VStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
                 ZStack {
                     PlanetArtwork(destinationID: destination.id)
-                        .frame(width: destination.id == "jupiter" ? 126 : 104, height: destination.id == "jupiter" ? 126 : 104)
+                        .frame(width: artworkSize, height: artworkSize)
                         .saturation(isUnlocked ? 1 : 0.12)
                         .opacity(isUnlocked ? 1 : 0.70)
                     if !isUnlocked {
@@ -50,10 +50,25 @@ struct PlanetDestinationNode: View {
         return GameContent.isWorldUnlocked(world, progress: progress)
     }
 
+    private var artworkSize: CGFloat {
+        switch destination.id {
+        case "jupiter", "saturn", "uranus", "neptune": 126
+        default: 104
+        }
+    }
+
     private var statusText: String {
         guard let world = destination.world else { return "COMING SOON" }
         guard isUnlocked else {
-            return world == .moon ? "CLEAR EARTH" : "CLEAR MOON"
+            return switch world {
+            case .earth: "AVAILABLE"
+            case .moon: "CLEAR EARTH"
+            case .mars: "CLEAR MOON"
+            case .jupiter: "CLEAR MARS"
+            case .saturn: "CLEAR JUPITER"
+            case .uranus: "CLEAR SATURN"
+            case .neptune: "CLEAR URANUS"
+            }
         }
         let levels = GameContent.levels(in: world)
         let completed = levels.filter { progress.levelRecords[$0.number]?.completed == true }.count
@@ -102,12 +117,19 @@ struct PlanetDestinationRow: View {
 private struct PlanetArtwork: View {
     let destinationID: String
 
+    @ViewBuilder
     var body: some View {
-        Image(assetName)
-            .resizable()
-            .scaledToFit()
-            .shadow(color: glowColor.opacity(0.55), radius: 16)
-        .accessibilityHidden(true)
+        if destinationID == "andromeda" {
+            AndromedaGlyph()
+                .shadow(color: glowColor.opacity(0.65), radius: 16)
+                .accessibilityHidden(true)
+        } else {
+            Image(assetName)
+                .resizable()
+                .scaledToFit()
+                .shadow(color: glowColor.opacity(0.55), radius: 16)
+                .accessibilityHidden(true)
+        }
     }
 
     private var assetName: String {
@@ -115,6 +137,9 @@ private struct PlanetArtwork: View {
         case "earth": "PlanetEarth"
         case "moon": "PlanetMoon"
         case "mars": "PlanetMars"
+        case "saturn": "PlanetSaturn"
+        case "uranus": "PlanetUranus"
+        case "neptune": "PlanetNeptune"
         default: "PlanetJupiter"
         }
     }
@@ -124,7 +149,35 @@ private struct PlanetArtwork: View {
         case "earth": GoalRushTheme.cyan
         case "moon": Color(red: 0.68, green: 0.74, blue: 1)
         case "mars": GoalRushTheme.marsRust
+        case "jupiter": Color(red: 1, green: 0.60, blue: 0.18)
+        case "saturn": Color(red: 1, green: 0.82, blue: 0.40)
+        case "uranus": Color(red: 0.30, green: 0.94, blue: 1)
+        case "neptune": Color(red: 0.18, green: 0.46, blue: 1)
+        case "andromeda": Color(red: 0.76, green: 0.42, blue: 1)
         default: GoalRushTheme.gold
+        }
+    }
+}
+
+private struct AndromedaGlyph: View {
+    var body: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { index in
+                Ellipse()
+                    .stroke(
+                        index == 0 ? Color.white : Color.purple.opacity(0.82),
+                        lineWidth: CGFloat(5 - index)
+                    )
+                    .frame(
+                        width: CGFloat(112 - index * 22),
+                        height: CGFloat(38 - index * 6)
+                    )
+                    .rotationEffect(.degrees(-22))
+            }
+            Circle()
+                .fill(.white)
+                .frame(width: 16, height: 16)
+                .shadow(color: .purple, radius: 12)
         }
     }
 }

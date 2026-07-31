@@ -128,6 +128,10 @@ extension WorldID {
         case .earth: GoalRushTheme.cyan
         case .moon: Color(red: 0.70, green: 0.78, blue: 1)
         case .mars: GoalRushTheme.marsRust
+        case .jupiter: Color(red: 0.92, green: 0.57, blue: 0.20)
+        case .saturn: Color(red: 0.88, green: 0.76, blue: 0.38)
+        case .uranus: Color(red: 0.38, green: 0.86, blue: 0.78)
+        case .neptune: Color(red: 0.12, green: 0.58, blue: 0.88)
         }
     }
 
@@ -136,6 +140,10 @@ extension WorldID {
         case .earth: GoalRushTheme.grass
         case .moon: Color(red: 0.34, green: 0.24, blue: 0.62)
         case .mars: GoalRushTheme.marsViolet
+        case .jupiter: Color(red: 0.24, green: 0.18, blue: 0.46)
+        case .saturn: Color(red: 0.28, green: 0.20, blue: 0.42)
+        case .uranus: Color(red: 0.38, green: 0.18, blue: 0.58)
+        case .neptune: Color(red: 0.04, green: 0.16, blue: 0.42)
         }
     }
 
@@ -144,6 +152,10 @@ extension WorldID {
         case .earth: "globe.americas.fill"
         case .moon: "moon.stars.fill"
         case .mars: "circle.grid.cross.fill"
+        case .jupiter: "hurricane"
+        case .saturn: "circle.hexagongrid.circle.fill"
+        case .uranus: "snowflake.circle.fill"
+        case .neptune: "water.waves"
         }
     }
 }

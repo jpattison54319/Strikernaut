@@ -12,7 +12,7 @@ struct HomeTopHUD: View {
         layout {
             HStack(spacing: GoalRushTheme.Metrics.compactSpacing) {
                 TrainingTokenIcon(size: 22)
-                Text(store.progress.trainingTokens.formatted())
+                Text(GameNumberFormatter.compact(store.progress.trainingTokens))
                     .monospacedDigit()
             }
                 .font(GoalRushTheme.Typography.metric(size: 18))
@@ -25,7 +25,9 @@ struct HomeTopHUD: View {
                     maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil,
                     alignment: .leading
                 )
-                .accessibilityLabel("\(store.progress.trainingTokens) Training Tokens")
+                .accessibilityLabel(
+                    "\(GameNumberFormatter.exact(store.progress.trainingTokens)) Training Tokens"
+                )
 
             if !dynamicTypeSize.isAccessibilitySize {
                 Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)

@@ -9,15 +9,27 @@ final class GameStore {
         case campaign(CampaignRoute)
         case endless
         case characters
+        case relics
+        case relicForge
         case upgrades
         case settings
         case onboarding
         case trophies
         case playing(RunMode)
+        case relicDrop(RunResult)
         case result(RunResult)
     }
 
-    var route: Route = .home
+    var route: Route = .home {
+        didSet {
+            switch route {
+            case .home, .relics, .relicForge, .upgrades:
+                resetRewardedTokenBonusEligibility()
+            default:
+                break
+            }
+        }
+    }
     var progress: PlayerProgress
     var settings: GameSettings
     var selectedLevel = 1
@@ -25,16 +37,25 @@ final class GameStore {
     var pendingResetConfirmation = false
     let uiAudio: UIAudio
     var celebrations: [Celebration] = []
+    let runCheckpointStore: RunCheckpointStore
 
     private let persistence: ProgressStore
     private var pendingSaveTask: Task<Void, Never>?
+    private var rewardedTokenBonusWasClaimed = false
+    private var rewardedTokenBonusMode: RunMode?
 
-    init(progress: PlayerProgress, settings: GameSettings, persistence: ProgressStore) {
+    init(
+        progress: PlayerProgress,
+        settings: GameSettings,
+        persistence: ProgressStore,
+        runCheckpointStore: RunCheckpointStore = RunCheckpointStore()
+    ) {
         var reconciledProgress = progress
         reconciledProgress.reconcileUnlockedContent()
         self.progress = reconciledProgress
         self.settings = settings
         self.persistence = persistence
+        self.runCheckpointStore = runCheckpointStore
         self.uiAudio = UIAudio(
             soundEnabled: settings.soundEnabled,
             hapticsEnabled: settings.hapticsEnabled
@@ -44,6 +65,9 @@ final class GameStore {
     static func bootstrap() -> GameStore {
         let persistence = FileProgressStore()
         let arguments = ProcessInfo.processInfo.arguments
+        let runCheckpointStore = RunCheckpointStore(
+            resetExistingStorage: arguments.contains("--reset-save")
+        )
         if arguments.contains("--reset-save") {
             try? persistence.reset()
         }
@@ -65,7 +89,8 @@ final class GameStore {
         let store = GameStore(
             progress: progress,
             settings: settings,
-            persistence: persistence
+            persistence: persistence,
+            runCheckpointStore: runCheckpointStore
         )
         // Engagement bootstrap: migrate veteran saves past onboarding, arm daily systems.
         if !store.progress.hasSeenOnboarding &&
@@ -88,13 +113,32 @@ final class GameStore {
             case "mars-map": store.route = .campaign(.worldMap(world: .mars, focusLevel: 21))
             case "endless": store.route = .endless
             case "gear", "characters": store.route = .characters
+            case "relics": store.route = .relics
+            case "forge": store.route = .relicForge
             case "upgrades": store.route = .upgrades
             case "settings": store.route = .settings
             case "onboarding": store.route = .onboarding
             case "trophies": store.route = .trophies
-            case "result-endless":
-                store.progress.endlessRecord = .init(bestWave: 11, bestScore: 150_000)
-                store.route = .result(.init(
+            case "result-endless", "relic-drop":
+                let runID = UUID(
+                    uuidString: "C09C1BA9-9307-49DC-B711-784EC75A9438"
+                ) ?? UUID()
+                let relic = EndlessRelicRules.runReward(
+                    runID: runID,
+                    waveReached: 12
+                )
+                store.progress.endlessRecord = .init(
+                    bestWave: 12,
+                    bestScore: 150_000,
+                    relics: relic.map { [$0] } ?? [],
+                    scrap: 65,
+                    lastRewardedRunID: runID
+                )
+                store.progress.unlockedAchievements.formUnion(
+                    AchievementCatalog.evaluate(progress: store.progress)
+                )
+                let result = RunResult(
+                    runID: runID,
                     mode: .endless,
                     didWin: false,
                     tokensEarned: 286,
@@ -102,8 +146,12 @@ final class GameStore {
                     wave: 12,
                     score: 184_500,
                     newBestWave: true,
-                    newBestScore: true
-                ))
+                    newBestScore: true,
+                    relicEarned: relic
+                )
+                store.route = arguments[screenIndex + 1] == "relic-drop"
+                    ? .relicDrop(result)
+                    : .result(result)
             case "result-world":
                 store.progress.unlockedCharacters.insert(.volt)
                 store.route = .result(.init(
@@ -134,13 +182,35 @@ final class GameStore {
                 lastScore: 216_750
             )
         }
+        if arguments.contains("--relic-fixtures") {
+            store.seedRelicFixturesForTesting()
+        }
+        if arguments.contains("--progress-fixtures") {
+            store.seedProgressFixturesForTesting()
+        }
         if arguments.contains("--unlock-gear") || arguments.contains("--unlock-characters") {
             store.progress.unlockedCharacters = Set(CharacterID.allCases)
+        }
+        let previewUpgradeTrack: UpgradeTrack
+        if let trackIndex = arguments.firstIndex(of: "--upgrade-track"),
+           arguments.indices.contains(trackIndex + 1),
+           let track = UpgradeTrack(rawValue: arguments[trackIndex + 1]) {
+            previewUpgradeTrack = track
+        } else {
+            previewUpgradeTrack = .impact
         }
         if let upgradeLevelIndex = arguments.firstIndex(of: "--upgrade-level"),
            arguments.indices.contains(upgradeLevelIndex + 1),
            let level = Int(arguments[upgradeLevelIndex + 1]) {
-            store.progress.setRank(max(0, level), for: .impact)
+            store.progress.setRank(max(0, level), for: previewUpgradeTrack)
+        }
+        if let prestigeIndex = arguments.firstIndex(of: "--upgrade-prestige-count"),
+           arguments.indices.contains(prestigeIndex + 1),
+           let count = Int(arguments[prestigeIndex + 1]) {
+            store.progress.setPrestigeCount(
+                min(max(0, count), UpgradePrestigeTier.allCases.count),
+                for: previewUpgradeTrack
+            )
         }
         if let characterIndex = arguments.firstIndex(of: "--character"),
            arguments.indices.contains(characterIndex + 1),
@@ -165,10 +235,12 @@ final class GameStore {
         if arguments.contains("--endless") {
             store.route = .playing(.endless)
         }
+        store.evaluateAchievements()
         return store
     }
 
     func start(level: Int) {
+        prepareRewardedTokenBonus(for: .campaign(level: level))
         selectedLevel = level
         selectedWorld = GameContent.level(level).world
         route = .playing(.campaign(level: level))
@@ -200,10 +272,15 @@ final class GameStore {
     }
 
     func startEndless() {
+        prepareRewardedTokenBonus(for: .endless)
         route = .playing(.endless)
     }
 
     func finish(_ result: RunResult, tokensAlreadyCredited: Int = 0) {
+        Task {
+            try? await runCheckpointStore.delete(for: result.mode)
+        }
+        prepareRewardedTokenBonus(for: result.mode)
         progress.trainingTokens += max(0, result.tokensEarned - tokensAlreadyCredited)
         var finalResult = result
         switch result.mode {
@@ -228,20 +305,79 @@ final class GameStore {
                 }
             }
         case .endless:
-            let previous = progress.endlessRecord
-            finalResult.newBestWave = result.wave > previous.bestWave
-            finalResult.newBestScore = result.score > previous.bestScore
-            progress.endlessRecord = EndlessRecord(
-                bestWave: max(previous.bestWave, result.wave),
-                bestScore: max(previous.bestScore, result.score),
-                lastWave: result.wave,
-                lastScore: result.score
-            )
+            var record = progress.endlessRecord
+            finalResult.newBestWave = result.wave > record.bestWave
+            finalResult.newBestScore = result.score > record.bestScore
+            record.bestWave = max(record.bestWave, result.wave)
+            record.bestScore = max(record.bestScore, result.score)
+            record.lastWave = result.wave
+            record.lastScore = result.score
+            if record.lastRewardedRunID != result.runID,
+               !record.relics.contains(where: { $0.id == result.runID }),
+               let relic = EndlessRelicRules.runReward(
+                   runID: result.runID,
+                   waveReached: result.wave
+               ) {
+                record.relics.append(relic)
+                record.lastRewardedRunID = result.runID
+                finalResult.relicEarned = relic
+            }
+            progress.endlessRecord = record
         }
         recordRunStats(finalResult)
         evaluateAchievements()
         saveProgress()
-        route = .result(finalResult)
+        route = finalResult.relicEarned == nil
+            ? .result(finalResult)
+            : .relicDrop(finalResult)
+    }
+
+    func continueAfterRelicDrop(_ result: RunResult) {
+        guard case .relicDrop(let displayedResult) = route,
+              displayedResult == result else {
+            return
+        }
+        route = .result(result)
+    }
+
+    func continueAfterResult(_ result: RunResult) {
+        switch result.mode {
+        case .endless:
+            startEndless()
+        case .campaign(let level):
+            if result.didWin {
+                resetRewardedTokenBonusEligibility()
+            }
+            start(level: result.didWin ? min(level + 1, GameContent.levels.count) : level)
+        }
+    }
+
+    func rewardedTokenBonus(for result: RunResult) -> Int {
+        max(0, result.tokensEarned) / 2
+    }
+
+    func canOfferRewardedTokenBonus(for result: RunResult) -> Bool {
+        guard case .result(let displayedResult) = route,
+              displayedResult == result else {
+            return false
+        }
+        return !rewardedTokenBonusWasClaimed && rewardedTokenBonus(for: result) > 0
+    }
+
+    @discardableResult
+    func claimRewardedTokenBonus(for result: RunResult) -> Int {
+        guard canOfferRewardedTokenBonus(for: result) else { return 0 }
+        let bonus = rewardedTokenBonus(for: result)
+        rewardedTokenBonusWasClaimed = true
+        rewardedTokenBonusMode = result.mode
+        progress.trainingTokens += bonus
+        saveProgress()
+        return bonus
+    }
+
+    func resetRewardedTokenBonusEligibility() {
+        rewardedTokenBonusWasClaimed = false
+        rewardedTokenBonusMode = nil
     }
 
     func creditRunTokens(_ amount: Int) {
@@ -271,6 +407,53 @@ final class GameStore {
     }
 
     @discardableResult
+    func equipRelic(_ id: UUID?) -> Bool {
+        if let id, !progress.endlessRecord.relics.contains(where: { $0.id == id }) {
+            return false
+        }
+        progress.endlessRecord.equippedRelicID = id
+        saveProgress()
+        return true
+    }
+
+    @discardableResult
+    func scrapRelics(_ ids: Set<UUID>) -> Int {
+        guard !ids.isEmpty else { return 0 }
+        let removed = progress.endlessRecord.relics.filter { ids.contains($0.id) }
+        guard !removed.isEmpty else { return 0 }
+        let recoveredScrap = removed.reduce(0) { $0 + $1.scrapValue }
+        progress.endlessRecord.relics.removeAll { ids.contains($0.id) }
+        if let equippedID = progress.endlessRecord.equippedRelicID,
+           ids.contains(equippedID) {
+            progress.endlessRecord.equippedRelicID = nil
+        }
+        progress.endlessRecord.scrap += recoveredScrap
+        saveProgress()
+        return recoveredScrap
+    }
+
+    @discardableResult
+    func forgeRelic(focusing stat: EndlessRelicStat? = nil) -> EndlessRelic? {
+        guard let milestone = EndlessRelicRules.forgeMilestone(
+            forBestWaveReached: progress.endlessRecord.bestWave
+        ) else {
+            return nil
+        }
+        let cost = stat == nil
+            ? EndlessRelicRules.randomForgeCost
+            : EndlessRelicRules.focusedForgeCost
+        guard progress.endlessRecord.scrap >= cost else { return nil }
+        let relic = EndlessRelicRules.forgeRoll(
+            sourceWaveMilestone: milestone,
+            focusedStat: stat
+        )
+        progress.endlessRecord.scrap -= cost
+        progress.endlessRecord.relics.append(relic)
+        saveProgress()
+        return relic
+    }
+
+    @discardableResult
     func selectCharacter(_ id: CharacterID) -> Bool {
         guard progress.unlockedCharacters.contains(id) else { return false }
         progress.selectedCharacter = id
@@ -289,6 +472,10 @@ final class GameStore {
         pendingSaveTask?.cancel()
         pendingSaveTask = nil
         try? persistence.reset()
+        Task {
+            try? await runCheckpointStore.reset()
+        }
+        resetRewardedTokenBonusEligibility()
         progress = .newPlayer
         selectedLevel = 1
         selectedWorld = .earth
@@ -302,6 +489,89 @@ final class GameStore {
         pendingSaveTask = nil
         try? persistence.save(progress)
     }
+
+    private func prepareRewardedTokenBonus(for mode: RunMode) {
+        if rewardedTokenBonusMode != mode {
+            rewardedTokenBonusWasClaimed = false
+        }
+        rewardedTokenBonusMode = mode
+    }
+
+#if DEBUG
+    func unlockAllContentForTesting() {
+        progress.highestUnlockedLevel = GameContent.levels.map(\.number).max() ?? 1
+        progress.unlockedCharacters = Set(CharacterID.allCases)
+        saveProgress()
+    }
+
+    private func seedRelicFixturesForTesting() {
+        let identifiers = [
+            "001DF608-17D6-489B-966E-4271FE03F658",
+            "5AA39D36-751D-4618-B5F2-FFB6A2668443",
+            "665E09A6-EAC0-42EF-AE93-48F0723BA259",
+            "59937E83-42E2-480A-BADB-1C046DF474A9",
+            "5A435761-25BA-48B8-A17F-F96D3E03A236",
+            "96DEDC61-F547-47A6-81D9-1EDE81396517",
+            "891701C2-2A76-4971-93B9-555C96C22E85",
+            "D7D4706E-56D0-4915-B64C-DCC22C09D64A",
+        ].compactMap(UUID.init(uuidString:))
+        let milestones = [5, 10, 20, 30, 50, 70, 100, 140]
+        let stats = EndlessRelicStat.allCases
+        let rarities = EndlessRelicRarity.allCases
+        let relics = zip(identifiers, milestones).enumerated().map { index, pair in
+            let targetRarity = rarities[index % rarities.count]
+            var seed = UInt64(index + 1)
+            var relic: EndlessRelic
+            repeat {
+                relic = EndlessRelicRules.roll(
+                    id: pair.0,
+                    acquiredAt: Date(
+                        timeIntervalSince1970: 1_700_000_000 + Double(index)
+                    ),
+                    sourceWaveMilestone: pair.1,
+                    guaranteedPrimary: stats[index % stats.count],
+                    seed: seed
+                )
+                seed += 1
+            } while relic.rarity != targetRarity
+            return relic
+        }
+        progress.endlessRecord.bestWave = max(progress.endlessRecord.bestWave, 141)
+        progress.endlessRecord.bestScore = max(progress.endlessRecord.bestScore, 2_850_000)
+        progress.endlessRecord.lastWave = 54
+        progress.endlessRecord.lastScore = 796_400
+        progress.endlessRecord.relics = relics
+        progress.endlessRecord.equippedRelicID = relics.last?.id
+        progress.endlessRecord.scrap = 165
+        progress.unlockedAchievements.formUnion(
+            AchievementCatalog.evaluate(progress: progress)
+        )
+    }
+
+    private func seedProgressFixturesForTesting() {
+        progress.lifetimeStats = LifetimeStats(
+            totalTokensEarned: 900,
+            totalRuns: 42,
+            totalWavesCleared: 168,
+            totalTargetsDefeated: 1_284,
+            bossesDefeated: 18,
+            bestCombo: 9,
+            upgradesPurchased: 31,
+            characterAbilityDefeats: [
+                .ace: 24,
+                .volt: 17,
+                .nova: 12,
+                .aegis: 8,
+            ]
+        )
+        progress.endlessRecord.bestWave = 18
+        progress.dailyReward.streak = 2
+        progress.setRank(4, for: .impact)
+        progress.unlockedAchievements.formUnion(
+            AchievementCatalog.evaluate(progress: progress)
+        )
+    }
+#endif
 
     func markCampaignBriefingSeen(level: Int) {
         guard GameContent.levels.indices.contains(level - 1),
@@ -375,6 +645,9 @@ final class GameStore {
         stats.totalTargetsDefeated += result.targetsDefeated
         stats.bossesDefeated += result.bossesDefeated
         stats.bestCombo = max(stats.bestCombo, result.bestCombo)
+        if let character = result.character, result.characterAbilityDefeats > 0 {
+            stats.characterAbilityDefeats[character, default: 0] += result.characterAbilityDefeats
+        }
         if result.mode.isEndless { stats.totalWavesCleared += max(0, result.wave - 1) }
         progress.lifetimeStats = stats
         MissionCatalog.apply(result: result, to: &progress.missions)

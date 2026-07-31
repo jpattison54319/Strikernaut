@@ -17,6 +17,12 @@ struct HomeClubhouseDock: View {
                 action: openCharacters
             )
             HomeDockButton(
+                title: "Relics",
+                systemImage: "diamond.fill",
+                identifier: "relics",
+                action: openRelics
+            )
+            HomeDockButton(
                 title: "Upgrades",
                 systemImage: "arrow.up.circle.fill",
                 identifier: "upgrades",
@@ -33,6 +39,10 @@ struct HomeClubhouseDock: View {
 
     private func openUpgrades() {
         open(.upgrades)
+    }
+
+    private func openRelics() {
+        open(.relics)
     }
 
     private func open(_ route: GameStore.Route) {

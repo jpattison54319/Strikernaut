@@ -29,6 +29,13 @@ struct MissionRow: View {
                 Text(MissionCatalog.goalText(for: mission.kind, goal: mission.goal))
                     .font(GoalRushTheme.Typography.caption)
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel(
+                        MissionCatalog.goalText(
+                            for: mission.kind,
+                            goal: mission.goal,
+                            compactNumbers: false
+                        )
+                    )
             }
             Spacer(minLength: 4)
 
@@ -36,19 +43,26 @@ struct MissionRow: View {
                 Image(systemName: "checkmark.seal.fill")
                     .foregroundStyle(GoalRushTheme.positive)
             } else if mission.isComplete {
-                Button("+\(mission.reward)", action: claimMission)
+                Button("+\(GameNumberFormatter.compact(mission.reward))", action: claimMission)
                     .font(GoalRushTheme.Typography.metric(size: 15, relativeTo: .subheadline))
                     .foregroundStyle(GoalRushTheme.navy)
                     .padding(.horizontal, 12)
                     .frame(minHeight: Self.minimumClaimHeight)
                     .background(GoalRushTheme.gold, in: ComicPanelShape(cut: 5))
                     .pulseGlow(true)
-                    .accessibilityLabel("Claim \(mission.reward) tokens, \(MissionCatalog.title(for: mission.kind))")
+                    .accessibilityLabel(
+                        "Claim \(GameNumberFormatter.exact(mission.reward)) tokens, \(MissionCatalog.title(for: mission.kind))"
+                    )
                     .accessibilityIdentifier("mission-claim-\(mission.kind.rawValue)")
             } else {
-                Text("\(min(mission.progress, mission.goal))/\(mission.goal)")
+                Text(
+                    "\(GameNumberFormatter.compact(min(mission.progress, mission.goal)))/\(GameNumberFormatter.compact(mission.goal))"
+                )
                     .font(GoalRushTheme.Typography.metric(size: 12, relativeTo: .caption))
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel(
+                        "\(GameNumberFormatter.exact(min(mission.progress, mission.goal))) of \(GameNumberFormatter.exact(mission.goal))"
+                    )
             }
         }
         .padding(12)

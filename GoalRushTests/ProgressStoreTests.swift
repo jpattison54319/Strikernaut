@@ -13,8 +13,29 @@ struct ProgressStoreTests {
         progress.highestUnlockedLevel = 4
         progress.setRank(2, for: .impact)
         progress.setPrestigeCount(1, for: .impact)
+        progress.lifetimeStats.characterAbilityDefeats[.nova] = 4
         try store.save(progress)
         #expect(try store.load() == progress)
+    }
+
+    @Test func lifetimeStatsFromOlderSavesDefaultAbilityDefeatsToZero() throws {
+        let json = """
+        {
+          "totalTokensEarned": 900,
+          "totalRuns": 12,
+          "totalWavesCleared": 40,
+          "totalTargetsDefeated": 320,
+          "bossesDefeated": 8,
+          "bestCombo": 17,
+          "upgradesPurchased": 6
+        }
+        """
+
+        let stats = try JSONDecoder().decode(LifetimeStats.self, from: Data(json.utf8))
+
+        #expect(stats.totalRuns == 12)
+        #expect(stats.abilityDefeats(for: .nova) == 0)
+        #expect(stats.characterAbilityDefeats.isEmpty)
     }
 
     @Test func versionOneSaveMigratesWithoutLosingProgress() throws {
@@ -45,6 +66,27 @@ struct ProgressStoreTests {
         #expect(try store.load() == .newPlayer)
     }
 
+    @Test func schemaNineMarsClearUnlocksJupiterWithoutLosingProgress() {
+        var progress = PlayerProgress.newPlayer
+        progress.schemaVersion = 9
+        progress.trainingTokens = 9_999
+        progress.highestUnlockedLevel = 30
+        progress.levelRecords[30] = .init(
+            completed: true,
+            bestTokens: 800,
+            bestStamina: 42
+        )
+        progress.unlockedCharacters = [.ace, .volt, .nova, .aegis]
+
+        progress.reconcileUnlockedContent()
+
+        #expect(progress.schemaVersion == 11)
+        #expect(progress.highestUnlockedLevel == 31)
+        #expect(progress.trainingTokens == 9_999)
+        #expect(progress.levelRecords[30]?.bestTokens == 800)
+        #expect(progress.unlockedCharacters == [.ace, .volt, .nova, .aegis])
+    }
+
     @Test func resettingAccountRemovesSaveAndRestartsOnboarding() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let saveURL = directory.appending(path: "save.json")
@@ -70,18 +112,49 @@ struct ProgressStoreTests {
         #expect(!FileManager.default.fileExists(atPath: saveURL.path))
     }
 
-    @Test func upgradeCostsRiseThroughMasteryThenRemainSteadyForever() {
+#if DEBUG
+    @Test func developerUnlockMakesEveryLevelAndCharacterAccessibleWithoutCompletingIt() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let persistence = FileProgressStore(fileURL: directory.appending(path: "save.json"))
+        let gameStore = GameStore(
+            progress: .newPlayer,
+            settings: .init(),
+            persistence: persistence
+        )
+
+        gameStore.unlockAllContentForTesting()
+
+        #expect(gameStore.progress.highestUnlockedLevel == 70)
+        #expect(gameStore.progress.unlockedCharacters == Set(CharacterID.allCases))
+        #expect(gameStore.progress.levelRecords.isEmpty)
+        #expect(gameStore.progress.trainingTokens == 0)
+        #expect(UpgradeTrack.allCases.allSatisfy {
+            gameStore.progress.rank(for: $0) == 0
+        })
+        #expect(WorldID.allCases.allSatisfy {
+            GameContent.isWorldUnlocked($0, progress: gameStore.progress)
+        })
+        let persistedProgress = try persistence.load()
+        #expect(persistedProgress.highestUnlockedLevel == 70)
+        #expect(persistedProgress.unlockedCharacters == Set(CharacterID.allCases))
+    }
+#endif
+
+    @Test func upgradeCostsRiseThroughMasteryThenGrowLinearlyForever() {
         #expect(UpgradeRules.costs == UpgradeRules.costs.sorted())
         #expect(UpgradeRules.costs.count == UpgradeRules.masteryRank)
         #expect(UpgradeRules.cost(forNextRank: 0) == 100)
-        #expect(UpgradeRules.cost(forNextRank: 4) == 1_300)
-        #expect(UpgradeRules.cost(forNextRank: 5) == 1_300)
-        #expect(UpgradeRules.cost(forNextRank: 500) == 1_300)
+        #expect(UpgradeRules.cost(forNextRank: 4) == 1_800)
+        #expect(UpgradeRules.cost(forNextRank: 5) == 1_800)
+        #expect(UpgradeRules.cost(forNextRank: 6) == 2_050)
+        #expect(UpgradeRules.cost(forNextRank: 10) == 3_050)
+        #expect(UpgradeRules.cost(forNextRank: 500) == 126_550)
         #expect(UpgradePrestigeRules.prestigeCost == 2_600)
         #expect(
             UpgradePrestigeRules.purchaseCost(level: 10, prestigeCount: 0)
-                > UpgradeRules.sustainedCost
+                > UpgradeRules.masteryCost
         )
+        #expect(UpgradePrestigeRules.totalInvestment(toReachRank: 11) == 20_975)
     }
 
     @Test func permanentUpgradePurchasesContinueBeyondRankFive() throws {
@@ -97,7 +170,7 @@ struct ProgressStoreTests {
         }
 
         #expect(gameStore.progress.rank(for: .impact) == 10)
-        #expect(gameStore.progress.trainingTokens == 13_500)
+        #expect(gameStore.progress.trainingTokens == 8_500)
         #expect(try persistence.load().rank(for: .impact) == 10)
     }
 
@@ -105,31 +178,48 @@ struct ProgressStoreTests {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let persistence = FileProgressStore(fileURL: directory.appending(path: "save.json"))
         var progress = PlayerProgress.newPlayer
-        progress.trainingTokens = 5_000
+        progress.trainingTokens = 6_000
         progress.setRank(10, for: .impact)
         let gameStore = GameStore(progress: progress, settings: .init(), persistence: persistence)
 
         #expect(gameStore.purchase(.impact))
         #expect(gameStore.progress.rank(for: .impact) == 10)
         #expect(gameStore.progress.prestigeCount(for: .impact) == 1)
-        #expect(gameStore.progress.trainingTokens == 2_400)
+        #expect(gameStore.progress.trainingTokens == 3_400)
+        #expect(gameStore.progress.unlockedAchievements.contains(.bronzePrestige))
 
         #expect(gameStore.purchase(.impact))
         #expect(gameStore.progress.rank(for: .impact) == 11)
         #expect(gameStore.progress.prestigeCount(for: .impact) == 1)
-        #expect(gameStore.progress.trainingTokens == 1_100)
+        #expect(gameStore.progress.trainingTokens == 350)
         #expect(try persistence.load().prestigeCount(for: .impact) == 1)
     }
 
-    @Test func prestigeProgressUsesTenCirclesAcrossNonlinearLevelRanges() {
+    @Test func badgeLevelsResetWhileGlobalUpgradeRankStaysPermanent() {
+        #expect(UpgradePrestigeRules.localLevel(level: 10, prestigeCount: 0) == 10)
+        #expect(UpgradePrestigeRules.localLevel(level: 10, prestigeCount: 1) == 0)
+        #expect(UpgradePrestigeRules.localLevel(level: 19, prestigeCount: 1) == 9)
+        #expect(UpgradePrestigeRules.localLevel(level: 20, prestigeCount: 2) == 0)
+        #expect(UpgradePrestigeRules.localLevel(level: 49, prestigeCount: 2) == 29)
+        #expect(UpgradePrestigeRules.localLevel(level: 50, prestigeCount: 3) == 0)
+        #expect(UpgradePrestigeRules.localLevel(level: 100, prestigeCount: 4) == 0)
+        #expect(UpgradePrestigeRules.localLevel(level: 200, prestigeCount: 5) == 0)
+        #expect(UpgradePrestigeRules.localLevel(level: 207, prestigeCount: 5) == 7)
+    }
+
+    @Test func everyPrestigeMarkerRepresentsOneActualLevel() {
         #expect(UpgradePrestigeRules.segment(level: 1, prestigeCount: 0).filled == 1)
-        #expect(UpgradePrestigeRules.segment(level: 10, prestigeCount: 0).filled == 10)
+        #expect(UpgradePrestigeRules.segment(level: 10, prestigeCount: 0).total == 10)
         #expect(UpgradePrestigeRules.segment(level: 10, prestigeCount: 1).filled == 0)
         #expect(UpgradePrestigeRules.segment(level: 15, prestigeCount: 1).filled == 5)
-        #expect(UpgradePrestigeRules.segment(level: 35, prestigeCount: 2).filled == 5)
-        #expect(UpgradePrestigeRules.segment(level: 75, prestigeCount: 3).filled == 5)
-        #expect(UpgradePrestigeRules.segment(level: 150, prestigeCount: 4).filled == 5)
-        #expect(UpgradePrestigeRules.segment(level: 200, prestigeCount: 5).filled == 10)
+        #expect(UpgradePrestigeRules.segment(level: 35, prestigeCount: 2).filled == 15)
+        #expect(UpgradePrestigeRules.segment(level: 35, prestigeCount: 2).total == 30)
+        #expect(UpgradePrestigeRules.segment(level: 75, prestigeCount: 3).filled == 25)
+        #expect(UpgradePrestigeRules.segment(level: 75, prestigeCount: 3).total == 50)
+        #expect(UpgradePrestigeRules.segment(level: 150, prestigeCount: 4).filled == 50)
+        #expect(UpgradePrestigeRules.segment(level: 150, prestigeCount: 4).total == 100)
+        #expect(UpgradePrestigeRules.segment(level: 200, prestigeCount: 4).filled == 100)
+        #expect(UpgradePrestigeRules.segment(level: 200, prestigeCount: 5).total == 0)
     }
 
     @Test func existingHighLevelUpgradesReceiveRequiredPrestigeBadges() {
@@ -139,7 +229,7 @@ struct ProgressStoreTests {
 
         progress.reconcileUnlockedContent()
 
-        #expect(progress.schemaVersion == 9)
+        #expect(progress.schemaVersion == 11)
         #expect(progress.prestigeCount(for: .impact) == 2)
         #expect(progress.rank(for: .impact) == 21)
     }
@@ -207,7 +297,7 @@ struct ProgressStoreTests {
             persistence: FileProgressStore(fileURL: directory.appending(path: "save.json"))
         )
 
-        #expect(gameStore.progress.schemaVersion == 9)
+        #expect(gameStore.progress.schemaVersion == 11)
         #expect(gameStore.progress.highestUnlockedLevel == 21)
         #expect(gameStore.progress.unlockedCharacters == [.ace, .volt, .nova])
         #expect(GameContent.isWorldUnlocked(.mars, progress: gameStore.progress))
@@ -277,12 +367,12 @@ struct ProgressStoreTests {
         )
         gameStore.finish(.init(mode: .endless, didWin: false, tokensEarned: 9, remainingStamina: 0, wave: 12, score: 45_000))
         gameStore.finish(.init(mode: .endless, didWin: false, tokensEarned: 1, remainingStamina: 0, wave: 7, score: 8_000))
-        #expect(gameStore.progress.endlessRecord == .init(
-            bestWave: 12,
-            bestScore: 45_000,
-            lastWave: 7,
-            lastScore: 8_000
-        ))
+        let record = gameStore.progress.endlessRecord
+        #expect(record.bestWave == 12)
+        #expect(record.bestScore == 45_000)
+        #expect(record.lastWave == 7)
+        #expect(record.lastScore == 8_000)
+        #expect(record.relics.count == 2)
     }
 
     @Test func endlessRecordPreservesBestAndPersistsTheMostRecentRun() throws {
@@ -313,12 +403,11 @@ struct ProgressStoreTests {
         ))
 
         let loaded = try persistence.load()
-        #expect(loaded.endlessRecord == .init(
-            bestWave: 18,
-            bestScore: 92_000,
-            lastWave: 6,
-            lastScore: 14_000
-        ))
+        #expect(loaded.endlessRecord.bestWave == 18)
+        #expect(loaded.endlessRecord.bestScore == 92_000)
+        #expect(loaded.endlessRecord.lastWave == 6)
+        #expect(loaded.endlessRecord.lastScore == 14_000)
+        #expect(loaded.endlessRecord.relics.count == 2)
     }
 
     @Test func legacyEndlessRecordDecodesWithoutInventingALastRun() throws {
@@ -357,7 +446,7 @@ struct ProgressStoreTests {
 
         #expect(progress.endlessRecord == .init(bestWave: 24, bestScore: 61_000))
         progress.reconcileUnlockedContent()
-        #expect(progress.schemaVersion == 9)
+        #expect(progress.schemaVersion == 11)
 
         let encoded = try JSONEncoder().encode(progress)
         let object = try #require(
@@ -391,7 +480,7 @@ struct ProgressStoreTests {
         """
         var progress = try JSONDecoder().decode(PlayerProgress.self, from: Data(json.utf8))
         progress.reconcileUnlockedContent()
-        #expect(progress.schemaVersion == 9)
+        #expect(progress.schemaVersion == 11)
         #expect(progress.trainingTokens == 321)
         #expect(progress.lifetimeStats == LifetimeStats())
         #expect(progress.dailyReward == DailyRewardState())

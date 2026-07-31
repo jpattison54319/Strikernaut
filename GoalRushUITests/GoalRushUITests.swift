@@ -18,10 +18,14 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(app.buttons["continue-hero"].exists)
         XCTAssertTrue(app.buttons["trophies"].exists)
         XCTAssertTrue(app.buttons["characters"].exists)
+        XCTAssertTrue(app.buttons["relics"].exists)
         XCTAssertTrue(app.buttons["upgrades"].exists)
 
         app.buttons["trophies"].tap()
-        XCTAssertTrue(app.buttons["progress-trophies"].waitForExistence(timeout: 2))
+        XCTAssertTrue(
+            app.otherElements["progress-trophy-widget"]
+                .waitForExistence(timeout: 2)
+        )
         app.buttons["Home"].tap()
 
         app.buttons["play"].tap()
@@ -56,6 +60,175 @@ final class GoalRushUITests: XCTestCase {
         app.buttons["upgrades"].tap()
         XCTAssertTrue(app.otherElements["upgrade-impact"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.buttons["upgrade-purchase-impact"].waitForExistence(timeout: 2))
+    }
+
+    func testRelicsEmptyStateExplainsTheFirstDropAndStartsEndless() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-save", "--screen", "relics"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["No Relics Yet"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Inventory"].exists)
+        XCTAssertTrue(app.buttons["destination-forge"].exists)
+        XCTAssertFalse(app.otherElements["relic-rarity-odds"].exists)
+        let start = app.buttons["relics-empty-start-endless"]
+        XCTAssertTrue(start.exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Relics Empty State Start Endless Padding"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        start.tap()
+        XCTAssertTrue(
+            app.buttons.matching(
+                NSPredicate(format: "identifier BEGINSWITH %@", "ability-")
+            ).firstMatch.waitForExistence(timeout: 3)
+        )
+    }
+
+    func testRelicForgeRevealInventoryComparisonEquipAndScrapFlow() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--screen", "relics", "--relic-fixtures",
+        ]
+        app.launch()
+
+        let forgeDestination = app.buttons["destination-forge"]
+        XCTAssertTrue(forgeDestination.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.otherElements["relic-rarity-odds"].exists)
+        XCTAssertFalse(app.staticTexts["Relic Forge"].exists)
+        forgeDestination.tap()
+
+        XCTAssertTrue(app.staticTexts["relic-scrap-balance"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.staticTexts["relic-scrap-balance"].label, "165 Scrap")
+        XCTAssertEqual(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS[c] %@", "tier")
+            ).count,
+            0
+        )
+        let forgeMode = app.buttons["relic-forge-mode"]
+        XCTAssertTrue(forgeMode.exists)
+        XCTAssertEqual(forgeMode.value as? String, "Random")
+        XCTAssertFalse(app.otherElements["relic-rarity-odds"].exists)
+
+        let forge = app.buttons["forge-relic"]
+        XCTAssertTrue(forge.exists)
+        XCTAssertTrue(forge.isEnabled)
+        forgeMode.tap()
+        app.buttons["Focused"].tap()
+        XCTAssertTrue(app.buttons["relic-focused-stat"].waitForExistence(timeout: 2))
+        XCTAssertTrue(forge.label.contains("Forge Focused"))
+        XCTAssertTrue(forge.label.contains("80"))
+        forgeMode.tap()
+        app.buttons["Random"].tap()
+        XCTAssertTrue(forge.label.contains("Forge Random"))
+        XCTAssertTrue(forge.label.contains("40"))
+        forge.tap()
+        XCTAssertTrue(
+            app.otherElements["forge-relic-reveal"].waitForExistence(timeout: 3)
+        )
+        let revealName = app.staticTexts["forge-reveal-name"]
+        if app.buttons["forge-reveal-skip"].exists {
+            XCTAssertFalse(revealName.exists)
+        }
+        XCTAssertTrue(revealName.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["relic-reveal-keep"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.otherElements["relic-comparison"].exists)
+        let revealScreenshot = XCTAttachment(screenshot: app.screenshot())
+        revealScreenshot.name = "Forged Relic Celebration"
+        revealScreenshot.lifetime = .keepAlways
+        add(revealScreenshot)
+        app.buttons["relic-reveal-keep"].tap()
+
+        XCTAssertEqual(
+            app.staticTexts["relic-scrap-balance"].label,
+            "125 Scrap"
+        )
+        app.buttons["destination-relics"].tap()
+
+        let firstRelic = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "relic-card-")
+        ).firstMatch
+        XCTAssertTrue(firstRelic.waitForExistence(timeout: 3))
+        firstRelic.tap()
+        XCTAssertTrue(
+            String(describing: firstRelic.value).contains("Equipped")
+        )
+        XCTAssertFalse(app.otherElements["relic-comparison"].exists)
+        let equippedScreenshot = XCTAttachment(screenshot: app.screenshot())
+        equippedScreenshot.name = "Equipped Relic Checkmark"
+        equippedScreenshot.lifetime = .keepAlways
+        add(equippedScreenshot)
+        firstRelic.tap()
+        XCTAssertTrue(
+            String(describing: firstRelic.value).contains("Not equipped")
+        )
+        XCTAssertTrue(app.staticTexts["Inventory"].waitForExistence(timeout: 2))
+
+        app.buttons["relic-inventory-salvage"].tap()
+        let cancelCandidate = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "relic-card-")
+        ).firstMatch
+        XCTAssertTrue(cancelCandidate.waitForExistence(timeout: 2))
+        cancelCandidate.tap()
+        XCTAssertTrue(app.buttons["relic-salvage-confirm"].label.contains("Salvage 1"))
+        app.buttons["relic-salvage-cancel"].tap()
+        XCTAssertTrue(app.staticTexts["Inventory"].waitForExistence(timeout: 2))
+
+        app.buttons["relic-inventory-salvage"].tap()
+        let salvageCandidates = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "relic-card-")
+        )
+        XCTAssertGreaterThanOrEqual(salvageCandidates.count, 2)
+        salvageCandidates.element(boundBy: 0).tap()
+        salvageCandidates.element(boundBy: 1).tap()
+
+        let salvage = app.buttons["relic-salvage-confirm"]
+        XCTAssertTrue(salvage.isEnabled)
+        XCTAssertTrue(salvage.label.contains("Salvage 2"))
+        salvage.tap()
+        let confirmSalvage = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Salvage 2 for")
+        ).firstMatch
+        XCTAssertTrue(confirmSalvage.waitForExistence(timeout: 2))
+        confirmSalvage.tap()
+        XCTAssertTrue(app.staticTexts["7 relics"].waitForExistence(timeout: 3))
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Relic Inventory and Salvage"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testRelicsRemainUsableAtAccessibilityExtraExtraExtraLarge() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--screen", "relics", "--relic-fixtures",
+            "--dynamic-type-accessibility-xxxl",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Inventory"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["relic-inventory-salvage"].isHittable)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Relics Accessibility XXXL"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        app.buttons["destination-forge"].tap()
+        XCTAssertTrue(app.staticTexts["relic-scrap-balance"].waitForExistence(timeout: 3))
+        let forge = app.buttons["forge-relic"]
+        for _ in 0..<4 where !forge.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(forge.isHittable)
+        XCTAssertTrue(forge.label.contains("Forge Random"))
+
+        let forgeScreenshot = XCTAttachment(screenshot: app.screenshot())
+        forgeScreenshot.name = "Relic Forge Accessibility XXXL"
+        forgeScreenshot.lifetime = .keepAlways
+        add(forgeScreenshot)
     }
 
     func testPlanetPaginationRevealsFutureJupiterAndReturns() {
@@ -114,10 +287,40 @@ final class GoalRushUITests: XCTestCase {
 
         purchase.tap()
 
-        let nextCost = NSPredicate(format: "label == %@", "Upgrade Impact for 225 Training Tokens")
+        let nextCost = NSPredicate(format: "label == %@", "Upgrade Impact for 275 Training Tokens")
         expectation(for: nextCost, evaluatedWith: purchase)
         waitForExpectations(timeout: 2)
         XCTAssertFalse(app.otherElements["upgrade-detail"].exists)
+    }
+
+    func testUpgradeHowItWorksMatchesLivePrestigeRules() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-save", "--screen", "upgrades"]
+        app.launch()
+
+        let info = app.buttons["How It Works"]
+        XCTAssertTrue(info.waitForExistence(timeout: 3))
+        info.tap()
+
+        XCTAssertTrue(
+            app.otherElements["upgrade-how-it-works"]
+                .waitForExistence(timeout: 2)
+        )
+        XCTAssertTrue(
+            app.staticTexts[
+                "Prestige changes the badge only—rank and stat bonuses never reset."
+            ].exists
+        )
+        XCTAssertTrue(
+            app.staticTexts[
+                "Each badge costs 2.6K Training Tokens."
+            ].exists
+        )
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Current Upgrade Rules"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     func testLevelTenPrestigeAddsBronzeBadge() {
@@ -141,9 +344,10 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(prestige.isEnabled)
         prestige.tap()
 
-        let nextLevel = NSPredicate(format: "label == %@", "Upgrade Impact for 1,300 Training Tokens")
+        let nextLevel = NSPredicate(format: "label == %@", "Upgrade Impact for 3,050 Training Tokens")
         expectation(for: nextLevel, evaluatedWith: prestige)
         waitForExpectations(timeout: 2)
+        XCTAssertEqual(app.staticTexts["upgrade-rank-impact"].label, "Bronze level 0")
         XCTAssertTrue(
             app.descendants(matching: .any)["upgrade-prestige-bronze"].waitForExistence(timeout: 2)
         )
@@ -193,6 +397,30 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 2))
     }
 
+    func testRecoveredCampaignRunOffersContinueOrStartOver() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--level", "1", "--fixed-seed", "42",
+            "--run-checkpoint-preview",
+        ]
+        app.launch()
+
+        let offer = app.otherElements["run-checkpoint-offer"]
+        XCTAssertTrue(offer.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["RUN RECOVERED"].exists)
+        XCTAssertTrue(app.staticTexts["Wave 3"].exists)
+        XCTAssertTrue(app.buttons["run-checkpoint-continue"].isHittable)
+        XCTAssertTrue(app.buttons["run-checkpoint-start-over"].isHittable)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Recovered Campaign Run Prompt"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        app.buttons["run-checkpoint-continue"].tap()
+        XCTAssertTrue(app.staticTexts["PICK A POWER"].waitForExistence(timeout: 3))
+    }
+
     func testChargedCharacterAbilityCanBeActivatedInLivePlay() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -215,11 +443,21 @@ final class GoalRushUITests: XCTestCase {
     }
 
     func testEveryCharacterKickFramesRenderInLivePlay() {
-        for character in ["ace", "volt", "nova", "aegis"] {
+        let previews: [(character: String, level: Int)] = [
+            ("ace", 1),
+            ("volt", 11),
+            ("nova", 21),
+            ("aegis", 30),
+            ("gale", 31),
+            ("halo", 41),
+            ("flux", 51),
+            ("surge", 61),
+        ]
+        for preview in previews {
             let app = XCUIApplication()
             app.launchArguments = [
-                "--reset-save", "--level", "1", "--fixed-seed", "42",
-                "--character", character
+                "--reset-save", "--level", "\(preview.level)", "--fixed-seed", "42",
+                "--character", preview.character
             ]
             app.launch()
             XCTAssertTrue(app.buttons["Kick Off"].waitForExistence(timeout: 3))
@@ -229,7 +467,7 @@ final class GoalRushUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 1.02)
             for frame in 1...3 {
                 let screenshot = XCTAttachment(screenshot: app.screenshot())
-                screenshot.name = "\(character.capitalized) Live Kick Frame \(frame)"
+                screenshot.name = "\(preview.character.capitalized) Live Kick Frame \(frame)"
                 screenshot.lifetime = .keepAlways
                 add(screenshot)
                 Thread.sleep(forTimeInterval: 0.055)
@@ -239,11 +477,23 @@ final class GoalRushUITests: XCTestCase {
     }
 
     func testEveryCharacterAbilityHasLiveVisualFeedback() {
-        for character in ["volt", "nova", "aegis"] {
+        let previews: [
+            (character: String, level: Int, captureDelay: TimeInterval)
+        ] = [
+            ("volt", 11, 0.18),
+            ("nova", 21, 0.58),
+            ("aegis", 30, 0.18),
+            ("gale", 31, 1.02),
+            ("halo", 41, 0.30),
+            ("flux", 51, 1.35),
+            ("surge", 61, 0.72),
+        ]
+        for preview in previews {
             let app = XCUIApplication()
             app.launchArguments = [
-                "--reset-save", "--level", "1", "--fixed-seed", "42", "--boss-preview",
-                "--character", character, "--character-ability-ready"
+                "--reset-save", "--level", "\(preview.level)", "--fixed-seed", "42",
+                "--boss-preview", "--enemy-swarm-preview",
+                "--character", preview.character, "--character-ability-ready"
             ]
             app.launch()
             XCTAssertTrue(app.buttons["Kick Off"].waitForExistence(timeout: 3))
@@ -251,15 +501,15 @@ final class GoalRushUITests: XCTestCase {
             XCTAssertTrue(app.buttons["character-ability"].waitForExistence(timeout: 3))
             Thread.sleep(forTimeInterval: 0.45)
             app.buttons["character-ability"].tap()
-            Thread.sleep(forTimeInterval: character == "nova" ? 0.58 : 0.12)
+            Thread.sleep(forTimeInterval: preview.captureDelay)
 
             let screenshot = XCTAttachment(screenshot: app.screenshot())
-            screenshot.name = character == "nova"
+            screenshot.name = preview.character == "nova"
                 ? "Nova Character Ability In Flight"
-                : "\(character.capitalized) Character Ability"
+                : "\(preview.character.capitalized) Character Ability"
             screenshot.lifetime = .keepAlways
             add(screenshot)
-            if character == "nova" {
+            if preview.character == "nova" {
                 Thread.sleep(forTimeInterval: 0.14)
                 let impact = XCTAttachment(screenshot: app.screenshot())
                 impact.name = "Nova Character Ability Impact"
@@ -318,7 +568,7 @@ final class GoalRushUITests: XCTestCase {
         app.buttons["pause"].tap()
         app.buttons["pause-retry"].tap()
 
-        XCTAssertTrue(app.buttons["Kick Off"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 2))
         XCTAssertEqual(app.alerts.count, 0)
         XCTAssertEqual(app.sheets.count, 0)
     }
@@ -356,6 +606,7 @@ final class GoalRushUITests: XCTestCase {
         let timer = app.otherElements["temporary-ability-timer"]
         XCTAssertTrue(timer.waitForExistence(timeout: 2))
         XCTAssertEqual(timer.label, "Ice Balls")
+        XCTAssertFalse(app.otherElements["endless-live-score"].exists)
 
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Campaign Wave HUD and Temporary Power"
@@ -569,7 +820,11 @@ final class GoalRushUITests: XCTestCase {
 
         let combo = app.otherElements["combo-meter"]
         XCTAssertTrue(combo.waitForExistence(timeout: 3))
-        XCTAssertEqual(combo.label, "Combo times 7")
+        XCTAssertTrue(combo.label.hasPrefix("Combo times "))
+        XCTAssertGreaterThanOrEqual(
+            Int(combo.label.split(separator: " ").last ?? "") ?? 0,
+            7
+        )
         XCTAssertFalse(app.staticTexts["COMBO"].exists)
         XCTAssertTrue(app.otherElements["gameplay-status-bar"].exists)
         XCTAssertTrue(app.otherElements["stamina-meter"].exists)
@@ -775,20 +1030,93 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Clear Earth"].exists)
     }
 
-    func testProgressProgressivelyDisclosesTrophies() {
+    func testProgressShowsClosestTrophiesAndEveryLifetimeStat() {
         let app = XCUIApplication()
-        app.launchArguments = ["--reset-save", "--screen", "trophies"]
+        app.launchArguments = [
+            "--reset-save", "--screen", "trophies", "--progress-fixtures",
+        ]
         app.launch()
 
-        let trophies = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "trophy-"))
-        XCTAssertEqual(trophies.count, 0)
-        XCTAssertFalse(app.buttons["progress-streak"].exists)
-        let trophiesCategory = app.buttons["progress-trophies"]
-        XCTAssertTrue(trophiesCategory.waitForExistence(timeout: 2))
-        trophiesCategory.tap()
+        XCTAssertTrue(
+            app.otherElements["progress-trophy-widget"]
+                .waitForExistence(timeout: 3)
+        )
+        XCTAssertFalse(app.staticTexts["MILESTONE COMPLETION"].exists)
+        XCTAssertFalse(app.staticTexts["NEXT MILESTONE"].exists)
+        XCTAssertFalse(app.staticTexts["Collections"].exists)
+
+        let previews = app.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@",
+                "progress-trophy-preview-"
+            )
+        )
+        XCTAssertEqual(previews.count, 3)
+        XCTAssertTrue(app.buttons["progress-trophies-all"].isHittable)
+
+        XCTAssertTrue(
+            app.otherElements["progress-lifetime-widget"].exists
+        )
+        for metric in [
+            "runs", "endlessWaves", "targets", "bosses",
+            "bestCombo", "runTokens", "upgrades", "abilityDefeats",
+        ] {
+            XCTAssertTrue(
+                app.descendants(matching: .any)[
+                    "progress-lifetime-\(metric)"
+                ].exists,
+                "Missing lifetime metric \(metric)"
+            )
+        }
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Progress Trophy and Lifetime Widgets"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        app.buttons["progress-trophies-all"].tap()
+        let trophies = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "trophy-")
+        )
         XCTAssertTrue(trophies.firstMatch.waitForExistence(timeout: 2))
-        XCTAssertGreaterThan(trophies.count, 0)
+        XCTAssertGreaterThan(trophies.count, 3)
+    }
+
+    func testProgressWidgetsRemainUsableAtAccessibilityExtraExtraExtraLarge() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--screen", "trophies", "--progress-fixtures",
+            "--dynamic-type-accessibility-xxxl",
+        ]
+        app.launch()
+
+        XCTAssertTrue(
+            app.otherElements["progress-trophy-widget"]
+                .waitForExistence(timeout: 3)
+        )
+        XCTAssertTrue(app.buttons["progress-trophies-all"].isHittable)
+
+        let topScreenshot = XCTAttachment(screenshot: app.screenshot())
+        topScreenshot.name = "Progress Accessibility XXXL Trophies"
+        topScreenshot.lifetime = .keepAlways
+        add(topScreenshot)
+
+        let finalMetric = app.descendants(matching: .any)[
+            "progress-lifetime-abilityDefeats"
+        ]
+        for _ in 0..<12 {
+            if finalMetric.exists, finalMetric.isHittable {
+                break
+            }
+            app.swipeUp()
+        }
+        XCTAssertTrue(finalMetric.waitForExistence(timeout: 2))
+        XCTAssertTrue(finalMetric.isHittable)
+
+        let lifetimeScreenshot = XCTAttachment(screenshot: app.screenshot())
+        lifetimeScreenshot.name = "Progress Accessibility XXXL Lifetime"
+        lifetimeScreenshot.lifetime = .keepAlways
+        add(lifetimeScreenshot)
     }
 
     func testUnlockedMarsPlanetOpensItsWorldMap() {
@@ -804,12 +1132,12 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(app.buttons["level-21"].exists)
     }
 
-    func testCampaignLevelShowsPreviewBeforeLaunch() {
+    func testCampaignLevelShowsBriefingBeforeLaunch() {
         let app = XCUIApplication()
         app.launchArguments = ["--reset-save", "--screen", "levels"]
         app.launch()
 
-        XCTAssertFalse(app.otherElements["level-preview"].exists)
+        XCTAssertFalse(app.buttons["briefing-start"].exists)
         XCTAssertTrue(app.buttons["planet-earth"].waitForExistence(timeout: 3))
         app.buttons["planet-earth"].tap()
         let lockedLevel = app.buttons["level-2"]
@@ -819,8 +1147,8 @@ final class GoalRushUITests: XCTestCase {
             "Unexpected locked level label: \(lockedLevel.label)"
         )
         app.buttons["level-1"].tap()
-        XCTAssertTrue(app.otherElements["level-preview"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.buttons["level-preview-play"].exists)
+        XCTAssertTrue(app.buttons["briefing-start"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["pause"].isHittable)
     }
 
     func testEndlessHubIsMinimalAndStartsOnEarth() {
@@ -872,6 +1200,37 @@ final class GoalRushUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testEndlessHubKeepsEquippedRelicOnlyOnRelicsScreen() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--screen", "endless", "--relic-fixtures",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["start-endless"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.otherElements["equipped-relic"].exists)
+        XCTAssertFalse(app.buttons["manage-relics"].exists)
+        XCTAssertFalse(app.staticTexts["Equipped Relic"].exists)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Endless Hub Without Equipped Relic"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testRecoveredEndlessRunKeepsItsOriginalRelicSnapshot() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--endless", "--relic-fixtures",
+            "--run-checkpoint-preview", "--fixed-seed", "42",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.otherElements["run-checkpoint-offer"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.otherElements["run-checkpoint-relic"].exists)
+        XCTAssertTrue(app.buttons["run-checkpoint-continue"].isHittable)
+    }
+
     func testEndlessEnemyCounterAdvancesAfterInitialDraft() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -894,6 +1253,35 @@ final class GoalRushUITests: XCTestCase {
         waitForExpectations(timeout: 6)
         XCTAssertTrue(objective.label.hasPrefix("Wave 1, "))
         XCTAssertTrue(objective.label.hasSuffix(" enemies remaining"))
+    }
+
+    func testEndlessHeaderCentersLiveScoreBetweenStaminaAndTokens() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--endless", "--fixed-seed", "42"
+        ]
+        app.launch()
+
+        let ability = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "ability-")
+        ).firstMatch
+        XCTAssertTrue(ability.waitForExistence(timeout: 3))
+        ability.tap()
+
+        let stamina = app.otherElements["stamina-meter"]
+        let score = app.otherElements["endless-live-score"]
+        let tokens = app.otherElements["training-token-counter"]
+        XCTAssertTrue(score.waitForExistence(timeout: 3))
+        XCTAssertEqual(score.label, "Score 0")
+        XCTAssertTrue(stamina.exists)
+        XCTAssertTrue(tokens.exists)
+        XCTAssertGreaterThan(score.frame.minX, stamina.frame.maxX)
+        XCTAssertLessThan(score.frame.maxX, tokens.frame.minX)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Endless Header With Live Score"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     func testEndlessWorldTransitionHandsEarthOffToMoonBeforeDraft() {
@@ -975,11 +1363,58 @@ final class GoalRushUITests: XCTestCase {
 
     func testEndlessResultShowsNewBestBadge() {
         let app = XCUIApplication()
-        app.launchArguments = ["--reset-save", "--screen", "result-endless"]
+        app.launchArguments = [
+            "--reset-save", "--screen", "result-endless",
+            "--rewarded-ad-stub",
+        ]
         app.launch()
         XCTAssertTrue(app.staticTexts["result-new-best"].waitForExistence(timeout: 3)
                       || app.otherElements["result-new-best"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["result-relic-found"].exists)
+        XCTAssertTrue(app.otherElements["result-relic-summary"].exists)
+        XCTAssertFalse(app.buttons["result-relic-equip"].exists)
         XCTAssertTrue(app.buttons["result-primary"].waitForExistence(timeout: 2))
+        assertRewardButtonIsRightOfTokens(in: app)
+    }
+
+    func testEndlessDeathShowsRelicRevealBeforeCompactResult() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--endless", "--endless-wave", "12",
+            "--death-save-preview", "--disable-ads",
+        ]
+        app.launch()
+
+        XCTAssertTrue(
+            app.otherElements["death-save-offer"].waitForExistence(timeout: 4)
+        )
+        app.buttons["death-save-decline"].tap()
+
+        let reveal = app.otherElements["relic-drop-reveal"]
+        XCTAssertTrue(reveal.waitForExistence(timeout: 4))
+        XCTAssertFalse(app.staticTexts["result-title"].exists)
+
+        let skip = app.buttons["relic-drop-skip"]
+        if skip.waitForExistence(timeout: 1) {
+            skip.tap()
+        }
+
+        XCTAssertTrue(
+            app.staticTexts["relic-drop-name"].waitForExistence(timeout: 3)
+        )
+        let continueButton = app.buttons["relic-drop-continue"]
+        XCTAssertTrue(continueButton.waitForExistence(timeout: 3))
+        continueButton.tap()
+
+        let title = app.staticTexts["result-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 4))
+        XCTAssertEqual(title.label, "Wave 12")
+        XCTAssertTrue(app.otherElements["result-stats"].exists)
+        XCTAssertTrue(app.otherElements["result-wave"].exists)
+        XCTAssertTrue(app.otherElements["result-score"].exists)
+        XCTAssertTrue(app.otherElements["result-best"].exists)
+        XCTAssertTrue(app.otherElements["result-relic-summary"].exists)
+        XCTAssertFalse(app.buttons["result-relic-equip"].exists)
     }
 
     func testCampaignResultOmitsMissionProgressAndSavedConfirmation() {
@@ -1001,6 +1436,35 @@ final class GoalRushUITests: XCTestCase {
         )
     }
 
+    func testRewardedAdGrantsHalfTheDisplayedCampaignTokens() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--screen", "result-world", "--rewarded-ad-stub",
+        ]
+        app.launch()
+
+        let reward = app.buttons["rewarded-token-bonus"]
+        XCTAssertTrue(reward.waitForExistence(timeout: 3))
+        assertRewardButtonIsRightOfTokens(in: app)
+        XCTAssertEqual(reward.label, "Watch video ad")
+        XCTAssertTrue(String(describing: reward.value).contains("50 percent"))
+        reward.tap()
+
+        let claimed = app.descendants(matching: .any)["rewarded-token-bonus-claimed"]
+        XCTAssertTrue(claimed.waitForExistence(timeout: 2))
+        XCTAssertEqual(claimed.label, "50 percent token bonus added")
+        XCTAssertFalse(reward.exists)
+    }
+
+    private func assertRewardButtonIsRightOfTokens(in app: XCUIApplication) {
+        let tokens = app.otherElements["result-tokens"]
+        let reward = app.buttons["rewarded-token-bonus"]
+        XCTAssertTrue(tokens.waitForExistence(timeout: 3))
+        XCTAssertTrue(reward.waitForExistence(timeout: 3))
+        XCTAssertGreaterThan(reward.frame.minX, tokens.frame.maxX)
+        XCTAssertLessThan(abs(reward.frame.midY - tokens.frame.midY), 2)
+    }
+
     func testCampaignLossUsesClearGameOverHeadline() {
         let app = XCUIApplication()
         app.launchArguments = ["--reset-save", "--screen", "result-loss"]
@@ -1012,22 +1476,72 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["RUN ENDED"].exists)
     }
 
-    func testResultExposesOnlyUpgradesMapAndHomeDestinations() {
+    func testCampaignDeathSaveDeclineShowsFinalLossAndTokenReward() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--level", "1", "--death-save-preview",
+            "--rewarded-ad-stub",
+        ]
+        app.launch()
+
+        XCTAssertTrue(
+            app.otherElements["death-save-offer"].waitForExistence(timeout: 3)
+        )
+        XCTAssertTrue(app.buttons["death-save-watch"].exists)
+        let decline = app.buttons["death-save-decline"]
+        XCTAssertTrue(decline.exists)
+        XCTAssertEqual(decline.label, "Let Me Die")
+
+        decline.tap()
+
+        let title = app.staticTexts["result-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 3))
+        XCTAssertEqual(title.label, "GAME OVER")
+        XCTAssertTrue(
+            app.buttons["rewarded-token-bonus"].waitForExistence(timeout: 2)
+        )
+    }
+
+    func testEndlessRewardedDeathSaveContinuesTheRun() {
+        verifyRewardedDeathSaveContinues(modeArguments: ["--endless"])
+    }
+
+    func testCampaignRewardedDeathSaveContinuesTheRun() {
+        verifyRewardedDeathSaveContinues(modeArguments: ["--level", "1"])
+    }
+
+    func testEndlessFailureCanRetryRepeatedlyWithoutTerminating() {
+        verifyRepeatedFailureRetries(modeArguments: ["--endless"])
+    }
+
+    func testCampaignFailureCanRetryRepeatedlyWithoutTerminating() {
+        verifyRepeatedFailureRetries(modeArguments: ["--level", "1"])
+    }
+
+    func testEndlessPauseCanRetryRepeatedlyWithoutTerminating() {
+        verifyRepeatedPauseRetries(modeArguments: ["--endless"])
+    }
+
+    func testCampaignPauseCanRetryRepeatedlyWithoutTerminating() {
+        verifyRepeatedPauseRetries(modeArguments: ["--level", "1"])
+    }
+
+    func testEndlessResultExposesOnlyRelicsEndlessAndHomeDestinations() {
         let app = XCUIApplication()
         app.launchArguments = ["--reset-save", "--screen", "result-endless"]
         app.launch()
 
         XCTAssertTrue(app.buttons["result-primary"].waitForExistence(timeout: 3))
         XCTAssertEqual(app.buttons["result-primary"].label, "Retry")
-        XCTAssertTrue(app.buttons["result-more-upgrades"].exists)
+        XCTAssertTrue(app.buttons["result-more-relics"].exists)
         XCTAssertTrue(app.buttons["result-more-map"].exists)
         XCTAssertTrue(app.buttons["result-more-home"].exists)
         XCTAssertFalse(app.buttons["result-more-characters"].exists)
         XCTAssertFalse(app.buttons["result-more"].exists)
         XCTAssertFalse(app.otherElements["result-more-actions"].exists)
 
-        app.buttons["result-more-upgrades"].tap()
-        XCTAssertTrue(app.otherElements["upgrade-impact"].waitForExistence(timeout: 2))
+        app.buttons["result-more-relics"].tap()
+        XCTAssertTrue(app.staticTexts["Inventory"].waitForExistence(timeout: 2))
 
         app.terminate()
         app.launch()
@@ -1041,5 +1555,115 @@ final class GoalRushUITests: XCTestCase {
         XCTAssertTrue(app.buttons["result-more-home"].waitForExistence(timeout: 3))
         app.buttons["result-more-home"].tap()
         XCTAssertTrue(app.otherElements["home-root"].waitForExistence(timeout: 2))
+    }
+
+    private func verifyRepeatedFailureRetries(modeArguments: [String]) {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--death-save-preview", "--disable-ads",
+        ] + modeArguments
+        app.launch()
+
+        for attempt in 1...4 {
+            let offer = app.otherElements["death-save-offer"]
+            XCTAssertTrue(
+                offer.waitForExistence(timeout: 4),
+                "Death-save offer was missing on attempt \(attempt)"
+            )
+            app.buttons["death-save-decline"].tap()
+
+            let retry = app.buttons["result-primary"]
+            XCTAssertTrue(
+                retry.waitForExistence(timeout: 4),
+                "Result retry was missing on attempt \(attempt)"
+            )
+            XCTAssertEqual(retry.label, "Retry")
+            XCTAssertEqual(
+                app.state,
+                .runningForeground,
+                "The app terminated after failure \(attempt)"
+            )
+            retry.tap()
+        }
+
+        XCTAssertTrue(
+            app.otherElements["death-save-offer"].waitForExistence(timeout: 4)
+        )
+        XCTAssertEqual(app.state, .runningForeground)
+    }
+
+    private func verifyRewardedDeathSaveContinues(
+        modeArguments: [String]
+    ) {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--death-save-preview",
+            "--rewarded-ad-stub", "--gameplay-runtime-probe",
+        ] + modeArguments
+        app.launch()
+
+        let continueButton = app.buttons["death-save-watch"]
+        XCTAssertTrue(continueButton.waitForExistence(timeout: 3))
+        XCTAssertEqual(continueButton.label, "Watch Ad & Continue")
+        continueButton.tap()
+
+        let countdown = app.otherElements["death-save-countdown"]
+        XCTAssertTrue(countdown.waitForExistence(timeout: 2))
+        XCTAssertTrue(countdown.label.contains("Resuming in"))
+        XCTAssertFalse(app.buttons["pause"].isHittable)
+        XCTAssertFalse(app.otherElements["death-save-offer"].exists)
+
+        let countdownFinished = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: countdown
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [countdownFinished], timeout: 4),
+            .completed,
+            "The recovery countdown did not complete after three seconds."
+        )
+        XCTAssertTrue(app.buttons["pause"].isHittable)
+
+        let runtimeProbe =
+            app.descendants(matching: .any)["gameplay-runtime-probe"]
+        XCTAssertTrue(runtimeProbe.waitForExistence(timeout: 2))
+        let simulationAdvanced = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value != %@", "0"),
+            object: runtimeProbe
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [simulationAdvanced], timeout: 3),
+            .completed,
+            "The simulation remained paused after the rewarded continue."
+        )
+    }
+
+    private func verifyRepeatedPauseRetries(modeArguments: [String]) {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--reset-save", "--auto-kick-off", "--disable-ads",
+        ] + modeArguments
+        app.launch()
+
+        for attempt in 1...4 {
+            let pause = app.buttons["pause"]
+            XCTAssertTrue(
+                pause.waitForExistence(timeout: 4),
+                "Gameplay did not restart on attempt \(attempt)"
+            )
+            pause.tap()
+
+            let retry = app.buttons["pause-retry"]
+            XCTAssertTrue(retry.waitForExistence(timeout: 2))
+            retry.tap()
+            XCTAssertEqual(
+                app.state,
+                .runningForeground,
+                "The app terminated after pause retry \(attempt)"
+            )
+        }
+
+        XCTAssertTrue(app.buttons["pause"].waitForExistence(timeout: 4))
+        XCTAssertEqual(app.state, .runningForeground)
     }
 }

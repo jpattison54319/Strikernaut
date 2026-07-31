@@ -95,6 +95,10 @@ struct CharacterRosterCard: View {
         case .timeBreak: "snowflake"
         case .meteorVolley: "meteor.fill"
         case .lastStand: "shield.lefthalf.filled"
+        case .stormbreak: "wind"
+        case .ringRelay: "circle.hexagongrid.circle.fill"
+        case .poleShift: "dot.scope"
+        case .tidalBreak: "water.waves"
         }
     }
 }

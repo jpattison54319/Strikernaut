@@ -20,10 +20,92 @@ struct CharacterAbilityIcon: View {
                 drawMeteorVolley(in: &context, color: color, softColor: softColor)
             case .lastStand:
                 drawLastStand(in: &context, color: color, softColor: softColor)
+            case .stormbreak:
+                drawPinballBlitz(in: &context, color: color, softColor: softColor)
+            case .ringRelay:
+                drawOrbitalCrown(in: &context, color: color, softColor: softColor)
+            case .poleShift:
+                drawPolarLockdown(in: &context, color: color, softColor: softColor)
+            case .tidalBreak:
+                drawTidalBreak(in: &context, color: color, softColor: softColor)
             }
         }
         .frame(width: 38, height: 38)
         .accessibilityHidden(true)
+    }
+
+    private func drawOrbitalCrown(
+        in context: inout GraphicsContext,
+        color: Color,
+        softColor: Color
+    ) {
+        let orbit = CGRect(x: 4, y: 8, width: 28, height: 20)
+        context.stroke(
+            Path(ellipseIn: orbit),
+            with: .color(softColor),
+            lineWidth: 2
+        )
+        for index in 0..<8 {
+            let angle = Double(index) / 8 * Double.pi * 2
+            let center = CGPoint(
+                x: 18 + cos(angle) * 14,
+                y: 18 + sin(angle) * 10
+            )
+            context.fill(
+                Path(ellipseIn: CGRect(
+                    x: center.x - 2.7,
+                    y: center.y - 2.7,
+                    width: 5.4,
+                    height: 5.4
+                )),
+                with: .color(color)
+            )
+        }
+    }
+
+    private func drawPolarLockdown(
+        in context: inout GraphicsContext,
+        color: Color,
+        softColor: Color
+    ) {
+        context.fill(
+            Path(ellipseIn: CGRect(x: 5, y: 20, width: 26, height: 10)),
+            with: .color(softColor)
+        )
+        var spikes = Path()
+        for x in stride(from: 8.0, through: 28.0, by: 5.0) {
+            spikes.move(to: CGPoint(x: x - 2, y: 24))
+            spikes.addLine(to: CGPoint(x: x, y: 8))
+            spikes.addLine(to: CGPoint(x: x + 2, y: 24))
+        }
+        context.fill(spikes, with: .color(color))
+    }
+
+    private func drawTidalBreak(
+        in context: inout GraphicsContext,
+        color: Color,
+        softColor: Color
+    ) {
+        for row in 0..<3 {
+            var wave = Path()
+            let y = 11.0 + Double(row) * 7
+            wave.move(to: CGPoint(x: 3, y: y + 2))
+            wave.addCurve(
+                to: CGPoint(x: 18, y: y),
+                control1: CGPoint(x: 8, y: y - 6),
+                control2: CGPoint(x: 13, y: y + 6)
+            )
+            wave.addCurve(
+                to: CGPoint(x: 33, y: y + 2),
+                control1: CGPoint(x: 23, y: y - 6),
+                control2: CGPoint(x: 28, y: y + 6)
+            )
+            context.stroke(
+                wave,
+                with: .color(row == 1 ? color : softColor),
+                style: StrokeStyle(lineWidth: 3, lineCap: .round)
+            )
+        }
     }
 
     private func drawPinballBlitz(

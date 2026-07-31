@@ -12,9 +12,12 @@ struct EndlessHubView: View {
                 )
 
                 ScrollView {
-                    EndlessRunStatsView(record: store.progress.endlessRecord)
+                    VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
+                        EndlessRunStatsView(record: store.progress.endlessRecord)
+                    }
                         .padding(.horizontal, GoalRushTheme.Metrics.horizontalPadding)
                         .padding(.top, GoalRushTheme.Metrics.sectionSpacing)
+                        .padding(.bottom, GoalRushTheme.Metrics.sectionSpacing)
                 }
                 .scrollBounceBehavior(.basedOnSize)
 

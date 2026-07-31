@@ -25,13 +25,17 @@ enum SpecialBallPresentation {
         case .orbitShot: "AbilityShockwave"
         case .solarPierce: "AbilityThroughBall"
         case .volt: "SoccerBallVolt"
+        case .gravityWell: "SoccerBallGravityVortex"
+        case .ringReturn: "SoccerBallReturn"
+        case .polarLink: "SoccerBallMagnet"
+        case .undertow: "SoccerBallTidal"
         }
     }
 
     private static func benefit(for ability: TemporaryBallAbility) -> String {
         switch ability {
         case .volt:
-            "Shots chain through enemies."
+            "Chains through every enemy; closer targets take more damage."
         case .ice:
             "Shots freeze targets."
         case .fire:
@@ -44,6 +48,14 @@ enum SpecialBallPresentation {
             "Shots burst into fragments."
         case .rapidFire, .heatSeeking, .orbitShot, .solarPierce:
             ""
+        case .gravityWell:
+            "Pulls nearby targets inward, then deals area damage."
+        case .ringReturn:
+            "Survives hits, turns at the edge, and comes back."
+        case .polarLink:
+            "Marks a target so following balls home toward it."
+        case .undertow:
+            "Pushes regular enemies back and slows them to 55%; bosses resist."
         }
     }
 
@@ -51,20 +63,43 @@ enum SpecialBallPresentation {
         for ability: TemporaryBallAbility,
         currentRank: Int
     ) -> AbilityEffectPresentation {
+        let potency = potencyEffect(
+            for: ability,
+            currentRank: currentRank
+        )
+        guard EndlessSpecialBallRules.isAvailable(ability) else {
+            return potency
+        }
+        return .init(
+            metric: potency.metric,
+            current: potency.current,
+            next: potency.next,
+            accent: potency.accent,
+            chanceCurrent: chanceLabel(rank: currentRank),
+            chanceNext: chanceLabel(rank: currentRank + 1)
+        )
+    }
+
+    private static func potencyEffect(
+        for ability: TemporaryBallAbility,
+        currentRank: Int
+    ) -> AbilityEffectPresentation {
         let nextRank = currentRank + 1
         switch ability {
         case .volt:
             return .init(
-                metric: "First chain hit",
+                metric: "Minimum chain hit",
                 current: percentageOrOff(
                     EndlessSpecialBallRules.voltDamageMultiplier(
                         recipientOffset: 0,
+                        recipientCount: 1,
                         rank: currentRank
                     )
                 ),
                 next: percentageOrOff(
                     EndlessSpecialBallRules.voltDamageMultiplier(
                         recipientOffset: 0,
+                        recipientCount: 1,
                         rank: nextRank
                     )
                 ),
@@ -83,7 +118,7 @@ enum SpecialBallPresentation {
             )
         case .fire:
             return .init(
-                metric: "Burn duration / tick",
+                metric: "Burn time / tick damage",
                 current: fireLabel(rank: currentRank),
                 next: fireLabel(rank: nextRank),
                 accent: GoalRushTheme.orange
@@ -101,17 +136,45 @@ enum SpecialBallPresentation {
             )
         case .explosive:
             return .init(
-                metric: "Blast damage / radius",
+                metric: "Blast damage / reach",
                 current: explosiveLabel(rank: currentRank),
                 next: explosiveLabel(rank: nextRank),
                 accent: GoalRushTheme.gold
             )
         case .split:
             return .init(
-                metric: "Fragments / damage",
+                metric: "Fragments / fragment damage",
                 current: splitLabel(rank: currentRank),
                 next: splitLabel(rank: nextRank),
                 accent: GoalRushTheme.positive
+            )
+        case .gravityWell:
+            return .init(
+                metric: "Vortex damage / reach",
+                current: gravityWellLabel(rank: currentRank),
+                next: gravityWellLabel(rank: nextRank),
+                accent: GoalRushTheme.marsViolet
+            )
+        case .ringReturn:
+            return .init(
+                metric: "Return damage / edge turns",
+                current: ringReturnLabel(rank: currentRank),
+                next: ringReturnLabel(rank: nextRank),
+                accent: GoalRushTheme.gold
+            )
+        case .polarLink:
+            return .init(
+                metric: "Mark time / homing strength",
+                current: magnetMarkLabel(rank: currentRank),
+                next: magnetMarkLabel(rank: nextRank),
+                accent: GoalRushTheme.cyan
+            )
+        case .undertow:
+            return .init(
+                metric: "Push distance / slow time",
+                current: undertowLabel(rank: currentRank),
+                next: undertowLabel(rank: nextRank),
+                accent: GoalRushTheme.blue
             )
         case .rapidFire, .heatSeeking, .orbitShot, .solarPierce:
             return .init(
@@ -130,9 +193,10 @@ enum SpecialBallPresentation {
 
     private static func explosiveLabel(rank: Int) -> String {
         guard rank > 0 else { return "Off" }
-        let radius = EndlessSpecialBallRules.explosionRadius(rank: rank)
-            .formatted(.number.precision(.fractionLength(2)))
-        return "\(percentageOrOff(EndlessSpecialBallRules.explosionDamageMultiplier(rank: rank))) • \(radius)"
+        let reach = fieldPercentage(
+            EndlessSpecialBallRules.explosionRadius(rank: rank)
+        )
+        return "\(percentageOrOff(EndlessSpecialBallRules.explosionDamageMultiplier(rank: rank))) • \(reach) field"
     }
 
     private static func splitLabel(rank: Int) -> String {
@@ -141,7 +205,50 @@ enum SpecialBallPresentation {
             rank: rank,
             isCritical: false
         )
-        return "\(count) • \(percentageOrOff(EndlessSpecialBallRules.splitDamageMultiplier(rank: rank)))"
+        return "\(GameNumberFormatter.compact(count)) • \(percentageOrOff(EndlessSpecialBallRules.splitDamageMultiplier(rank: rank)))"
+    }
+
+    private static func gravityWellLabel(rank: Int) -> String {
+        guard rank > 0 else { return "Off" }
+        let reach = fieldPercentage(
+            EndlessSpecialBallRules.gravityWellRadius(rank: rank)
+        )
+        return "\(percentageOrOff(EndlessSpecialBallRules.gravityWellDamageMultiplier(rank: rank))) • \(reach) field"
+    }
+
+    private static func ringReturnLabel(rank: Int) -> String {
+        guard rank > 0 else { return "Off" }
+        let damage = percentageOrOff(
+            EndlessSpecialBallRules.ringReturnDamageMultiplier(rank: rank)
+        )
+        let turns = EndlessSpecialBallRules.ringReturnPasses(rank: rank)
+        return "\(damage) • \(GameNumberFormatter.compact(turns)) \(turns == 1 ? "turn" : "turns")"
+    }
+
+    private static func magnetMarkLabel(rank: Int) -> String {
+        guard rank > 0 else { return "Off" }
+        let duration = durationLabel(
+            EndlessSpecialBallRules.polarLinkMarkDuration(rank: rank)
+        )
+        let homing = percentageOrOff(
+            EndlessSpecialBallRules.polarLinkTurnRate(rank: rank) / 5.5
+        )
+        return "\(duration) • \(homing)"
+    }
+
+    private static func undertowLabel(rank: Int) -> String {
+        guard rank > 0 else { return "Off" }
+        let push = fieldPercentage(
+            EndlessSpecialBallRules.undertowPush(rank: rank)
+        )
+        return "\(push) field • \(durationLabel(EndlessSpecialBallRules.undertowSlowDuration(rank: rank)))"
+    }
+
+    private static func chanceLabel(rank: Int) -> String {
+        let chance = EndlessSpecialBallRules.triggerChance(rank: rank)
+        return chance > 0
+            ? "\(Int((chance * 100).rounded()))%"
+            : "Off"
     }
 
     private static func durationOrOff(_ duration: TimeInterval) -> String {
@@ -150,11 +257,18 @@ enum SpecialBallPresentation {
     }
 
     private static func durationLabel(_ duration: TimeInterval) -> String {
-        "\(duration.formatted(.number.precision(.fractionLength(2)))) sec"
+        if duration >= 1_000, duration < Double(Int.max) {
+            return "\(GameNumberFormatter.compact(Int(duration.rounded()))) sec"
+        }
+        return "\(duration.formatted(.number.precision(.fractionLength(2)))) sec"
     }
 
     private static func percentageOrOff(_ multiplier: Double) -> String {
         guard multiplier > 0 else { return "Off" }
-        return "\(Int((multiplier * 100).rounded()))%"
+        return "\(GameNumberFormatter.compact(Int((multiplier * 100).rounded())))%"
+    }
+
+    private static func fieldPercentage(_ normalizedDistance: Double) -> String {
+        "\(GameNumberFormatter.compact(Int((normalizedDistance * 100).rounded())))%"
     }
 }

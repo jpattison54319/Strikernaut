@@ -79,6 +79,91 @@ struct EngagementTests {
         #expect(!unlocked.contains(.combo25))
     }
 
+    @Test func expandedAchievementsCoverOuterWorldsEndlessPrestigeRosterAndEveryAbility() {
+        var progress = PlayerProgress.newPlayer
+        for world in WorldID.allCases {
+            progress.levelRecords[GameContent.world(world).finalLevel] = .init(
+                completed: true,
+                bestTokens: 100,
+                bestStamina: 50
+            )
+        }
+        progress.endlessRecord = .init(bestWave: 100, bestScore: 1_000_000)
+        progress.setPrestigeCount(UpgradePrestigeTier.diamond.rawValue, for: .impact)
+        progress.unlockedCharacters = Set(CharacterID.allCases)
+        progress.lifetimeStats.characterAbilityDefeats = Dictionary(
+            uniqueKeysWithValues: CharacterID.allCases.map {
+                ($0, AchievementCatalog.characterAbilityDefeatGoal)
+            }
+        )
+
+        let unlocked = AchievementCatalog.evaluate(progress: progress)
+
+        #expect(unlocked.isSuperset(of: [
+            .jupiterWorldClear, .saturnWorldClear, .uranusWorldClear, .neptuneWorldClear,
+            .wave50, .wave100,
+            .bronzePrestige, .silverPrestige, .goldPrestige, .platinumPrestige, .diamondPrestige,
+            .fullRoster,
+            .aceAbilityDefeats, .voltAbilityDefeats, .novaAbilityDefeats, .aegisAbilityDefeats,
+            .galeAbilityDefeats, .haloAbilityDefeats, .fluxAbilityDefeats, .surgeAbilityDefeats
+        ]))
+    }
+
+    @Test func legacyRosterAndRankFiveTrophiesNowDescribeTheirActualRequirements() {
+        var progress = PlayerProgress.newPlayer
+        progress.unlockedCharacters.insert(.aegis)
+        progress.setRank(UpgradeRules.masteryRank, for: .impact)
+
+        let unlocked = AchievementCatalog.evaluate(progress: progress)
+
+        #expect(unlocked.contains(.fullMarsSet))
+        #expect(!unlocked.contains(.fullRoster))
+        #expect(AchievementCatalog.title(for: .fullMarsSet) == "Aegis Unleashed")
+        #expect(AchievementCatalog.subtitle(for: .maxTrack) == "Reach rank 5 in any upgrade track")
+    }
+
+    @Test func longTermAchievementProgressReportsClampedReadableTotals() {
+        var progress = PlayerProgress.newPlayer
+        progress.endlessRecord = .init(bestWave: 73, bestScore: 0)
+        progress.lifetimeStats.characterAbilityDefeats[.nova] = 18
+
+        #expect(
+            AchievementCatalog.progress(for: .wave100, playerProgress: progress)?.label
+                == "73 / 100"
+        )
+        #expect(
+            AchievementCatalog.progress(for: .novaAbilityDefeats, playerProgress: progress)?.label
+                == "18 / 50"
+        )
+        #expect(
+            AchievementCatalog.progress(for: .wave50, playerProgress: progress)?.fraction
+                == 1
+        )
+    }
+
+    @Test func closestIncompleteTrophiesPrioritizeNearFinishedProgress() {
+        var progress = PlayerProgress.newPlayer
+        progress.endlessRecord = .init(bestWave: 19, bestScore: 0)
+        progress.lifetimeStats.totalTokensEarned = 900
+        progress.lifetimeStats.bestCombo = 9
+
+        #expect(
+            AchievementCatalog.closestIncomplete(in: progress)
+                == [.wave20, .combo10, .tokens1k]
+        )
+        #expect(
+            AchievementCatalog.closestIncomplete(in: progress, limit: 0)
+                .isEmpty
+        )
+    }
+
+    @Test func lifetimeAbilityDefeatsTotalIncludesEveryCharacter() {
+        var stats = LifetimeStats()
+        stats.characterAbilityDefeats = [.ace: 4, .nova: 7, .surge: 3]
+
+        #expect(stats.totalCharacterAbilityDefeats == 14)
+    }
+
     @MainActor
     private func makeStore() -> GameStore {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
@@ -128,13 +213,40 @@ struct EngagementTests {
         }
     }
 
+    @Test func runResultCreditsAbilityDefeatsToThePlayedCharacterAndUnlocksItsTrophy() {
+        let store = makeStore()
+        store.progress.lifetimeStats.characterAbilityDefeats[.nova] =
+            AchievementCatalog.characterAbilityDefeatGoal - 1
+
+        store.finish(RunResult(
+            mode: .campaign(level: 1),
+            didWin: false,
+            tokensEarned: 0,
+            remainingStamina: 0,
+            character: .nova,
+            characterAbilityDefeats: 1
+        ))
+
+        #expect(
+            store.progress.lifetimeStats.abilityDefeats(for: .nova)
+                == AchievementCatalog.characterAbilityDefeatGoal
+        )
+        #expect(store.progress.lifetimeStats.abilityDefeats(for: .ace) == 0)
+        #expect(store.progress.unlockedAchievements.contains(.novaAbilityDefeats))
+        #expect(store.celebrations.contains(.achievement(.novaAbilityDefeats)))
+    }
+
     @Test func endlessFinishFlagsNewBestWave() {
         let store = makeStore()
         store.finish(RunResult(mode: .endless, didWin: false, tokensEarned: 10,
                                remainingStamina: 0, wave: 6, score: 9_000))
-        guard case .result(let first) = store.route else { Issue.record("Expected result"); return }
+        guard case .relicDrop(let first) = store.route else {
+            Issue.record("Expected relic drop")
+            return
+        }
         #expect(first.newBestWave)
         #expect(first.newBestScore)
+        store.continueAfterRelicDrop(first)
         store.finish(RunResult(mode: .endless, didWin: false, tokensEarned: 10,
                                remainingStamina: 0, wave: 4, score: 3_000))
         guard case .result(let second) = store.route else { Issue.record("Expected result"); return }

@@ -33,7 +33,7 @@ struct CompactStaminaBar: View {
                     value: fraction
                 )
 
-            Text(Int(stamina).formatted())
+            Text(GameNumberFormatter.compact(Self.displayValue(for: stamina)))
                 .font(GoalRushTheme.Typography.subheadlineEmphasized)
                 .monospacedDigit()
                 .foregroundStyle(.white)
@@ -56,9 +56,14 @@ struct CompactStaminaBar: View {
         .frame(width: 106, height: 38, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "Stamina \(Int(stamina)) of \(Int(maxStamina))"
+            "Stamina \(GameNumberFormatter.exact(Self.displayValue(for: stamina))) of \(GameNumberFormatter.exact(Int(maxStamina)))"
         )
         .accessibilityIdentifier("stamina-meter")
+    }
+
+    static func displayValue(for stamina: Double) -> Int {
+        guard stamina > 0 else { return 0 }
+        return max(1, Int(stamina))
     }
 
     private var fraction: CGFloat {

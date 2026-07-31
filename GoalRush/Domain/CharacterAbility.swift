@@ -5,4 +5,8 @@ enum CharacterAbility: String, Codable, CaseIterable, Sendable {
     case timeBreak
     case meteorVolley
     case lastStand
+    case stormbreak
+    case ringRelay
+    case poleShift
+    case tidalBreak
 }

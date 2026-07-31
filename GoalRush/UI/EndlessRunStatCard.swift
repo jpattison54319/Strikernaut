@@ -17,8 +17,8 @@ struct EndlessRunStatCard: View {
             Divider()
                 .overlay(GoalRushTheme.emphasizedSurfaceStroke)
 
-            metric(label: "Wave", value: wave.map { $0.formatted() } ?? "—")
-            metric(label: "Score", value: score.map { $0.formatted() } ?? "—")
+            metric(label: "Wave", value: wave.map(GameNumberFormatter.compact) ?? "—")
+            metric(label: "Score", value: score.map(GameNumberFormatter.compact) ?? "—")
         }
         .padding(GoalRushTheme.Metrics.standardSpacing)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -33,7 +33,7 @@ struct EndlessRunStatCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(
-            "Wave \(wave.map { $0.formatted() } ?? "not set"), score \(score.map { $0.formatted() } ?? "not set")"
+            "Wave \(wave.map(GameNumberFormatter.exact) ?? "not set"), score \(score.map(GameNumberFormatter.exact) ?? "not set")"
         )
         .accessibilityIdentifier(accessibilityIdentifier)
     }

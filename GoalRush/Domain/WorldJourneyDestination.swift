@@ -17,12 +17,16 @@ enum WorldJourneyCatalog {
         .init(id: "earth", name: "Earth", subtitle: "Training Grounds", world: .earth, futureRequirement: nil),
         .init(id: "moon", name: "Moon", subtitle: "Lunar League", world: .moon, futureRequirement: nil),
         .init(id: "mars", name: "Mars", subtitle: "Red Frontier", world: .mars, futureRequirement: nil),
+        .init(id: "jupiter", name: "Jupiter", subtitle: "Storm Citadel", world: .jupiter, futureRequirement: nil),
+        .init(id: "saturn", name: "Saturn", subtitle: "Crown of Rings", world: .saturn, futureRequirement: nil),
+        .init(id: "uranus", name: "Uranus", subtitle: "Tilted Frontier", world: .uranus, futureRequirement: nil),
+        .init(id: "neptune", name: "Neptune", subtitle: "Tempest Deep", world: .neptune, futureRequirement: nil),
         .init(
-            id: "jupiter",
-            name: "Jupiter Citadel",
-            subtitle: "Future Transmission",
+            id: "andromeda",
+            name: "Andromeda Signal",
+            subtitle: "Beyond the Milky Way",
             world: nil,
-            futureRequirement: "Clear Mars to recruit Aegis. Jupiter Citadel arrives in a future chapter."
+            futureRequirement: "Clear Neptune to triangulate the signal. Coordinates remain unstable."
         )
     ]
 
