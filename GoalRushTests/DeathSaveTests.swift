@@ -169,6 +169,37 @@ struct DeathSaveTests {
         #expect(events.contains(.finished(false)))
     }
 
+    @Test(
+        arguments: [
+            RunMode.campaign(level: 1),
+            RunMode.endless,
+        ]
+    )
+    func lethalFramePublishesZeroStaminaBeforeDeathSaveOffer(mode: RunMode) {
+        let session = makeSession(mode: mode)
+        switch mode {
+        case .campaign:
+            session.startCampaignLevel()
+        case .endless:
+            session.choose(.ability(.powerDrive))
+        }
+        session.simulation.setStaminaForTesting(9)
+        session.update(currentTime: 1)
+
+        #expect(session.hudState.stamina == 9)
+
+        session.simulation.spawnHostileProjectileForTesting(
+            x: session.snapshot.playerX,
+            y: 0.16,
+            damage: 100
+        )
+        session.update(currentTime: 1.05)
+
+        #expect(session.phase == .deathSaveOffer)
+        #expect(session.snapshot.stamina == 0)
+        #expect(session.hudState.stamina == 0)
+    }
+
     @Test func positiveFractionalStaminaNeverDisplaysAsZero() {
         #expect(CompactStaminaBar.displayValue(for: 0) == 0)
         #expect(CompactStaminaBar.displayValue(for: 0.01) == 1)

@@ -34,6 +34,10 @@ enum GameHapticPlanner {
             [.init(.kick)]
         case .impact(let impact):
             [.init(kind(for: impact))]
+        case .enemyShieldBroken:
+            [.init(.critical)]
+        case .enemyShieldRefreshed:
+            [.init(.electric)]
         case .elementalReaction:
             [.init(.impact)]
         case .reward, .heal, .comboMilestone:

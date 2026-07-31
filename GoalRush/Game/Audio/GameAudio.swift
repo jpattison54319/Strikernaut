@@ -69,6 +69,11 @@ final class GameAudio {
                     volume: impact.isCritical || impact.isDefeating ? 0.62 : 0.30
                 )
             }
+        case .enemyShieldBroken:
+            play("impact", volume: 0.72)
+            play("confirm", volume: 0.30)
+        case .enemyShieldRefreshed:
+            play("ui-whoosh", volume: 0.62)
         case .elementalReaction:
             break
         case .reward:

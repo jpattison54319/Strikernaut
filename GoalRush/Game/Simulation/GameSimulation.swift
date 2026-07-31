@@ -1,6 +1,16 @@
 import Foundation
 
 final class GameSimulation {
+    private struct TargetDamageResolution {
+        let shieldDamage: Double
+        let healthDamage: Double
+        let wasShielded: Bool
+        let brokeShield: Bool
+
+        var appliedDamage: Double { shieldDamage + healthDamage }
+        var blocksEffects: Bool { wasShielded }
+    }
+
     private(set) var snapshot: SimulationSnapshot
     private let mode: RunMode
     private let level: LevelDefinition?
@@ -421,7 +431,8 @@ final class GameSimulation {
             timeBreakTargetIDs = Set(snapshot.targets.filter { !isPowerUp($0) }.map(\.id))
             timeBreakRemaining = 5.5
             for index in snapshot.targets.indices {
-                guard !isPowerUp(snapshot.targets[index]) else { continue }
+                guard !isPowerUp(snapshot.targets[index]),
+                      !snapshot.targets[index].isShielded else { continue }
                 snapshot.targets[index].freezeRemaining = max(snapshot.targets[index].freezeRemaining, 5.5)
             }
             events.append(.characterAbilityTargets(.timeBreak, affectedPositions))
@@ -686,11 +697,15 @@ final class GameSimulation {
             guard timeBreakTargetIDs.contains(target.id),
                   !isPowerUp(target) else { continue }
             let damage = stats.ballDamage * 2
-            snapshot.targets[index].hitPoints -= damage
+            let resolution = applyTargetDamage(
+                damage,
+                at: index,
+                events: &events
+            )
             shatteredPositions.append(target.position)
             events.append(impactEvent(
                 for: snapshot.targets[index],
-                damage: damage,
+                damage: resolution.appliedDamage,
                 flavor: .ice,
                 critical: true,
                 delivery: .area,
@@ -1613,10 +1628,12 @@ final class GameSimulation {
                     damage: stats.ballDamage * 4.5
                 ))
                 if let index = snapshot.targets.firstIndex(where: { $0.id == target.id }) {
-                    snapshot.targets[index].stunRemaining = max(
-                        snapshot.targets[index].stunRemaining,
-                        0.28
-                    )
+                    if !snapshot.targets[index].isShielded {
+                        snapshot.targets[index].stunRemaining = max(
+                            snapshot.targets[index].stunRemaining,
+                            0.28
+                        )
+                    }
                 }
             }
         }
@@ -1647,19 +1664,26 @@ final class GameSimulation {
                 y: interceptor.startPosition.y
                     + (target.position.y - interceptor.startPosition.y) * eased
             )
-            snapshot.targets[targetIndex].stunRemaining = max(
-                snapshot.targets[targetIndex].stunRemaining,
-                max(0, interceptor.duration - interceptor.elapsed)
-            )
+            if !snapshot.targets[targetIndex].isShielded {
+                snapshot.targets[targetIndex].stunRemaining = max(
+                    snapshot.targets[targetIndex].stunRemaining,
+                    max(0, interceptor.duration - interceptor.elapsed)
+                )
+            }
 
             if progress >= 1 {
-                snapshot.targets[targetIndex].hitPoints -= interceptor.damage
-                if snapshot.targets[targetIndex].bossTier == .standard {
+                let resolution = applyTargetDamage(
+                    interceptor.damage,
+                    at: targetIndex,
+                    events: &events
+                )
+                if !resolution.blocksEffects,
+                   snapshot.targets[targetIndex].bossTier == .standard {
                     snapshot.targets[targetIndex].position.y = max(
                         0.42,
                         snapshot.targets[targetIndex].position.y
                     )
-                } else {
+                } else if !resolution.blocksEffects {
                     snapshot.targets[targetIndex].stunRemaining = max(
                         snapshot.targets[targetIndex].stunRemaining,
                         0.45
@@ -1667,7 +1691,7 @@ final class GameSimulation {
                 }
                 events.append(impactEvent(
                     for: snapshot.targets[targetIndex],
-                    damage: interceptor.damage,
+                    damage: resolution.appliedDamage,
                     flavor: .standard,
                     critical: true,
                     delivery: .direct,
@@ -1783,14 +1807,20 @@ final class GameSimulation {
                   ) <= 0.20 else { continue }
             let damage = stats.ballDamage * 1.15
             hitCounts[target.id, default: 0] += 1
-            snapshot.targets[index].hitPoints -= damage
-            snapshot.targets[index].stunRemaining = max(
-                snapshot.targets[index].stunRemaining,
-                0.18
+            let resolution = applyTargetDamage(
+                damage,
+                at: index,
+                events: &events
             )
+            if !resolution.blocksEffects {
+                snapshot.targets[index].stunRemaining = max(
+                    snapshot.targets[index].stunRemaining,
+                    0.18
+                )
+            }
             events.append(impactEvent(
                 for: snapshot.targets[index],
-                damage: damage,
+                damage: resolution.appliedDamage,
                 flavor: .explosive,
                 critical: true,
                 delivery: .area,
@@ -1849,12 +1879,16 @@ final class GameSimulation {
                           center: ring.center,
                           radius: ring.radius
                       ) else { continue }
-                snapshot.targets[targetIndex].hitPoints -= ring.damage
+                let resolution = applyTargetDamage(
+                    ring.damage,
+                    at: targetIndex,
+                    events: &events
+                )
                 ring.targetHitCounts[target.id, default: 0] += 1
                 ring.targetContactCooldowns[target.id] = 0.45
                 events.append(impactEvent(
                     for: snapshot.targets[targetIndex],
-                    damage: ring.damage,
+                    damage: resolution.appliedDamage,
                     flavor: .standard,
                     critical: true,
                     delivery: .area,
@@ -1963,6 +1997,7 @@ final class GameSimulation {
                            && $0.position.y >= trap.position.y
                    }) {
                     trap.targetID = nil
+                    trap.controlBlockedByShield = false
                 }
                 if trap.targetID == nil {
                     let claimedTargetIDs = Set(
@@ -1996,53 +2031,74 @@ final class GameSimulation {
                    let targetIndex = snapshot.targets.firstIndex(where: {
                        $0.id == targetID
                    }) {
+                    if snapshot.targets[targetIndex].isShielded {
+                        trap.controlBlockedByShield = true
+                    }
+                    let controlBlocked = trap.controlBlockedByShield
                     if trap.captureRemaining == 0, trap.ticksRemaining == 8 {
                         let target = snapshot.targets[targetIndex]
-                        let offset = Vector2(
-                            x: trap.position.x - target.position.x,
-                            y: trap.position.y - target.position.y
-                        )
-                        let distance = hypot(offset.x, offset.y)
-                        let pullRate = target.bossTier == .standard ? 2.4 : 0.72
-                        let minimumPullSpeed = target.bossTier == .standard ? 0.42 : 0.16
-                        let pullDistance = min(
-                            distance,
-                            max(
-                                distance * (1 - exp(-pullRate * delta)),
-                                minimumPullSpeed * delta
-                            )
-                        )
-                        if distance > 0 {
-                            snapshot.targets[targetIndex].position.x +=
-                                offset.x / distance * pullDistance
-                            snapshot.targets[targetIndex].position.y +=
-                                offset.y / distance * pullDistance
-                        }
-                        let pulledTarget = snapshot.targets[targetIndex]
-                        let snapDistance = target.bossTier == .standard ? 0.10 : 0.14
-                        if hypot(
-                            trap.position.x - pulledTarget.position.x,
-                            trap.position.y - pulledTarget.position.y
-                        ) <= snapDistance {
+                        if controlBlocked {
+                            trap.position = target.position
                             trap.captureRemaining = 3.2
                             trap.tickClock = 0.08
-                            snapshot.targets[targetIndex].position = trap.position
                             events.append(.characterAbilityEffect(
-                                .magneticTrapSnap(trap.position)
+                                .magneticTrapSnap(target.position)
                             ))
+                        } else {
+                            let offset = Vector2(
+                                x: trap.position.x - target.position.x,
+                                y: trap.position.y - target.position.y
+                            )
+                            let distance = hypot(offset.x, offset.y)
+                            let pullRate = target.bossTier == .standard ? 2.4 : 0.72
+                            let minimumPullSpeed = target.bossTier == .standard ? 0.42 : 0.16
+                            let pullDistance = min(
+                                distance,
+                                max(
+                                    distance * (1 - exp(-pullRate * delta)),
+                                    minimumPullSpeed * delta
+                                )
+                            )
+                            if distance > 0 {
+                                snapshot.targets[targetIndex].position.x +=
+                                    offset.x / distance * pullDistance
+                                snapshot.targets[targetIndex].position.y +=
+                                    offset.y / distance * pullDistance
+                            }
+                            let pulledTarget = snapshot.targets[targetIndex]
+                            let snapDistance = target.bossTier == .standard ? 0.10 : 0.14
+                            if hypot(
+                                trap.position.x - pulledTarget.position.x,
+                                trap.position.y - pulledTarget.position.y
+                            ) <= snapDistance {
+                                trap.captureRemaining = 3.2
+                                trap.tickClock = 0.08
+                                snapshot.targets[targetIndex].position = trap.position
+                                events.append(.characterAbilityEffect(
+                                    .magneticTrapSnap(trap.position)
+                                ))
+                            }
                         }
                     }
                     if trap.captureRemaining > 0 {
                         trap.captureRemaining = max(0, trap.captureRemaining - delta)
-                        snapshot.targets[targetIndex].position = trap.position
+                        if controlBlocked {
+                            trap.position = snapshot.targets[targetIndex].position
+                        } else {
+                            snapshot.targets[targetIndex].position = trap.position
+                        }
                         trap.tickClock -= delta
                         while trap.tickClock <= 0, trap.ticksRemaining > 0 {
                             trap.tickClock += 0.40
                             trap.ticksRemaining -= 1
-                            snapshot.targets[targetIndex].hitPoints -= trap.tickDamage
+                            let resolution = applyTargetDamage(
+                                trap.tickDamage,
+                                at: targetIndex,
+                                events: &events
+                            )
                             events.append(impactEvent(
                                 for: snapshot.targets[targetIndex],
-                                damage: trap.tickDamage,
+                                damage: resolution.appliedDamage,
                                 flavor: .standard,
                                 critical: false,
                                 delivery: .damageOverTime,
@@ -2119,8 +2175,13 @@ final class GameSimulation {
                     continue
                 }
                 wave.contactedTargetIDs.insert(target.id)
-                snapshot.targets[targetIndex].hitPoints -= wave.damage
-                if target.bossTier == .standard {
+                let resolution = applyTargetDamage(
+                    wave.damage,
+                    at: targetIndex,
+                    events: &events
+                )
+                if !resolution.blocksEffects,
+                   target.bossTier == .standard {
                     snapshot.targets[targetIndex].position.y = min(
                         1.12,
                         snapshot.targets[targetIndex].position.y + wave.push
@@ -2129,7 +2190,7 @@ final class GameSimulation {
                         snapshot.targets[targetIndex].stunRemaining,
                         0.24
                     )
-                } else {
+                } else if !resolution.blocksEffects {
                     snapshot.targets[targetIndex].position.y = min(
                         1.12,
                         snapshot.targets[targetIndex].position.y + 0.035
@@ -2141,7 +2202,7 @@ final class GameSimulation {
                 }
                 events.append(impactEvent(
                     for: snapshot.targets[targetIndex],
-                    damage: wave.damage,
+                    damage: resolution.appliedDamage,
                     flavor: .ice,
                     critical: true,
                     delivery: .area,
@@ -2199,6 +2260,8 @@ final class GameSimulation {
                 $0.targetID == target.id && $0.hasLanded
             }
             let trapMovementFactor: Double = if activeTrap == nil {
+                1
+            } else if target.isShielded {
                 1
             } else if target.bossTier == .standard {
                 0
@@ -2284,7 +2347,8 @@ final class GameSimulation {
                     let movementRate = CampaignBalance.bossMovementRate(tier: target.bossTier)
                     let amplitude = target.bossTier == .megaBoss ? 0.68 : 0.58
                     if freezeFactor > 0 {
-                        target.position.x = sin(target.phase * movementRate * direction)
+                        target.bossMovementPhase += delta * freezeFactor * direction
+                        target.position.x = sin(target.bossMovementPhase * movementRate)
                             * amplitude
                     }
                     let healthRatio = target.hitPoints / target.maximumHitPoints
@@ -2293,6 +2357,15 @@ final class GameSimulation {
                         let crossedPhases = (bossPhase + 1)...newPhase
                         bossPhase = newPhase
                         for crossedPhase in crossedPhases {
+                            if target.maximumShieldHitPoints > 0 {
+                                target.shieldHitPoints = target.maximumShieldHitPoints
+                                clearEnemyEffects(on: &target)
+                                snapshot.magneticTraps.removeAll {
+                                    $0.targetID == target.id
+                                }
+                                timeBreakTargetIDs.remove(target.id)
+                                events.append(.enemyShieldRefreshed(target.position))
+                            }
                             events.append(.bossPhase(crossedPhase))
                             pendingReinforcementPhases.append(crossedPhase)
                             if world == .mars {
@@ -2318,7 +2391,8 @@ final class GameSimulation {
                         )
                     }
                 } else {
-                    target.position.y -= enemySpeed(kind) * activeSpeedMultiplier * slowFactor * freezeFactor * direction * delta
+                    let gravityMovementFactor = target.isShielded ? 1 : slowFactor
+                    target.position.y -= enemySpeed(kind) * activeSpeedMultiplier * gravityMovementFactor * freezeFactor * direction * delta
                     if kind == .tackleBot || kind == .craterCrawler || kind == .lunarHopper {
                         target.position.x += sin(target.phase * 5.2) * delta * 0.23 * direction * freezeFactor
                     }
@@ -2376,7 +2450,8 @@ final class GameSimulation {
     }
 
     private func applyGravityPull(to target: inout TargetState, delta: Double) {
-        guard let center = target.gravityPullCenter,
+        guard !target.isShielded,
+              let center = target.gravityPullCenter,
               target.gravityPullRemaining > 0,
               target.gravityPullStrength > 0 else {
             return
@@ -2468,15 +2543,19 @@ final class GameSimulation {
                   horizontalDistance * horizontalDistance
                     + verticalDistance * verticalDistance <= 1 else { continue }
             let damage = target.id == attack.targetID ? attack.damage : attack.damage * 0.55
+            let resolution = applyTargetDamage(
+                damage,
+                at: index,
+                events: &events
+            )
             awardCharacterAbilityChargeForBossDamage(
                 to: target,
-                damage: damage,
+                damage: resolution.appliedDamage,
                 awardsAbilityCharge: attack.awardsAbilityCharge
             )
-            snapshot.targets[index].hitPoints -= damage
             events.append(impactEvent(
                 for: snapshot.targets[index],
-                damage: damage,
+                damage: resolution.appliedDamage,
                 flavor: .explosive,
                 critical: true,
                 delivery: .area,
@@ -2512,17 +2591,26 @@ final class GameSimulation {
                   abs(target.position.y - attack.position.y) <= 0.075,
                   abs(target.position.x - attack.position.x) <= halfWidth else { continue }
             attack.contactedTargetIDs.insert(target.id)
+            let resolution = applyTargetDamage(
+                attack.damage,
+                at: index,
+                events: &events
+            )
             awardCharacterAbilityChargeForBossDamage(
                 to: target,
-                damage: attack.damage,
+                damage: resolution.appliedDamage,
                 awardsAbilityCharge: attack.awardsAbilityCharge
             )
-            snapshot.targets[index].hitPoints -= attack.damage
-            snapshot.targets[index].stunRemaining = max(snapshot.targets[index].stunRemaining, 0.78)
+            if !resolution.blocksEffects {
+                snapshot.targets[index].stunRemaining = max(
+                    snapshot.targets[index].stunRemaining,
+                    0.78
+                )
+            }
             events.append(.characterShockwaveHit(target.position))
             events.append(impactEvent(
                 for: snapshot.targets[index],
-                damage: attack.damage,
+                damage: resolution.appliedDamage,
                 flavor: .standard,
                 critical: false,
                 delivery: .area,
@@ -2637,6 +2725,7 @@ final class GameSimulation {
                 }) {
                     let position = snapshot.targets[targetIndex].position
                     let targetID = snapshot.targets[targetIndex].id
+                    let targetBlockedEffects = snapshot.targets[targetIndex].isShielded
                     let hitEnemy = if case .enemy = snapshot.targets[targetIndex].kind {
                         true
                     } else {
@@ -2693,6 +2782,7 @@ final class GameSimulation {
                             case .powerUp, .volatileCore: false
                             }
                             guard target.id != targetID,
+                                  !target.isShielded,
                                   isPullable,
                                   hypot(target.position.x - position.x, target.position.y - position.y) <= radius else {
                                 continue
@@ -2721,6 +2811,7 @@ final class GameSimulation {
                     if projectile.hasEffect(.polarLink),
                        snapshot.targets.indices.contains(targetIndex),
                        hitEnemy,
+                       !targetBlockedEffects,
                        snapshot.targets[targetIndex].hitPoints > 0 {
                         let rank = specialBallRank(.polarLink)
                         let turnRate = mode.isEndless
@@ -2748,6 +2839,7 @@ final class GameSimulation {
                     if projectile.hasEffect(.undertow),
                        snapshot.targets.indices.contains(targetIndex),
                        hitEnemy,
+                       !targetBlockedEffects,
                        snapshot.targets[targetIndex].bossTier == .standard {
                         let rank = specialBallRank(.undertow)
                         let push = mode.isEndless
@@ -2874,13 +2966,18 @@ final class GameSimulation {
         }
 
         let flavor = damageFlavor(for: projectile.ballEffects)
+        let targetBeforeDamage = snapshot.targets[targetIndex]
+        let resolution = applyTargetDamage(
+            projectile.damage,
+            at: targetIndex,
+            events: &events
+        )
         awardCharacterAbilityChargeForBossDamage(
-            to: snapshot.targets[targetIndex],
-            damage: projectile.damage,
+            to: targetBeforeDamage,
+            damage: resolution.appliedDamage,
             awardsAbilityCharge: projectile.characterProjectile == nil
         )
-        snapshot.targets[targetIndex].hitPoints -= projectile.damage
-        if projectile.hasEffect(.fire) {
+        if projectile.hasEffect(.fire), !resolution.blocksEffects {
             let fireRank = specialBallRank(.fire)
             let duration = mode.isEndless
                 ? EndlessSpecialBallRules.fireDuration(rank: fireRank)
@@ -2899,7 +2996,7 @@ final class GameSimulation {
                 tickDamage
             )
         }
-        if projectile.hasEffect(.ice) {
+        if projectile.hasEffect(.ice), !resolution.blocksEffects {
             let duration = mode.isEndless
                 ? EndlessSpecialBallRules.iceDuration(rank: specialBallRank(.ice))
                 : 1.7
@@ -2908,7 +3005,7 @@ final class GameSimulation {
                 duration
             )
         }
-        if projectile.hasEffect(.reverse) {
+        if projectile.hasEffect(.reverse), !resolution.blocksEffects {
             let duration = mode.isEndless
                 ? EndlessSpecialBallRules.reverseDuration(rank: specialBallRank(.reverse))
                 : 2.8
@@ -2919,7 +3016,7 @@ final class GameSimulation {
         }
         events.append(impactEvent(
             for: snapshot.targets[targetIndex],
-            damage: projectile.damage,
+            damage: resolution.appliedDamage,
             flavor: flavor,
             critical: projectile.isCritical,
             delivery: .direct,
@@ -2948,15 +3045,19 @@ final class GameSimulation {
                   hypot(target.position.x - center.x, target.position.y - center.y) <= radius else { continue }
             if case .powerUp = target.kind { continue }
             if case .volatileCore = target.kind { continue }
+            let resolution = applyTargetDamage(
+                damage,
+                at: index,
+                events: &events
+            )
             awardCharacterAbilityChargeForBossDamage(
                 to: target,
-                damage: damage,
+                damage: resolution.appliedDamage,
                 awardsAbilityCharge: awardsAbilityCharge
             )
-            snapshot.targets[index].hitPoints -= damage
             events.append(impactEvent(
                 for: snapshot.targets[index],
-                damage: damage,
+                damage: resolution.appliedDamage,
                 flavor: .explosive,
                 critical: false,
                 delivery: .area,
@@ -3024,12 +3125,16 @@ final class GameSimulation {
                     : EndlessSpecialBallRules.campaignEquivalentRank
             )
             let damage = projectileDamage * damageMultiplier
+            let resolution = applyTargetDamage(
+                damage,
+                at: targetIndex,
+                events: &aftermathEvents
+            )
             awardCharacterAbilityChargeForBossDamage(
                 to: target,
-                damage: damage,
+                damage: resolution.appliedDamage,
                 awardsAbilityCharge: true
             )
-            snapshot.targets[targetIndex].hitPoints -= damage
             let generation = Int(log2(Double(recipientOrder)).rounded(.down)) + 1
             arcs.append(VoltArc(
                 source: nodePositions[parentOrder],
@@ -3037,7 +3142,7 @@ final class GameSimulation {
                 destination: target.position,
                 generation: generation,
                 recipientOrder: recipientOrder,
-                damage: damage,
+                damage: resolution.appliedDamage,
                 isDefeating: snapshot.targets[targetIndex].hitPoints <= 0
             ))
             nodePositions.append(target.position)
@@ -3225,6 +3330,55 @@ final class GameSimulation {
         events.append(.damage)
     }
 
+    @discardableResult
+    private func applyTargetDamage(
+        _ amount: Double,
+        at index: Int,
+        events: inout [SimulationEvent]
+    ) -> TargetDamageResolution {
+        let requestedDamage = max(0, amount)
+        let wasShielded = snapshot.targets[index].shieldHitPoints > 0
+        let shieldDamage = min(
+            snapshot.targets[index].shieldHitPoints,
+            requestedDamage
+        )
+        snapshot.targets[index].shieldHitPoints -= shieldDamage
+        let remainingDamage = requestedDamage - shieldDamage
+        let healthDamage = min(
+            max(0, snapshot.targets[index].hitPoints),
+            remainingDamage
+        )
+        snapshot.targets[index].hitPoints -= remainingDamage
+        let brokeShield = wasShielded
+            && snapshot.targets[index].shieldHitPoints <= 0
+        if brokeShield {
+            snapshot.targets[index].shieldHitPoints = 0
+            events.append(.enemyShieldBroken(snapshot.targets[index].position))
+        }
+        return TargetDamageResolution(
+            shieldDamage: shieldDamage,
+            healthDamage: healthDamage,
+            wasShielded: wasShielded,
+            brokeShield: brokeShield
+        )
+    }
+
+    private func clearEnemyEffects(on target: inout TargetState) {
+        target.burnRemaining = 0
+        target.burnTickClock = 0
+        target.burnTickDamage = 0
+        target.freezeRemaining = 0
+        target.reverseRemaining = 0
+        target.stunRemaining = 0
+        target.tidalSlowRemaining = 0
+        target.undertowSlowRemaining = 0
+        target.magnetRemaining = 0
+        target.magnetTurnRate = 0
+        target.gravityPullCenter = nil
+        target.gravityPullRemaining = 0
+        target.gravityPullStrength = 0
+    }
+
     private var characterAbilityReferenceQuota: Int {
         if mode.isEndless {
             return EndlessRules.enemyQuota(wave: snapshot.wave)
@@ -3276,7 +3430,10 @@ final class GameSimulation {
               target.waveRole == .boss || target.bossTier != .standard else {
             return
         }
-        let effectiveDamage = min(max(0, target.hitPoints), max(0, damage))
+        let effectiveDamage = min(
+            max(0, target.hitPoints + target.shieldHitPoints),
+            max(0, damage)
+        )
         addCharacterAbilityCharge(
             CharacterAbilityChargeBalance.bossDamageCharge(
                 damage: effectiveDamage,
@@ -3372,6 +3529,19 @@ final class GameSimulation {
             bossTier: tier,
             waveRole: role
         )
+        if mode.isEndless {
+            let isBoss = tier != .standard || role == .boss
+            let chance = isBoss
+                ? EndlessRules.bossShieldSpawnChance(wave: snapshot.wave)
+                : EndlessRules.regularShieldSpawnChance(wave: snapshot.wave)
+            if chance > 0, random.unit() < chance {
+                let fraction = isBoss
+                    ? EndlessRules.bossShieldHealthFraction(wave: snapshot.wave)
+                    : EndlessRules.regularShieldHealthFraction(wave: snapshot.wave)
+                target.maximumShieldHitPoints = hitPoints * fraction
+                target.shieldHitPoints = target.maximumShieldHitPoints
+            }
+        }
         applyStatusEffectPreview(to: &target)
         snapshot.targets.append(target)
     }

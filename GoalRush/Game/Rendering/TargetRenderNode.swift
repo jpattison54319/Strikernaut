@@ -35,6 +35,12 @@ final class TargetRenderNode: SKNode {
     private(set) weak var bossHealthPlate: SKNode?
     private(set) weak var bossHealthFill: SKNode?
     private(set) weak var bossHealthIcon: SKSpriteNode?
+    private(set) weak var regularShieldBackground: SKNode?
+    private(set) weak var regularShieldFill: SKNode?
+    private(set) weak var bossShieldBackground: SKNode?
+    private(set) weak var bossShieldFill: SKNode?
+    private(set) weak var shieldFill: SKNode?
+    private(set) weak var shieldAura: SKNode?
     private(set) var showsBossHealth = false
     private(set) weak var leftLeg: SKNode?
     private(set) weak var rightLeg: SKNode?
@@ -66,7 +72,13 @@ final class TargetRenderNode: SKNode {
         bossHealthPlate = childNode(withName: "boss-health")
         bossHealthFill = bossHealthPlate?.childNode(withName: "boss-health-track/boss-health-fill")
         bossHealthIcon = bossHealthPlate?.childNode(withName: "boss-health-icon") as? SKSpriteNode
+        regularShieldBackground = childNode(withName: "enemy-shield-regular")
+        regularShieldFill = regularShieldBackground?.childNode(withName: "enemy-shield-fill")
+        bossShieldBackground = childNode(withName: "enemy-shield-boss")
+        bossShieldFill = bossShieldBackground?.childNode(withName: "enemy-shield-fill")
+        shieldAura = childNode(withName: "enemy-shield-aura")
         healthFill = regularHealthFill
+        shieldFill = regularShieldFill
         leftLeg = hitReactionRig?.childNode(withName: "left-leg")
         rightLeg = hitReactionRig?.childNode(withName: "right-leg")
         leftArm = hitReactionRig?.childNode(withName: "left-arm")
@@ -93,6 +105,29 @@ final class TargetRenderNode: SKNode {
         bossHealthPlate?.isHidden = !isBoss
         bossHealthIcon?.texture = bossIconTexture
         healthFill = isBoss ? bossHealthFill : regularHealthFill
+        shieldFill = isBoss ? bossShieldFill : regularShieldFill
+        regularShieldBackground?.isHidden = isBoss
+        bossShieldBackground?.isHidden = !isBoss
+    }
+
+    func applyShield(isActive: Bool, reducedMotion: Bool) {
+        shieldAura?.isHidden = !isActive
+        shieldFill?.parent?.isHidden = !isActive
+        guard isActive, let shieldAura else {
+            self.shieldAura?.removeAction(forKey: "shield-pulse")
+            return
+        }
+        guard !reducedMotion else {
+            shieldAura.removeAction(forKey: "shield-pulse")
+            shieldAura.alpha = 0.72
+            return
+        }
+        if shieldAura.action(forKey: "shield-pulse") == nil {
+            shieldAura.run(.repeatForever(.sequence([
+                .fadeAlpha(to: 0.52, duration: 0.48),
+                .fadeAlpha(to: 0.82, duration: 0.48),
+            ])), withKey: "shield-pulse")
+        }
     }
 
     func applyStatus(from target: TargetState, reducedMotion: Bool) {
@@ -453,6 +488,7 @@ final class TargetRenderNode: SKNode {
         let isEffectNode = insideStatusRig
             || node.name?.hasPrefix("status-") == true
             || node.name?.hasPrefix("health-") == true
+            || node.name?.hasPrefix("enemy-shield-") == true
         if !isEffectNode {
             if let sprite = node as? SKSpriteNode {
                 tintSprites.append(.init(node: sprite, color: sprite.color, blendFactor: sprite.colorBlendFactor))

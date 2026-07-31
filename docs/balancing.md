@@ -16,9 +16,9 @@ The design goal is:
   and hostile projectiles retain explicit readability limits;
 - World Levels 5 and 8 are persistent pressure steps, and Level 10 is a boss
   step;
-- the expected Campaign path deliberately underfunds a balanced build after
-  Earth, leaving a gap worth roughly two or three appropriately deep Endless
-  runs;
+- the expected Campaign path deliberately underfunds its reference build,
+  beginning with an Earth wall and continuing with gaps worth a few
+  appropriately deep Endless runs;
 - Endless difficulty and rewards remain uncapped, but reward multipliers grow
   sublinearly so high-wave currency cannot outrun the permanent economy.
 
@@ -183,7 +183,7 @@ The expected first-pass results are:
 
 | World end | First-clear bonuses in world | Cumulative Campaign income | Reference rank | Balanced cost | Intended gap | Baseline Endless run used for comparison | Runs to close gap |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Earth 10 | 1,310 | 7,246 | 3 | 5,850 | 1,396 surplus | — | — |
+| Earth 10 | 1,310 | 7,246 | 4 | 12,150 | 4,904 | Wave 10: 1,196 | 4.10 |
 | Moon 20 | 2,030 | 19,514 | 5 | 22,950 | 3,436 | Wave 10: 1,196 | 2.87 |
 | Mars 30 | 3,140 | 37,121 | 7 | 46,050 | 8,929 | Wave 20: 3,502 | 2.55 |
 | Jupiter 40 | 4,865 | 60,723 | 9 | 75,150 | 14,427 | Wave 30: 6,791 | 2.12 |
@@ -197,21 +197,30 @@ approximately 131,164, for 179,904 through Level 70. The replay-bonus total is
 absorbs the much larger hordes through higher upgrade prices, not reduced
 per-enemy rewards.
 
-The table explains the intended feel: Earth establishes the build, then later
-worlds increasingly ask the player to replay, specialize, or spend time in
-Endless. Optional object rewards and failed attempts make the real gap less
-rigid. No level checks the player's token balance or blocks Start.
+The table explains the intended feel: Earth now establishes both the build and
+the first real funding wall, then later worlds continue asking the player to
+replay, specialize, or spend time in Endless. Optional object rewards and failed
+attempts make the real gap less rigid. No level checks the player's token
+balance or blocks Start.
+
+Before Level 9, the repeatable first-pass floor is approximately 4,473 tokens.
+A balanced rank-3 build costs 5,850, leaving about 1,377—slightly more than the
+1,196-token baseline projection for an Endless run through Wave 10. A player can
+close that gap with specialization, failed-attempt combat income, Campaign
+replays, or Endless; the balance tests do not impose a hard purchase gate.
 
 ## Campaign reference ranks and walls
 
 World-finale reference ranks are:
 
 ```text
-endRank(worldIndex) = 3 + 2 × worldIndex
-                    = [3, 5, 7, 9, 11, 13, 15]
+endRank(0) = 4
+endRank(worldIndex > 0) = 3 + 2 × worldIndex
+                        = [4, 5, 7, 9, 11, 13, 15]
 ```
 
-Earth starts at rank zero. Each later world starts 0.15 rank above the prior
+Earth starts at rank zero and finishes at rank 4. Moon starts at 4.15 and
+finishes at rank 5; each later world likewise starts 0.15 rank above the prior
 finale so even a world opener is strictly harder than the level before it. The
 reference rank is interpolated as:
 
@@ -247,7 +256,7 @@ openingDamageFraction =
 averageEnemyHP =
     referenceBallDamage
     × (openingDamageFraction + 0.05 × (wave - 1))
-    × 1.14^(wave - 1)
+    × 1.35^(wave - 1)
 
 healthMultiplier = averageEnemyHP / meanBaseEnemyHP
 ```
@@ -255,8 +264,9 @@ healthMultiplier = averageEnemyHP / meanBaseEnemyHP
 The opening fraction stays just below one reference non-critical kick. This
 keeps the horde focused on aiming, cadence, pierce, volleys, and supers rather
 than damage-sponge cleanup. Every later level still raises average durability,
-and every later wave compounds durability beyond the expected 14% value of one
-offensive draft.
+and every later wave compounds durability around a representative 35% field
+upgrade. Through Ball and One-Two can still beat that reference in crowds, so a
+good draft remains a real advantage instead of being cancelled out.
 
 Campaign count and pulse formulas are:
 
@@ -292,23 +302,30 @@ Pulse timing preserves an independently increasing per-enemy arrival rate:
 
 ```text
 pressureIndex =
-    (globalLevel - 1) + 1.5 × cumulativeLandmarks
+    (globalLevel - 1)
+    + 1.5 × cumulativeLandmarks
+    + openingCampaignOffset(globalLevel)
+
+openingCampaignOffset =
+    [0, 0, 0, 0, 1, 2, 3, 5, 7, 8] for Levels 1...10
+    8 thereafter
 
 perEnemyInterval =
     max(
         1.55 × 0.9745^pressureIndex,
         0.60 × 0.9965^pressureIndex
     )
-    × 0.91^(wave - 1)
+    × 0.90^(wave - 1)
 
 pulseInterval = max(0.32, perEnemyInterval × packSize)
 ```
 
 Multiplying by pack size turns a continuous trickle into readable horde pulses
-without reducing total arrival pressure. Enemy stats, quotas, packs, and
-intervals never inspect the live loadout. Replaying early content with a
-stronger build therefore reduces escape pressure exactly as the upgrade UI
-promises.
+without reducing total arrival pressure. The opening offset makes Earth Levels
+5–10 form a lasting throughput staircase without adding damage-spongy tutorial
+enemies. Enemy stats, quotas, packs, and intervals never inspect the live
+loadout. Replaying early content with a stronger build therefore reduces escape
+pressure exactly as the upgrade UI promises.
 
 ## Campaign bosses and incoming damage
 
@@ -457,6 +474,35 @@ hostileShots(wave)      = min(12, 4 + floor(i / 5))
 Enemy health, damage, movement, attack cadence, and projectile speed have no
 terminal wave. Spawn, pack, active-enemy, and hostile-projectile limits protect
 readability and frame pacing rather than serving as the only difficulty axes.
+
+### Endless enemy shields
+
+From wave 11 onward, regular enemies and boss reinforcements can spawn with a
+cyan shield above health. Damage depletes shield first and spills into health,
+but a hit that begins against a shield cannot apply burn, freeze, reverse,
+stun, slow, push, pull, capture, or magnet effects. The next hit after the
+shield breaks can apply them normally.
+
+```text
+regularShieldChance(wave >= 11) =
+    0.80 × (1 - exp(-(wave - 10) / 25))
+
+regularShieldHealthFraction(wave >= 11) =
+    0.20 + 0.60 × (1 - exp(-(wave - 10) / 40))
+
+bossShieldChance(wave >= 25) =
+    0.35 × (1 - exp(-(wave - 20) / 50))
+
+bossShieldHealthFraction(wave >= 25) =
+    0.12 + 0.28 × (1 - exp(-(wave - 20) / 60))
+```
+
+At wave 30, approximately 44% of regular enemies receive shields worth 44% of
+their health. Boss shields remain much rarer and smaller. A boss that rolls a
+shield restores it when entering phases 2 and 3, cleansing current control
+effects so sustained high-probability freeze or reverse builds cannot suppress
+all boss attacks. Shield fractions approach bounded ratios, while their
+absolute durability remains uncapped because Endless health continues growing.
 
 Endless run upgrades are also uncapped, but continuous offensive effects begin
 diminishing after rank 5:

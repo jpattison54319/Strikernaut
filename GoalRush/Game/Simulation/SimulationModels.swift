@@ -94,7 +94,10 @@ struct TargetState: Identifiable, Equatable, Sendable {
     var position: Vector2
     var hitPoints: Double
     var maximumHitPoints: Double
+    var shieldHitPoints: Double = 0
+    var maximumShieldHitPoints: Double = 0
     var phase: Double
+    var bossMovementPhase: Double = 0
     var bossTier: CampaignBossTier = .standard
     var waveRole: WaveEnemyRole = .quota
     var burnRemaining: Double = 0
@@ -110,6 +113,10 @@ struct TargetState: Identifiable, Equatable, Sendable {
     var gravityPullCenter: Vector2?
     var gravityPullRemaining: Double = 0
     var gravityPullStrength: Double = 0
+
+    var isShielded: Bool {
+        shieldHitPoints > 0
+    }
 }
 
 enum CharacterProjectileKind: Equatable, Sendable {
@@ -240,6 +247,7 @@ struct MagneticTrapState: Identifiable, Equatable, Sendable {
     var ticksRemaining: Int
     let tickDamage: Double
     var hasLanded: Bool
+    var controlBlockedByShield: Bool = false
 
     var flightProgress: Double {
         guard flightDuration > 0 else { return 1 }
@@ -440,6 +448,8 @@ enum SimulationEvent: Equatable, Sendable {
     case damage
     case kick
     case impact(ImpactEvent)
+    case enemyShieldBroken(Vector2)
+    case enemyShieldRefreshed(Vector2)
     case elementalReaction(Vector2)
     case reward(Int, Vector2)
     case heal(Double, Vector2)

@@ -131,6 +131,26 @@ enum EndlessRules {
         max(3.25, 5.0 - 0.025 * Double(max(0, wave - 5)))
     }
 
+    static func regularShieldSpawnChance(wave: Int) -> Double {
+        guard wave >= 11 else { return 0 }
+        return 0.80 * (1 - exp(-Double(wave - 10) / 25))
+    }
+
+    static func regularShieldHealthFraction(wave: Int) -> Double {
+        guard wave >= 11 else { return 0 }
+        return 0.20 + 0.60 * (1 - exp(-Double(wave - 10) / 40))
+    }
+
+    static func bossShieldSpawnChance(wave: Int) -> Double {
+        guard wave >= 25 else { return 0 }
+        return 0.35 * (1 - exp(-Double(wave - 20) / 50))
+    }
+
+    static func bossShieldHealthFraction(wave: Int) -> Double {
+        guard wave >= 25 else { return 0 }
+        return 0.12 + 0.28 * (1 - exp(-Double(wave - 20) / 60))
+    }
+
     static func waveClearScore(wave: Int) -> Int {
         500 * max(1, wave)
     }

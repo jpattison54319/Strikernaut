@@ -110,25 +110,33 @@ that workload in pulses:
 
 ```text
 pressureIndex =
-    (globalLevel - 1) + 1.5 × cumulativeLandmarks
+    (globalLevel - 1)
+    + 1.5 × cumulativeLandmarks
+    + openingCampaignOffset(globalLevel)
+
+openingCampaignOffset =
+    [0, 0, 0, 0, 1, 2, 3, 5, 7, 8] for Levels 1...10
+    8 thereafter
 
 perEnemyInterval =
     max(
         1.55 × 0.9745^pressureIndex,
         0.60 × 0.9965^pressureIndex
     )
-    × 0.91^(wave - 1)
+    × 0.90^(wave - 1)
 
 pulseInterval = max(0.32, perEnemyInterval × packSize)
 ```
 
-The pack multiplier changes presentation, not average workload. Level 1 opens
-with one enemy per pulse, Level 20 with five, Uranus with six, and Neptune's
-fourth regular wave with thirteen. An underpowered late-game build can fill the
-48-enemy field; a prepared build destroys the same pulses before that backlog
-forms. Endless cadence still approaches a 0.25-second floor and its pack size
-tops out at five. All spawning respects the remaining active and quota slots,
-preventing over-spawn at the end of a wave.
+The pack multiplier changes presentation, not average workload. The opening
+offset makes Earth Levels 5–10 establish a permanent throughput step without
+inflating enemy durability. Level 1 opens with one enemy per pulse, Level 20
+with five, Uranus with six, and Neptune's fourth regular wave with thirteen. An
+underpowered late-game build can fill the 48-enemy field; a prepared build
+destroys the same pulses before that backlog forms. Endless cadence still
+approaches a 0.25-second floor and its pack size tops out at five. All spawning
+respects the remaining active and quota slots, preventing over-spawn at the end
+of a wave.
 
 ## Strength and upgrade budget
 
@@ -139,10 +147,10 @@ player-independent reference build:
 averageEnemyHP =
     referenceBallDamage
     × authoredLevelFraction
-    × 1.14^(wave - 1)
+    × 1.35^(wave - 1)
 ```
 
-The authored reference finale ranks are 3, 5, 7, 9, 11, 13, and 15. World
+The authored reference finale ranks are 4, 5, 7, 9, 11, 13, and 15. World
 Levels 5 and 8 jump toward the next reference rank, and Level 10 derives boss
 health from reference DPS and an increasing 50-to-59-second target. Incoming
 damage, movement speed, attack cadence, hostile projectile speed, quota,
@@ -150,7 +158,9 @@ per-enemy arrival pressure, and average enemy health all increase independently
 from one level to the next. The complete formulas and numerical economy outcomes
 are maintained in `docs/balancing.md`.
 
-- Expected Campaign draft offense grows by `1.14^(draft count)`.
+- Expected Campaign crowd offense grows by `1.35^(draft count)`. Boss health
+  retains `1.14^(draft count)` because pierce does not multiply single-target
+  damage.
 - Permanent Impact, Tempo, Flight, and Spin continue changing damage, cadence,
   travel time, and critical tiers without loadout-based rubber-banding.
 - Conditioning increases real hit capacity because the smooth single-source
@@ -272,10 +282,13 @@ Unit coverage pins the formulas, active caps, kill-only completion, escape
 replacement, objective-role exclusions, final-wave bosses, Endless fifth-wave
 bosses, reinforcement gaps, power-target timing, signature telegraphs, one-hit
 hazards, strict level-to-level pressure growth, horde pulse sizes, hostile
-projectile limits, and HUD values. Deterministic seeded playtests compare
-under-budget and recovered builds at every world finale and prove that a
-Moon-ready rank-5 build cannot skip to Uranus while a recovered build can win.
-UI coverage asserts the combined Campaign, boss, and Endless objective labels
-and the absence of a persistent world-effect HUD. Simulator and physical-device
-play remain necessary for visual readability, real frame pacing with 48 active
-enemies, and final retry/fun tuning.
+projectile limits, and HUD values. Deterministic seeded playtests keep Levels
+1–4 viable for the starter build, prevent fresh or balanced rank-2 profiles from
+sweeping late Earth, retain rank-3 Level 9 wins, and distinguish rank-3 from
+rank-4 performance at the Earth finale. They also compare under-budget and
+recovered builds at every world finale and prove that a Moon-ready rank-5 build
+cannot skip to Uranus while a recovered build can win. UI coverage asserts the
+combined Campaign, boss, and Endless objective labels and the absence of a
+persistent world-effect HUD. Simulator and physical-device play remain
+necessary for visual readability, real frame pacing with 48 active enemies, and
+final retry/fun tuning.

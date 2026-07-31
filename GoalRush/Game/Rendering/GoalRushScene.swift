@@ -53,6 +53,7 @@ final class GoalRushScene: SKScene {
     private var liveTidalWaveIDs = Set<Int>()
     private var liveBossHazardIDs = Set<Int>()
     private var targetHealthRatios: [Int: Double] = [:]
+    private var targetShieldRatios: [Int: Double] = [:]
     private var fragmentedTargetIDs = Set<Int>()
     private var configuredSize = CGSize.zero
     private var renderedWorldID: WorldID
@@ -270,6 +271,7 @@ final class GoalRushScene: SKScene {
                 recycleTarget(node, kind: kind)
             }
             targetHealthRatios.removeValue(forKey: id)
+            targetShieldRatios.removeValue(forKey: id)
         }
         let reduceMotion = reducesMotion
         for target in targets {
@@ -323,6 +325,17 @@ final class GoalRushScene: SKScene {
                 if targetHealthRatios[target.id] != healthRatio {
                     GameNodeFactory.updateHealth(on: node, ratio: healthRatio)
                     targetHealthRatios[target.id] = healthRatio
+                }
+                let shieldRatio = target.shieldHitPoints
+                    / max(1, target.maximumShieldHitPoints)
+                if targetShieldRatios[target.id] != shieldRatio {
+                    GameNodeFactory.updateShield(
+                        on: node,
+                        ratio: shieldRatio,
+                        isActive: target.isShielded,
+                        reducedMotion: reduceMotion
+                    )
+                    targetShieldRatios[target.id] = shieldRatio
                 }
                 GameNodeFactory.updateStatus(on: node, target: target, reducedMotion: reduceMotion)
             }
@@ -917,6 +930,16 @@ final class GoalRushScene: SKScene {
                     flavor: impact.flavor,
                     critical: impact.isCritical,
                     at: location
+                )
+            case .enemyShieldBroken(let position):
+                spawnEnemyShieldPulse(
+                    at: point(x: position.x, y: position.y),
+                    restored: false
+                )
+            case .enemyShieldRefreshed(let position):
+                spawnEnemyShieldPulse(
+                    at: point(x: position.x, y: position.y),
+                    restored: true
                 )
             case .elementalReaction(let position):
                 spawnSteamReaction(at: point(x: position.x, y: position.y))
@@ -2180,6 +2203,27 @@ final class GoalRushScene: SKScene {
         label.zPosition = 2_100
         effectsLayer.addChild(label)
         label.run(.sequence([.group([.moveBy(x: 0, y: 32, duration: 0.42), .fadeOut(withDuration: 0.42)]), .removeFromParent()]))
+    }
+
+    private func spawnEnemyShieldPulse(at position: CGPoint, restored: Bool) {
+        let ring = SKShapeNode(ellipseOf: .init(width: 58, height: 72))
+        ring.name = restored ? "enemy-shield-refresh" : "enemy-shield-break"
+        ring.position = position
+        ring.zPosition = 2_060
+        ring.fillColor = SKColor(red: 0.08, green: 0.72, blue: 1, alpha: 0.14)
+        ring.strokeColor = SKColor(red: 0.24, green: 0.92, blue: 1, alpha: 0.96)
+        ring.lineWidth = restored ? 3 : 2
+        ring.glowWidth = 4
+        effectsLayer.addChild(ring)
+        let duration = reducesMotion ? 0.14 : 0.34
+        let scale: CGFloat = restored ? 1.28 : 1.65
+        ring.run(.sequence([
+            .group([
+                .scale(to: scale, duration: duration),
+                .fadeOut(withDuration: duration),
+            ]),
+            .removeFromParent(),
+        ]))
     }
 
     private func showDamageFeedback() {

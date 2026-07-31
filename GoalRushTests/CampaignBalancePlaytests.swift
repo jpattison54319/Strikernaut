@@ -22,7 +22,7 @@ struct CampaignBalancePlaytests {
             ProgressionProfile(
                 level: 10,
                 underBudgetRank: 0,
-                recoveryRank: 3,
+                recoveryRank: 4,
                 character: .ace
             ),
             ProgressionProfile(
@@ -52,13 +52,13 @@ struct CampaignBalancePlaytests {
             ProgressionProfile(
                 level: 60,
                 underBudgetRank: 11,
-                recoveryRank: 15,
+                recoveryRank: 18,
                 character: .halo
             ),
             ProgressionProfile(
                 level: 70,
                 underBudgetRank: 15,
-                recoveryRank: 24,
+                recoveryRank: 30,
                 character: .aegis
             ),
         ]
@@ -121,7 +121,7 @@ struct CampaignBalancePlaytests {
             run(level: 51, permanentRank: 5, seed: $0)
         }
         let uranusRecovery = seeds.map {
-            run(level: 51, permanentRank: 12, seed: $0)
+            run(level: 51, permanentRank: 13, seed: $0)
         }
 
         #expect(
@@ -150,6 +150,42 @@ struct CampaignBalancePlaytests {
             uranusRecovery.reduce(0) { $0 + $1.progress }
                 > skippedToUranus.reduce(0) { $0 + $1.progress }
         )
+    }
+
+    @Test func freshEarthNeedsPermanentInvestmentBeforeLevelNine() {
+        let seeds: [UInt64] = [11, 29, 47]
+        func outcomes(level: Int, rank: Int) -> [Outcome] {
+            seeds.map {
+                run(level: level, permanentRank: rank, seed: $0, character: .ace)
+            }
+        }
+
+        let tutorial = (1...4).flatMap { outcomes(level: $0, rank: 0) }
+        let freshLevelSix = outcomes(level: 6, rank: 0)
+        let freshLevelNine = outcomes(level: 9, rank: 0)
+        let rankTwoLevelNine = outcomes(level: 9, rank: 2)
+        let rankThreeLevelNine = outcomes(level: 9, rank: 3)
+        let rankThreeFinale = outcomes(level: 10, rank: 3)
+        let rankFourFinale = outcomes(level: 10, rank: 4)
+
+        #expect(tutorial.allSatisfy { $0.didWin })
+        #expect(freshLevelSix.count(where: \.didWin) < seeds.count)
+        #expect(freshLevelNine.allSatisfy { !$0.didWin })
+        #expect(rankTwoLevelNine.count(where: \.didWin) < seeds.count)
+        #expect(rankThreeLevelNine.allSatisfy { $0.didWin })
+        #expect(rankThreeFinale.count(where: \.didWin) < seeds.count)
+        #expect(rankFourFinale.allSatisfy { $0.didWin })
+
+        let balancedRankThreeCost = UpgradeTrack.allCases.count
+            * UpgradePrestigeRules.totalInvestment(toReachRank: 3)
+        let firstPassIncomeBeforeLevelNine = EconomyBalance.expectedCampaignTokens(
+            throughLevel: 8
+        )
+        let baselineEarthEndlessRun = EconomyBalance.expectedEndlessTokens(
+            throughWave: 10
+        )
+        #expect(Double(balancedRankThreeCost) - firstPassIncomeBeforeLevelNine
+                > baselineEarthEndlessRun)
     }
 
     private func run(

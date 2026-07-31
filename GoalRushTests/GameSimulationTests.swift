@@ -1935,6 +1935,7 @@ struct GameSimulationTests {
     }
 
     @Test func campaignReferenceBuildAndBossPressureEscalateAcrossAllWorlds() {
+        let expectedFinalRanks = [4.0, 5, 7, 9, 11, 13, 15]
         var previousFinalRank = 0.0
         var previousBossHealth = 0.0
         for (index, world) in WorldID.allCases.enumerated() {
@@ -1948,7 +1949,7 @@ struct GameSimulationTests {
                 for: finale
             )
 
-            #expect(finalRank == Double(3 + 2 * index))
+            #expect(finalRank == expectedFinalRanks[index])
             #expect(finalRank > previousFinalRank)
             #expect(bossHealth > previousBossHealth)
             #expect(CampaignBalance.referenceSingleTargetDPS(for: finale)
@@ -3688,17 +3689,16 @@ struct GameSimulationTests {
                 throughLevel: finalLevel
             )
 
-            if world == .earth {
-                #expect(expectedCampaignIncome >= Double(targetBalancedBuild))
-            } else {
-                let gap = Double(targetBalancedBuild) - expectedCampaignIncome
-                let reachableEndlessWave = worldIndex * EndlessRules.wavesPerWorld
-                let expectedEndlessRun = EconomyBalance.expectedEndlessTokens(
-                    throughWave: reachableEndlessWave
-                )
-                #expect(gap > expectedEndlessRun)
-                #expect(gap < expectedEndlessRun * 4)
-            }
+            let gap = Double(targetBalancedBuild) - expectedCampaignIncome
+            let reachableEndlessWave = max(
+                EndlessRules.wavesPerWorld,
+                worldIndex * EndlessRules.wavesPerWorld
+            )
+            let expectedEndlessRun = EconomyBalance.expectedEndlessTokens(
+                throughWave: reachableEndlessWave
+            )
+            #expect(gap > expectedEndlessRun)
+            #expect(gap < expectedEndlessRun * 5)
         }
     }
 
@@ -4956,6 +4956,274 @@ struct GameSimulationTests {
                 #expect(currentPosition == frozenPosition)
             }
         }
+    }
+
+    @Test func reverseChangesBossDirectionWithoutMirroringAcrossArena() {
+        let campaignLevel = GameContent.level(10)
+        let campaign = GameSimulation(
+            level: campaignLevel,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 4_012
+        )
+        campaign.setCampaignWaveForTesting(campaignLevel.waveCount)
+
+        let endless = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 4_013
+        )
+        endless.setEndlessWaveForTesting(5)
+
+        for simulation in [campaign, endless] {
+            for _ in 0..<100 {
+                _ = simulation.update(delta: 0.025)
+            }
+            guard var boss = simulation.snapshot.targets.first(where: {
+                $0.waveRole == .boss
+            }) else {
+                Issue.record("Expected a boss")
+                continue
+            }
+
+            let positionBeforeReverse = boss.position.x
+            boss.reverseRemaining = 0.50
+            simulation.replaceTargetsForTesting([boss])
+            _ = simulation.update(delta: 0.01)
+
+            guard var reversedBoss = simulation.snapshot.targets.first(where: {
+                $0.id == boss.id
+            }) else {
+                Issue.record("Expected the reversed boss")
+                continue
+            }
+            #expect(abs(reversedBoss.position.x - positionBeforeReverse) < 0.02)
+            #expect(reversedBoss.position.x < positionBeforeReverse)
+
+            reversedBoss.reverseRemaining = 0.005
+            simulation.replaceTargetsForTesting([reversedBoss])
+            let positionBeforeExpiration = reversedBoss.position.x
+            _ = simulation.update(delta: 0.01)
+
+            guard let recoveredBoss = simulation.snapshot.targets.first(where: {
+                $0.id == boss.id
+            }) else {
+                Issue.record("Expected the recovered boss")
+                continue
+            }
+            #expect(abs(recoveredBoss.position.x - positionBeforeExpiration) < 0.02)
+            #expect(recoveredBoss.position.x > positionBeforeExpiration)
+        }
+    }
+
+    @Test func endlessEnemyShieldCurvesStartLateAndKeepScaling() {
+        #expect(EndlessRules.regularShieldSpawnChance(wave: 10) == 0)
+        #expect(EndlessRules.regularShieldHealthFraction(wave: 10) == 0)
+        #expect(EndlessRules.bossShieldSpawnChance(wave: 24) == 0)
+        #expect(EndlessRules.bossShieldHealthFraction(wave: 24) == 0)
+
+        let wave30Chance = EndlessRules.regularShieldSpawnChance(wave: 30)
+        let wave30Health = EndlessRules.regularShieldHealthFraction(wave: 30)
+        #expect(abs(wave30Chance - 0.4405) < 0.001)
+        #expect(abs(wave30Health - 0.4361) < 0.001)
+        #expect(EndlessRules.regularShieldSpawnChance(wave: 100) > wave30Chance)
+        #expect(EndlessRules.regularShieldHealthFraction(wave: 100) > wave30Health)
+        #expect(EndlessRules.bossShieldSpawnChance(wave: 30) < wave30Chance)
+        #expect(
+            EndlessRules.bossShieldHealthFraction(wave: 30)
+                < wave30Health
+        )
+    }
+
+    @Test func shieldAbsorbsDamageAndBreakingHitCannotApplyBallEffects() {
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 4_020
+        )
+        simulation.apply(.specialBall(.fire))
+        simulation.apply(.specialBall(.ice))
+        simulation.apply(.specialBall(.reverse))
+        simulation.replaceTargetsForTesting([
+            TargetState(
+                id: 20_001,
+                kind: .enemy(.coneRunner),
+                position: .init(x: 0, y: 0.18),
+                hitPoints: 100,
+                maximumHitPoints: 100,
+                shieldHitPoints: 5,
+                maximumShieldHitPoints: 5,
+                phase: 0
+            )
+        ])
+        let effects: Set<TemporaryBallAbility> = [.fire, .ice, .reverse]
+        simulation.spawnFriendlyProjectileForTesting(
+            pierce: 0,
+            damage: 10,
+            endlessEffects: effects
+        )
+
+        let breakingEvents = simulation.update(delta: 0.01)
+        guard let afterBreak = simulation.snapshot.targets.first else {
+            Issue.record("Expected shielded target to survive")
+            return
+        }
+        #expect(afterBreak.shieldHitPoints == 0)
+        #expect(afterBreak.hitPoints == 95)
+        #expect(afterBreak.burnRemaining == 0)
+        #expect(afterBreak.freezeRemaining == 0)
+        #expect(afterBreak.reverseRemaining == 0)
+        #expect(breakingEvents.contains {
+            if case .enemyShieldBroken = $0 { true } else { false }
+        })
+
+        simulation.spawnFriendlyProjectileForTesting(
+            pierce: 0,
+            damage: 1,
+            endlessEffects: effects
+        )
+        for _ in 0..<20 {
+            _ = simulation.update(delta: 0.01)
+            if simulation.snapshot.targets.contains(where: {
+                $0.id == afterBreak.id
+                    && $0.burnRemaining > 0
+                    && $0.freezeRemaining > 0
+                    && $0.reverseRemaining > 0
+            }) {
+                break
+            }
+        }
+        guard let afterFollowUp = simulation.snapshot.targets.first else {
+            Issue.record("Expected target after follow-up")
+            return
+        }
+        #expect(afterFollowUp.burnRemaining > 0)
+        #expect(afterFollowUp.freezeRemaining > 0)
+        #expect(afterFollowUp.reverseRemaining > 0)
+    }
+
+    @Test func onlyLateEndlessSpawnsReceiveEnemyShields() {
+        let endless = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 4_022
+        )
+        endless.setEndlessWaveForTesting(99)
+        for _ in 0..<300 {
+            _ = endless.update(delta: 0.01)
+        }
+        let shieldedEnemies = endless.snapshot.targets.filter {
+            if case .enemy = $0.kind { $0.maximumShieldHitPoints > 0 } else { false }
+        }
+        #expect(!shieldedEnemies.isEmpty)
+        for enemy in shieldedEnemies {
+            let expectedShield = enemy.maximumHitPoints
+                * EndlessRules.regularShieldHealthFraction(wave: 99)
+            #expect(
+                abs(enemy.maximumShieldHitPoints - expectedShield)
+                    < max(0.001, expectedShield * 0.000_001)
+            )
+        }
+
+        let campaign = GameSimulation(
+            level: GameContent.level(70),
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 4_022
+        )
+        for _ in 0..<300 {
+            _ = campaign.update(delta: 0.01)
+        }
+        #expect(campaign.snapshot.targets.allSatisfy {
+            $0.maximumShieldHitPoints == 0
+        })
+    }
+
+    @Test func shieldedBossRefreshesAndCleansesAtEachNewPhase() {
+        let simulation = GameSimulation(
+            mode: .endless,
+            progress: .newPlayer,
+            assistMode: false,
+            seed: 4_021
+        )
+        simulation.setEndlessWaveForTesting(25)
+        _ = simulation.update(delta: 0.01)
+        guard var boss = simulation.snapshot.targets.first(where: {
+            $0.waveRole == .boss
+        }) else {
+            Issue.record("Expected Endless boss")
+            return
+        }
+        boss.hitPoints = boss.maximumHitPoints * 0.60
+        boss.maximumShieldHitPoints = 40
+        boss.shieldHitPoints = 0
+        boss.burnRemaining = 4
+        boss.freezeRemaining = 3
+        boss.reverseRemaining = 3
+        boss.stunRemaining = 2
+        boss.tidalSlowRemaining = 2
+        boss.undertowSlowRemaining = 2
+        boss.magnetRemaining = 2
+        boss.gravityPullCenter = .init(x: 0, y: 0.5)
+        boss.gravityPullRemaining = 1
+        boss.gravityPullStrength = 4
+        simulation.replaceTargetsForTesting([boss])
+
+        let events = simulation.update(delta: 0.01)
+        guard let refreshed = simulation.snapshot.targets.first else {
+            Issue.record("Expected refreshed boss")
+            return
+        }
+        #expect(refreshed.shieldHitPoints == 40)
+        #expect(refreshed.burnRemaining == 0)
+        #expect(refreshed.freezeRemaining == 0)
+        #expect(refreshed.reverseRemaining == 0)
+        #expect(refreshed.stunRemaining == 0)
+        #expect(refreshed.tidalSlowRemaining == 0)
+        #expect(refreshed.undertowSlowRemaining == 0)
+        #expect(refreshed.magnetRemaining == 0)
+        #expect(refreshed.gravityPullRemaining == 0)
+        #expect(events.contains {
+            if case .enemyShieldRefreshed = $0 { true } else { false }
+        })
+    }
+
+    @Test func enemyShieldPresentationTracksRegularAndBossTargets() {
+        var regular = TargetState(
+            id: 20_010,
+            kind: .enemy(.coneRunner),
+            position: .init(x: 0, y: 0.5),
+            hitPoints: 100,
+            maximumHitPoints: 100,
+            shieldHitPoints: 50,
+            maximumShieldHitPoints: 100,
+            phase: 0
+        )
+        let node = GameNodeFactory.target(regular, world: .earth)
+        let aura = node.childNode(withName: "enemy-shield-aura")
+        let regularBar = node.childNode(withName: "enemy-shield-regular")
+        let bossBar = node.childNode(withName: "enemy-shield-boss")
+        let regularFill = regularBar?.childNode(withName: "enemy-shield-fill")
+        #expect(aura?.isHidden == false)
+        #expect(regularBar?.isHidden == false)
+        #expect(bossBar?.isHidden == true)
+        #expect(abs((regularFill?.xScale ?? 0) - 0.5) < 0.001)
+
+        regular.bossTier = .megaBoss
+        regular.waveRole = .boss
+        GameNodeFactory.configureTarget(node, target: regular, world: .earth)
+        let bossFill = bossBar?.childNode(withName: "enemy-shield-fill")
+        #expect(regularBar?.isHidden == true)
+        #expect(bossBar?.isHidden == false)
+        #expect(abs((bossFill?.xScale ?? 0) - 0.5) < 0.001)
+
+        regular.shieldHitPoints = 0
+        GameNodeFactory.configureTarget(node, target: regular, world: .earth)
+        #expect(aura?.isHidden == true)
+        #expect(bossBar?.isHidden == true)
     }
 
     @Test func bossTargetsUseARedSigilHealthPlateThatResetsWhenPooled() {

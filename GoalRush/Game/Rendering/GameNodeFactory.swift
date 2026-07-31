@@ -384,6 +384,12 @@ enum GameNodeFactory {
             on: renderNode,
             ratio: target.hitPoints / max(1, target.maximumHitPoints)
         )
+        updateShield(
+            on: renderNode,
+            ratio: target.shieldHitPoints / max(1, target.maximumShieldHitPoints),
+            isActive: target.isShielded,
+            reducedMotion: true
+        )
     }
 
     /// Builds each shape hierarchy once. Copies retain SpriteKit's immutable
@@ -464,9 +470,56 @@ enum GameNodeFactory {
         bossTrack.addChild(bossFill)
         root.addChild(bossHealth)
 
+        let shieldAura = SKShapeNode(
+            ellipseOf: CGSize(width: 66, height: 76)
+        )
+        shieldAura.name = "enemy-shield-aura"
+        shieldAura.position.y = 4
+        shieldAura.zPosition = -4
+        shieldAura.fillColor = color(0.08, 0.72, 1).withAlphaComponent(0.10)
+        shieldAura.strokeColor = color(0.20, 0.90, 1).withAlphaComponent(0.92)
+        shieldAura.lineWidth = 2.2
+        shieldAura.glowWidth = 3
+        shieldAura.isHidden = true
+        root.addChild(shieldAura)
+
+        let regularShield = makeEnemyShieldBar(width: 48)
+        regularShield.name = "enemy-shield-regular"
+        regularShield.position.y = healthBarHeight(for: kind) + 7
+        regularShield.isHidden = true
+        root.addChild(regularShield)
+
+        let bossShield = makeEnemyShieldBar(width: 66)
+        bossShield.name = "enemy-shield-boss"
+        bossShield.position.y = healthBarHeight(for: kind) + 13
+        bossShield.zPosition = 1_201
+        bossShield.isHidden = true
+        root.addChild(bossShield)
+
         installStatusEffects(on: root, kind: kind)
         root.cacheRenderNodes()
         return root
+    }
+
+    private static func makeEnemyShieldBar(width: CGFloat) -> SKShapeNode {
+        let background = SKShapeNode(
+            rectOf: CGSize(width: width, height: 5),
+            cornerRadius: 2.5
+        )
+        background.fillColor = color(0.02, 0.16, 0.25).withAlphaComponent(0.92)
+        background.strokeColor = color(0.20, 0.90, 1).withAlphaComponent(0.90)
+        background.lineWidth = 0.8
+
+        let fill = SKShapeNode(
+            rectOf: CGSize(width: width - 4, height: 2.5),
+            cornerRadius: 1.25
+        )
+        fill.name = "enemy-shield-fill"
+        fill.fillColor = color(0.16, 0.82, 1)
+        fill.strokeColor = .clear
+        fill.glowWidth = 1.2
+        background.addChild(fill)
+        return background
     }
 
     static func animateTarget(
@@ -772,6 +825,21 @@ enum GameNodeFactory {
                         ? color(1, 0.72, 0.10)
                         : color(1, 0.22, 0.08)))
         }
+    }
+
+    static func updateShield(
+        on node: SKNode,
+        ratio: Double,
+        isActive: Bool,
+        reducedMotion: Bool
+    ) {
+        guard let renderNode = node as? TargetRenderNode else { return }
+        renderNode.applyShield(isActive: isActive, reducedMotion: reducedMotion)
+        guard let fill = renderNode.shieldFill else { return }
+        let clampedRatio = min(1, max(0, ratio))
+        fill.xScale = max(0.02, clampedRatio)
+        let halfWidth: CGFloat = renderNode.showsBossHealth ? 31 : 22
+        fill.position.x = -halfWidth * CGFloat(1 - clampedRatio)
     }
 
     static func updateStatus(on node: SKNode, target: TargetState, reducedMotion: Bool) {

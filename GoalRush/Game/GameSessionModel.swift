@@ -252,12 +252,16 @@ final class GameSessionModel {
                 false
             }
         }
+        let endsRun = events.contains { event in
+            if case .finished = event { true } else { false }
+        }
         // Keep the completed wave visible beneath the draft. `choose(_:)`
         // publishes the already-advanced simulation snapshot as the draft
         // dismisses, so the player actually sees the wave counter roll into
         // the next value instead of having that animation hidden by the
         // intermission.
-        if !beginsIntermission && currentTime - lastHUDPublishTime >= 0.10 {
+        if endsRun
+            || (!beginsIntermission && currentTime - lastHUDPublishTime >= 0.10) {
             hudState = HUDState(snapshot: snapshot)
             lastHUDPublishTime = currentTime
         }
