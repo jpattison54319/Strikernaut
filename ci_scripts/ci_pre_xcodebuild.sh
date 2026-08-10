@@ -31,14 +31,14 @@ if [ "$action" = "archive" ]; then
     marketing_setting=$(printf '%s\n' "$settings" | awk -F ' = ' '$1 ~ /^[[:space:]]*MARKETING_VERSION[[:space:]]*$/ { gsub(/[[:space:]]/, "", $2); print $2; exit }')
     bundle_setting=$(printf '%s\n' "$settings" | awk -F ' = ' '$1 ~ /^[[:space:]]*PRODUCT_BUNDLE_IDENTIFIER[[:space:]]*$/ { gsub(/[[:space:]]/, "", $2); print $2; exit }')
 
-    [ "$build_setting" = "33" ] \
-        || fail "archive Release settings resolve to build $build_setting, expected 33"
+    [ "$build_setting" = "34" ] \
+        || fail "archive Release settings resolve to build $build_setting, expected 34"
     [ "$marketing_setting" = "1.0" ] \
         || fail "archive Release settings resolve to version $marketing_setting, expected 1.0"
     [ "$bundle_setting" = "iCloud.org.xpetsllc.GoalRush" ] \
         || fail "archive Release settings resolve to bundle $bundle_setting"
 
-    echo "xcode-cloud: archive preflight passed for Strikernaut 1.0 (33)"
+    echo "xcode-cloud: archive preflight passed for Strikernaut 1.0 (34)"
 else
     echo "xcode-cloud: $action preflight passed for scheme GoalRush"
 fi

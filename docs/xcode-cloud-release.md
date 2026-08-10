@@ -8,7 +8,7 @@ The release identity for this workflow is:
 
 - Product: `Strikernaut`
 - Marketing version: `1.0`
-- Build: `33`
+- Build: `34`
 - Bundle ID: `iCloud.org.xpetsllc.GoalRush`
 - Project: `GoalRush.xcodeproj`
 - Shared scheme: `GoalRush`
@@ -26,10 +26,10 @@ Manage Workflows** page:
 4. Set Deployment Preparation to **TestFlight and App Store**.
 5. Do not enable a workflow option that rewrites the project’s version or build
    settings. The checked-in Release settings and the archive postflight both
-   require build `33`.
+   require build `34`.
 6. After the archive succeeds, use the workflow’s App Store Connect/TestFlight
    distribution post-action if desired. Before submitting, verify that the
-   uploaded build is exactly `1.0 (33)` and that the archive artifact has been
+   uploaded build is exactly `1.0 (34)` and that the archive artifact has been
    retained.
 
 The workflow’s first run must use a commit that includes `project.yml`, the
@@ -42,7 +42,7 @@ uncommitted local files.
   and generated build settings before an action starts.
 - `ci_pre_xcodebuild.sh` checks the effective Release settings before archive.
 - `ci_post_xcodebuild.sh` reads the actual archived app’s `Info.plist` and
-  fails if the archive is not Strikernaut `1.0 (33)`, has the wrong bundle ID,
+  fails if the archive is not Strikernaut `1.0 (34)`, has the wrong bundle ID,
   or has unexpected export-compliance metadata.
 
 These checks make the archive reproducible, but App Store Connect still owns

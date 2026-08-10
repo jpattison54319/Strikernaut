@@ -21,16 +21,16 @@ cd "$PROJECT_ROOT"
 [ -f "$PBXPROJ" ] || fail "generated project.pbxproj is missing"
 [ -f "$PROJECT_YML" ] || fail "project.yml is missing"
 
-grep -Fq 'CURRENT_PROJECT_VERSION: "33"' "$PROJECT_YML" \
-    || fail "project.yml is not pinned to release build 33"
+grep -Fq 'CURRENT_PROJECT_VERSION: "34"' "$PROJECT_YML" \
+    || fail "project.yml is not pinned to release build 34"
 grep -Fq 'MARKETING_VERSION: "1.0"' "$PROJECT_YML" \
     || fail "project.yml is not pinned to marketing version 1.0"
 grep -Fq 'PRODUCT_BUNDLE_IDENTIFIER: iCloud.org.xpetsllc.GoalRush' "$PROJECT_YML" \
     || fail "project.yml has an unexpected app bundle identifier"
 
-project_version_count=$(grep -cF 'CURRENT_PROJECT_VERSION = 33;' "$PBXPROJ" || true)
+project_version_count=$(grep -cF 'CURRENT_PROJECT_VERSION = 34;' "$PBXPROJ" || true)
 [ "$project_version_count" -eq 2 ] \
-    || fail "generated project does not contain build 33 in both app configurations"
+    || fail "generated project does not contain build 34 in both app configurations"
 grep -Fq 'MARKETING_VERSION = 1.0;' "$PBXPROJ" \
     || fail "generated project is not pinned to marketing version 1.0"
 grep -Fq 'PRODUCT_BUNDLE_IDENTIFIER = iCloud.org.xpetsllc.GoalRush;' "$PBXPROJ" \
@@ -38,5 +38,5 @@ grep -Fq 'PRODUCT_BUNDLE_IDENTIFIER = iCloud.org.xpetsllc.GoalRush;' "$PBXPROJ" 
 
 echo "xcode-cloud: checked out commit ${CI_COMMIT:-unknown}"
 echo "xcode-cloud: project GoalRush.xcodeproj, scheme GoalRush"
-echo "xcode-cloud: release identity Strikernaut 1.0 (33), iCloud.org.xpetsllc.GoalRush"
+echo "xcode-cloud: release identity Strikernaut 1.0 (34), iCloud.org.xpetsllc.GoalRush"
 xcodebuild -version

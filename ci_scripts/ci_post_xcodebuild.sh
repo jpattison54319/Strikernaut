@@ -36,11 +36,11 @@ encryption_value=$(read_plist_value ITSAppUsesNonExemptEncryption)
 
 [ "$marketing_version" = "1.0" ] \
     || { echo "xcode-cloud: archive version is $marketing_version, expected 1.0" >&2; exit 1; }
-[ "$build_number" = "33" ] \
-    || { echo "xcode-cloud: archive build is $build_number, expected 33" >&2; exit 1; }
+[ "$build_number" = "34" ] \
+    || { echo "xcode-cloud: archive build is $build_number, expected 34" >&2; exit 1; }
 [ "$bundle_id" = "iCloud.org.xpetsllc.GoalRush" ] \
     || { echo "xcode-cloud: archive bundle is $bundle_id" >&2; exit 1; }
 [ "$encryption_value" = "false" ] \
     || { echo "xcode-cloud: archive export-compliance value is $encryption_value, expected false" >&2; exit 1; }
 
-echo "xcode-cloud: archive verified Strikernaut 1.0 (33), $bundle_id"
+echo "xcode-cloud: archive verified Strikernaut 1.0 (34), $bundle_id"
