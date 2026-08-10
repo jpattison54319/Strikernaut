@@ -1,11 +1,19 @@
-# Goal Rush
+# Strikernaut
 
-Goal Rush is a native portrait iPhone arcade game built with SwiftUI and
+Strikernaut is a native portrait iPhone arcade game built with SwiftUI and
 SpriteKit. Drag the player horizontally, automatically kick soccer balls into
 approaching opponents, draft temporary techniques during a run, and spend
-Training Tokens on permanent player and ball upgrades. Campaign spans the
-Earth and Mars worlds; Endless mode stacks uncapped roguelite powers against
-waves that keep scaling. World clears award permanent equippable gear.
+Training Tokens on permanent player and ball upgrades. Campaign spans 70
+challenges across Earth, the Moon, Mars, Jupiter, Saturn, Uranus, and Neptune.
+Each world has a signature field rule, an exclusive temporary-power pool, an
+original arena, and a themed hero reward. Endless mode stacks uncapped
+roguelite powers against waves that keep scaling. Wave milestones also award
+one-slot permanent Endless Relics; see [the relic rules](docs/endless-relics.md).
+
+Campaign navigation follows a paged planet journey into tall illustrated
+landmark maps. Completed landmarks show up to three stars, locked challenges
+stay visibly disabled, and the route continues toward a future Andromeda
+chapter.
 
 ## Requirements
 
@@ -14,6 +22,8 @@ waves that keep scaling. World clears award permanent equippable gear.
 - XcodeGen 2.45 or newer only when regenerating the project
 
 The generated `GoalRush.xcodeproj` is checked in and opens directly in Xcode.
+The internal project and bundle identifiers retain their original names so
+existing installations and local saves continue upgrading in place.
 
 ## Commands
 
@@ -31,11 +41,13 @@ The default test destination is iPhone 17 Pro on iOS 26.5. Change
 ## Debug launch arguments
 
 - `--reset-save`: clear local progression before launch
+- `--reset-onboarding`: replay the first-time onboarding
 - `--currency 500`: set starting tokens for the current launch
-- `--screen endless`: open a menu screen directly (`levels`, `endless`, `gear`, `upgrades`, or `settings`)
+- `--screen endless`: open a menu screen directly (`planets`/`levels`, `earth-map`, `moon-map`, `mars-map`, `endless`, `characters`, `relics`, `upgrades`, `settings`, `onboarding`, or `trophies`)
+- `--relic-fixtures`: seed every relic rarity plus Scrap for inventory previews
 - `--level 6`: launch directly into a level
 - `--endless mars`: launch an Endless run directly on an unlocked world
-- `--unlock-worlds`: unlock both campaign worlds in debug builds
+- `--unlock-worlds`: unlock all current campaign worlds in debug builds
 - `--unlock-gear`: earn every gear piece in debug builds
 - `--fixed-seed 42`: reproduce wave and ability randomness
 - `--show-draft`: open the temporary run-upgrade choice immediately after a direct level launch

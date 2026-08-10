@@ -1,90 +1,551 @@
 import SpriteKit
 
+@MainActor
 enum GameNodeFactory {
-    static func player(loadout: GearLoadout = .empty) -> SKNode {
+    private static var targetPrototypes: [TargetState.Kind: TargetRenderNode] = [:]
+    private static let standardKickActions = makeKickActions(reducedMotion: false)
+    private static let reducedKickActions = makeKickActions(reducedMotion: true)
+    private static let projectileTextures: [String: SKTexture] = {
+        let names = [
+            "SoccerBall",
+            "SoccerBallRapidFire",
+            "SoccerBallExplosive",
+            "SoccerBallFire",
+            "SoccerBallIce",
+            "SoccerBallReverse",
+            "SoccerBallSplit",
+            "SoccerBallVolt",
+            "SoccerBallGravityVortex",
+            "SoccerBallReturn",
+            "SoccerBallMagnet",
+            "SoccerBallTidal"
+        ]
+        return Dictionary(uniqueKeysWithValues: names.map { name in
+            let texture = SKTexture(imageNamed: name)
+            texture.filteringMode = .linear
+            return (name, texture)
+        })
+    }()
+    private static let bossFactionTextures: [WorldID: SKTexture] = {
+        Dictionary(uniqueKeysWithValues: WorldID.allCases.map { world in
+            let texture = SKTexture(imageNamed: world.factionSigilAsset(isBoss: true))
+            texture.filteringMode = .linear
+            return (world, texture)
+        })
+    }()
+    static let renderedEnemyAssetNames: [EnemyKind: String] = [
+        .coneRunner: "EarthScoutRunner",
+        .dummyDefender: "EarthBlockerDefender",
+        .tackleBot: "EarthTackleBot",
+        .keeperDrone: "EarthAegisKeeper",
+        .ballLauncher: "EarthBallLauncher",
+        .titanKeeper: "EarthTitanKeeper",
+        .regolithRunner: "MoonRegolithRunner",
+        .lunarHopper: "MoonLunarHopper",
+        .orbitDrone: "MoonOrbitDrone",
+        .eclipseKeeper: "MoonEclipseKeeper",
+        .gravityStriker: "MoonGravityStriker",
+        .lunarWarden: "MoonLunarWarden",
+        .dustSprite: "MarsDustSprite",
+        .roverRaider: "MarsRoverRaider",
+        .craterCrawler: "MarsCraterCrawler",
+        .saucerKeeper: "MarsSaucerKeeper",
+        .plasmaStriker: "MarsPlasmaStriker",
+        .marsColossus: "MarsColossus",
+        .cloudRunner: "EarthScoutRunner",
+        .pressureBrute: "EarthBlockerDefender",
+        .vortexSkimmer: "MarsCraterCrawler",
+        .stormKeeper: "EarthAegisKeeper",
+        .boltStriker: "EarthBallLauncher",
+        .tempestRegent: "EarthTitanKeeper",
+        .ringRunner: "MoonRegolithRunner",
+        .iceMason: "MoonEclipseKeeper",
+        .shepherdDrone: "MoonLunarHopper",
+        .haloKeeper: "MoonOrbitDrone",
+        .shardStriker: "MoonGravityStriker",
+        .crownSovereign: "MoonLunarWarden",
+        .frostSprinter: "MoonRegolithRunner",
+        .tiltBrute: "MoonEclipseKeeper",
+        .auroraDrifter: "MoonLunarHopper",
+        .polarKeeper: "MoonOrbitDrone",
+        .magnetStriker: "MoonGravityStriker",
+        .axisPrime: "MoonLunarWarden",
+        .mistRunner: "MarsDustSprite",
+        .currentBrute: "MarsRoverRaider",
+        .squallRay: "MarsCraterCrawler",
+        .tridentKeeper: "MarsSaucerKeeper",
+        .pressureStriker: "MarsPlasmaStriker",
+        .abyssalMonarch: "MarsColossus"
+    ]
+    private static let renderedEnemyTextures: [EnemyKind: SKTexture] = {
+        renderedEnemyAssetNames.mapValues { name in
+            let texture = SKTexture(imageNamed: name)
+            texture.filteringMode = .linear
+            return texture
+        }
+    }()
+    private static let renderedFieldObjectTextures: [FieldObjectKind: SKTexture] = {
+        let assets: [FieldObjectKind: String] = [
+            .ballCart: "EarthBallCart",
+            .waterCooler: "EarthWaterCooler",
+            .tacticsBoard: "EarthTacticsBoard",
+            .coneBarricade: "EarthConeBarricade",
+            .equipmentTrunk: "EarthEquipmentTrunk",
+            .roverBattery: "EarthBallCart",
+            .satelliteRelay: "EarthTacticsBoard",
+            .regolithBarricade: "EarthConeBarricade",
+            .gravityCell: "EarthWaterCooler",
+            .lunarVault: "EarthEquipmentTrunk",
+            .oxygenPod: "MarsOxygenPod",
+            .meteorCrate: "MarsMeteorCrate",
+            .holoGate: "MarsHoloGate",
+            .crystalBarricade: "MarsCrystalBarricade",
+            .artifactVault: "MarsArtifactVault",
+            .pressureCell: "EarthBallCart",
+            .cloudCondenser: "EarthWaterCooler",
+            .windGate: "EarthConeBarricade",
+            .lightningMast: "EarthTacticsBoard",
+            .stormVault: "EarthEquipmentTrunk",
+            .ringShardCrate: "MarsMeteorCrate",
+            .thermalPod: "EarthWaterCooler",
+            .shepherdBeacon: "EarthTacticsBoard",
+            .iceBarricade: "EarthConeBarricade",
+            .crownVault: "EarthEquipmentTrunk",
+            .magneticCoil: "MarsMeteorCrate",
+            .cryoCanister: "MarsOxygenPod",
+            .auroraRelay: "MarsHoloGate",
+            .frostBarricade: "MarsCrystalBarricade",
+            .polarVault: "MarsArtifactVault",
+            .stormBattery: "MarsMeteorCrate",
+            .oxygenBell: "MarsOxygenPod",
+            .currentGate: "MarsHoloGate",
+            .coralBarricade: "MarsCrystalBarricade",
+            .trenchVault: "MarsArtifactVault"
+        ]
+        return assets.mapValues { name in
+            let texture = SKTexture(imageNamed: name)
+            texture.filteringMode = .linear
+            return texture
+        }
+    }()
+    private static let characterTextures: [String: SKTexture] = {
+        let names = CharacterID.allCases.flatMap { id in
+            let stem = CharacterCatalog.character(id).assetStem
+            return ["\(stem)Roster", "\(stem)Gameplay"]
+        }
+        return Dictionary(uniqueKeysWithValues: names.map { name in
+            let texture = SKTexture(imageNamed: name)
+            texture.filteringMode = .linear
+            return (name, texture)
+        })
+    }()
+    private static let standardRightHipPosition = CGPoint(x: 7.04, y: -5.28)
+    private static let gameplaySpriteSize = CGSize(width: 88, height: 88)
+
+    private struct KickActions {
+        let kickingLeg: SKAction
+        let plantLeg: SKAction
+        let body: SKAction
+    }
+
+    static func player(
+        character: CharacterID,
+        presentation: PlayerPresentation = .gameplay
+    ) -> SKNode {
         let root = SKNode()
         root.name = "player"
-        let shadow = ellipse(size: .init(width: 58, height: 16), color: .black.withAlphaComponent(0.26), y: -31)
+        root.userData = NSMutableDictionary(dictionary: ["characterID": character.rawValue])
+        let isGameplay = presentation == .gameplay
+        let shadow = ellipse(
+            size: isGameplay ? .init(width: 58, height: 15) : .init(width: 88, height: 20),
+            color: .black.withAlphaComponent(0.25),
+            y: isGameplay ? -45 : -77
+        )
         shadow.name = "shadow"
         root.addChild(shadow)
 
         let body = SKNode()
         body.name = "body"
+        let definition = CharacterCatalog.character(character)
+        let suffix = isGameplay ? "Gameplay" : "Roster"
+        if isGameplay,
+           let texture = characterTextures["\(definition.assetStem)\(suffix)"] {
+            addSegmentedCharacterRig(texture: texture, to: body)
+        } else {
+            let sprite = SKSpriteNode(texture: characterTextures["\(definition.assetStem)\(suffix)"])
+            sprite.name = "character-sprite"
+            sprite.size = .init(width: 158, height: 158)
+            body.addChild(sprite)
+        }
         root.addChild(body)
-
-        let legs = playerLegs(legID: loadout.item(in: .legs), footID: loadout.item(in: .feet))
-        legs.zPosition = 0
-        body.addChild(legs)
-
-        let hands = playerHands(loadout.item(in: .hands))
-        hands.zPosition = 1
-        body.addChild(hands)
-
-        let torso = playerTorso(loadout.item(in: .torso))
-        torso.zPosition = 2
-        body.addChild(torso)
-
-        let head = playerHead(loadout.item(in: .head))
-        head.zPosition = 3
-        body.addChild(head)
         return root
     }
 
     static func animateKick(on player: SKNode, reducedMotion: Bool) {
-        guard let body = player.childNode(withName: "body"),
-              let legs = body.childNode(withName: "slot-legs"),
-              let kickingLeg = legs.childNode(withName: "kicking-leg"),
-              let plantLeg = legs.childNode(withName: "plant-leg") else { return }
+        guard let body = player.childNode(withName: "body") else { return }
+        guard let legs = body.childNode(withName: "slot-legs"),
+              let kickingLeg = legs.childNode(withName: "kicking-leg") as? SKSpriteNode else {
+            body.removeAction(forKey: "kick-body")
+            let tilt: CGFloat = reducedMotion ? -0.035 : -0.09
+            body.run(.sequence([
+                .group([.rotate(toAngle: tilt, duration: 0.08), .scale(to: reducedMotion ? 1.01 : 1.06, duration: 0.08)]),
+                .group([.rotate(toAngle: 0.035, duration: 0.09), .scale(to: 0.98, duration: 0.09)]),
+                .group([.rotate(toAngle: 0, duration: 0.14), .scale(to: 1, duration: 0.14)])
+            ]), withKey: "kick-body")
+            return
+        }
 
+        animateLegKick(
+            rightLeg: kickingLeg,
+            restingPosition: standardRightHipPosition,
+            body: body,
+            reducedMotion: reducedMotion
+        )
+    }
+
+    private static func animateLegKick(
+        rightLeg: SKSpriteNode,
+        restingPosition: CGPoint,
+        body: SKNode,
+        reducedMotion: Bool
+    ) {
+        let wasAlreadyKicking = rightLeg.action(forKey: "kick-leg") != nil
+        rightLeg.removeAction(forKey: "kick-leg")
         body.removeAction(forKey: "kick-body")
-        kickingLeg.removeAction(forKey: "kick-leg")
-        plantLeg.removeAction(forKey: "plant-leg")
+        rightLeg.position = restingPosition
+        rightLeg.zRotation = 0
+        rightLeg.xScale = 1
+        rightLeg.yScale = 1
 
-        let windupAngle: CGFloat = reducedMotion ? -0.18 : -0.52
-        let strikeAngle: CGFloat = reducedMotion ? 0.38 : 1.02
-        kickingLeg.run(.sequence([
-            .rotate(toAngle: windupAngle, duration: 0.12, shortestUnitArc: true),
-            .rotate(toAngle: strikeAngle, duration: 0.10, shortestUnitArc: true),
-            .rotate(toAngle: 0.08, duration: 0.18, shortestUnitArc: true)
-        ]), withKey: "kick-leg")
-        plantLeg.run(.sequence([
-            .rotate(toAngle: -0.20, duration: 0.12, shortestUnitArc: true),
-            .rotate(toAngle: -0.08, duration: 0.28, shortestUnitArc: true)
-        ]), withKey: "plant-leg")
+        let legAction: SKAction
+        if reducedMotion {
+            legAction = .sequence([
+                .group([
+                    .rotate(toAngle: -0.18, duration: 0.06, shortestUnitArc: true),
+                    .scaleY(to: 0.80, duration: 0.06)
+                ]),
+                .group([
+                    .rotate(toAngle: 0, duration: 0.10, shortestUnitArc: true),
+                    .scaleY(to: 1, duration: 0.10)
+                ])
+            ])
+        } else {
+            let windupDuration = wasAlreadyKicking ? 0.018 : 0.065
+            let strikeDuration = wasAlreadyKicking ? 0.025 : 0.075
+            let recoverDuration = wasAlreadyKicking ? 0.045 : 0.14
+            legAction = .sequence([
+                .group([
+                    .rotate(toAngle: 0.30, duration: windupDuration, shortestUnitArc: true),
+                    .scaleY(to: 1.04, duration: windupDuration)
+                ]),
+                .group([
+                    .rotate(toAngle: -0.30, duration: strikeDuration, shortestUnitArc: true),
+                    .scaleY(to: 0.68, duration: strikeDuration)
+                ]),
+                .group([
+                    .rotate(toAngle: 0, duration: recoverDuration, shortestUnitArc: true),
+                    .scaleY(to: 1, duration: recoverDuration)
+                ])
+            ])
+        }
+        rightLeg.run(legAction, withKey: "kick-leg")
+
+        let lift: CGFloat = reducedMotion ? 0.5 : 2
+        let rotation: CGFloat = reducedMotion ? -0.008 : -0.025
         body.run(.sequence([
-            .group([.moveBy(x: 0, y: reducedMotion ? 1 : 4, duration: 0.10), .rotate(toAngle: -0.07, duration: 0.10, shortestUnitArc: true)]),
-            .group([.moveTo(y: 0, duration: 0.22), .rotate(toAngle: 0, duration: 0.22, shortestUnitArc: true)])
+            .group([
+                .moveTo(y: lift, duration: 0.08),
+                .rotate(toAngle: rotation, duration: 0.08, shortestUnitArc: true)
+            ]),
+            .group([
+                .moveTo(y: 0, duration: reducedMotion ? 0.08 : 0.20),
+                .rotate(toAngle: 0, duration: reducedMotion ? 0.08 : 0.20, shortestUnitArc: true)
+            ])
         ]), withKey: "kick-body")
     }
 
-    static func target(_ target: TargetState) -> SKNode {
-        let root = SKNode()
-        switch target.kind {
+    private static func addSegmentedCharacterRig(texture: SKTexture, to body: SKNode) {
+        let upperBody = croppedSprite(
+            texture: texture,
+            rect: .init(x: 0, y: 0.42, width: 1, height: 0.58),
+            name: "character-sprite"
+        )
+        body.addChild(upperBody)
+
+        let legs = SKNode()
+        legs.name = "slot-legs"
+
+        let plantLeg = croppedSprite(
+            texture: texture,
+            rect: .init(x: 0.20, y: 0, width: 0.32, height: 0.46),
+            name: "plant-leg",
+            anchorPoint: .init(x: 0.6875, y: 0.9565),
+            position: .init(x: -7.04, y: -5.28)
+        )
+        let kickingLeg = croppedSprite(
+            texture: texture,
+            rect: .init(x: 0.48, y: 0, width: 0.32, height: 0.46),
+            name: "kicking-leg",
+            anchorPoint: .init(x: 0.3125, y: 0.9565),
+            position: standardRightHipPosition
+        )
+        kickingLeg.zPosition = -1
+        legs.addChild(plantLeg)
+        legs.addChild(kickingLeg)
+        body.addChild(legs)
+    }
+
+    private static func croppedSprite(
+        texture: SKTexture,
+        rect: CGRect,
+        name: String,
+        anchorPoint: CGPoint = .init(x: 0.5, y: 0.5),
+        position: CGPoint? = nil
+    ) -> SKSpriteNode {
+        let sprite = SKSpriteNode(texture: SKTexture(rect: rect, in: texture))
+        sprite.name = name
+        sprite.size = .init(
+            width: gameplaySpriteSize.width * rect.width,
+            height: gameplaySpriteSize.height * rect.height
+        )
+        sprite.anchorPoint = anchorPoint
+        sprite.position = position ?? .init(
+            x: (rect.midX - 0.5) * gameplaySpriteSize.width,
+            y: (rect.midY - 0.5) * gameplaySpriteSize.height
+        )
+        return sprite
+    }
+
+    /// Forces the reusable action graphs to initialize before live kicks begin.
+    static func prewarmKickActions() {
+        _ = standardKickActions
+        _ = reducedKickActions
+    }
+
+    /// Resolves the full projectile atlas before the first live kick.
+    static func prewarmProjectileTextures() {
+        _ = projectileTextures
+    }
+
+    private static func makeKickActions(reducedMotion: Bool) -> KickActions {
+        let windupAngle: CGFloat = reducedMotion ? -0.18 : -0.52
+        let strikeAngle: CGFloat = reducedMotion ? 0.38 : 1.02
+        return KickActions(
+            kickingLeg: .sequence([
+                .rotate(toAngle: windupAngle, duration: 0.12, shortestUnitArc: true),
+                .rotate(toAngle: strikeAngle, duration: 0.10, shortestUnitArc: true),
+                .rotate(toAngle: 0.08, duration: 0.18, shortestUnitArc: true)
+            ]),
+            plantLeg: .sequence([
+                .rotate(toAngle: -0.20, duration: 0.12, shortestUnitArc: true),
+                .rotate(toAngle: -0.08, duration: 0.28, shortestUnitArc: true)
+            ]),
+            body: .sequence([
+                .group([
+                    .moveBy(x: 0, y: reducedMotion ? 1 : 4, duration: 0.10),
+                    .rotate(toAngle: -0.07, duration: 0.10, shortestUnitArc: true)
+                ]),
+                .group([
+                    .moveTo(y: 0, duration: 0.22),
+                    .rotate(toAngle: 0, duration: 0.22, shortestUnitArc: true)
+                ])
+            ])
+        )
+    }
+
+    static func target(_ target: TargetState, world: WorldID? = nil) -> SKNode {
+        let resolvedWorld = world ?? inferredWorld(for: target.kind)
+        if let prototype = targetPrototypes[target.kind],
+           let node = prototype.copy() as? TargetRenderNode {
+            node.cacheRenderNodes()
+            configureTarget(node, target: target, world: resolvedWorld)
+            return node
+        }
+
+        let prototype = makeTarget(kind: target.kind)
+        targetPrototypes[target.kind] = prototype
+        guard let node = prototype.copy() as? TargetRenderNode else {
+            configureTarget(prototype, target: target, world: resolvedWorld)
+            return prototype
+        }
+        node.cacheRenderNodes()
+        configureTarget(node, target: target, world: resolvedWorld)
+        return node
+    }
+
+    static func configureTarget(_ node: SKNode, target: TargetState, world: WorldID) {
+        guard let renderNode = node as? TargetRenderNode else { return }
+        let isBoss = target.bossTier != .standard
+        renderNode.configureHealthPresentation(
+            isBoss: isBoss,
+            bossIconTexture: isBoss ? bossFactionTextures[world] : nil
+        )
+        updateHealth(
+            on: renderNode,
+            ratio: target.hitPoints / max(1, target.maximumHitPoints)
+        )
+        updateShield(
+            on: renderNode,
+            ratio: target.shieldHitPoints / max(1, target.maximumShieldHitPoints),
+            isActive: target.isShielded,
+            reducedMotion: true
+        )
+    }
+
+    /// Builds each shape hierarchy once. Copies retain SpriteKit's immutable
+    /// geometry instead of recreating dozens of paths on a live spawn frame.
+    static func prewarmTarget(kind: TargetState.Kind) {
+        guard targetPrototypes[kind] == nil else { return }
+        targetPrototypes[kind] = makeTarget(kind: kind)
+    }
+
+    private static func makeTarget(kind: TargetState.Kind) -> TargetRenderNode {
+        let root = TargetRenderNode()
+        switch kind {
         case .enemy(let enemy): decorateEnemy(root, enemy: enemy)
         case .fieldObject(let object): decorateObject(root, object: object)
+        case .powerUp(let ability): decoratePowerUp(root, ability: ability)
+        case .volatileCore: decorateVolatileCore(root)
+        }
+        if case .powerUp = kind {
+            root.cacheRenderNodes()
+            return root
+        }
+        if case .volatileCore = kind {
+            root.cacheRenderNodes()
+            return root
         }
         let health = SKShapeNode(rectOf: .init(width: 48, height: 5), cornerRadius: 2.5)
         health.name = "health-background"
         health.fillColor = .black.withAlphaComponent(0.45)
         health.strokeColor = .clear
-        health.position.y = 43
+        health.position.y = healthBarHeight(for: kind)
         root.addChild(health)
         let fill = SKShapeNode(rectOf: .init(width: 46, height: 3), cornerRadius: 1.5)
         fill.name = "health-fill"
         fill.fillColor = color(0.16, 0.92, 0.42)
         fill.strokeColor = .clear
         health.addChild(fill)
+
+        let bossHealth = SKNode()
+        bossHealth.name = "boss-health"
+        bossHealth.position.y = healthBarHeight(for: kind)
+        bossHealth.zPosition = 1_200
+        bossHealth.isHidden = true
+
+        let iconBackdrop = SKShapeNode(circleOfRadius: 11)
+        iconBackdrop.name = "boss-health-icon-backdrop"
+        iconBackdrop.position.x = -40
+        iconBackdrop.fillColor = color(0.08, 0.01, 0.02).withAlphaComponent(0.96)
+        iconBackdrop.strokeColor = color(1, 0.12, 0.08)
+        iconBackdrop.lineWidth = 1.6
+        bossHealth.addChild(iconBackdrop)
+
+        let bossIcon = SKSpriteNode()
+        bossIcon.name = "boss-health-icon"
+        bossIcon.position.x = -40
+        bossIcon.size = CGSize(width: 18, height: 18)
+        bossIcon.zPosition = 1
+        bossHealth.addChild(bossIcon)
+
+        let bossTrack = SKShapeNode(
+            rectOf: CGSize(width: 66, height: 8),
+            cornerRadius: 4
+        )
+        bossTrack.name = "boss-health-track"
+        bossTrack.position.x = 5
+        bossTrack.fillColor = color(0.08, 0.01, 0.02).withAlphaComponent(0.94)
+        bossTrack.strokeColor = color(0.56, 0.04, 0.04)
+        bossTrack.lineWidth = 1
+        bossHealth.addChild(bossTrack)
+
+        let bossFill = SKShapeNode(
+            rectOf: CGSize(width: 62, height: 4),
+            cornerRadius: 2
+        )
+        bossFill.name = "boss-health-fill"
+        bossFill.fillColor = color(1, 0.10, 0.07)
+        bossFill.strokeColor = .clear
+        bossFill.glowWidth = 1.5
+        bossTrack.addChild(bossFill)
+        root.addChild(bossHealth)
+
+        let shieldAura = SKShapeNode(
+            ellipseOf: CGSize(width: 66, height: 76)
+        )
+        shieldAura.name = "enemy-shield-aura"
+        shieldAura.position.y = 4
+        shieldAura.zPosition = -4
+        shieldAura.fillColor = color(0.08, 0.72, 1).withAlphaComponent(0.10)
+        shieldAura.strokeColor = color(0.20, 0.90, 1).withAlphaComponent(0.92)
+        shieldAura.lineWidth = 2.2
+        shieldAura.glowWidth = 3
+        shieldAura.isHidden = true
+        root.addChild(shieldAura)
+
+        let regularShield = makeEnemyShieldBar(width: 48)
+        regularShield.name = "enemy-shield-regular"
+        regularShield.position.y = healthBarHeight(for: kind) + 7
+        regularShield.isHidden = true
+        root.addChild(regularShield)
+
+        let bossShield = makeEnemyShieldBar(width: 66)
+        bossShield.name = "enemy-shield-boss"
+        bossShield.position.y = healthBarHeight(for: kind) + 13
+        bossShield.zPosition = 1_201
+        bossShield.isHidden = true
+        root.addChild(bossShield)
+
+        installStatusEffects(on: root, kind: kind)
+        root.cacheRenderNodes()
         return root
     }
 
-    static func animateTarget(on node: SKNode, kind: TargetState.Kind, phase: Double, reducedMotion: Bool) {
+    private static func makeEnemyShieldBar(width: CGFloat) -> SKShapeNode {
+        let background = SKShapeNode(
+            rectOf: CGSize(width: width, height: 5),
+            cornerRadius: 2.5
+        )
+        background.fillColor = color(0.02, 0.16, 0.25).withAlphaComponent(0.92)
+        background.strokeColor = color(0.20, 0.90, 1).withAlphaComponent(0.90)
+        background.lineWidth = 0.8
+
+        let fill = SKShapeNode(
+            rectOf: CGSize(width: width - 4, height: 2.5),
+            cornerRadius: 1.25
+        )
+        fill.name = "enemy-shield-fill"
+        fill.fillColor = color(0.16, 0.82, 1)
+        fill.strokeColor = .clear
+        fill.glowWidth = 1.2
+        background.addChild(fill)
+        return background
+    }
+
+    static func animateTarget(
+        on node: SKNode,
+        kind: TargetState.Kind,
+        phase: Double,
+        reducedMotion: Bool,
+        frozen: Bool = false
+    ) {
         guard case .enemy(let enemy) = kind,
-              let rig = node.childNode(withName: "motion-body") else { return }
+              let renderNode = node as? TargetRenderNode,
+              let rig = renderNode.motionRig else { return }
+
+        if frozen {
+            rig.position = .zero
+            rig.zRotation = 0
+            rig.xScale = 1
+            rig.yScale = 1
+            setLimbPose(on: renderNode, stride: 0, armSwing: 0)
+            return
+        }
 
         let intensity: CGFloat = reducedMotion ? 0.28 : 1
         let time = CGFloat(phase)
         let pulse = CGFloat(0.78 + sin(phase * 5.2) * 0.22)
-        for child in rig.children where child.name == "motion-light" {
+        for child in renderNode.motionLights {
             child.alpha = pulse
         }
 
@@ -92,6 +553,9 @@ enum GameNodeFactory {
             let wobble = sin(time * 9.5)
             rig.position = CGPoint(x: wobble * 1.5 * intensity, y: abs(cos(time * 9.5)) * 2.8 * intensity)
             rig.zRotation = wobble * 0.13 * intensity
+            let compression = abs(wobble) * 0.025 * intensity
+            rig.xScale = 1 + compression
+            rig.yScale = 1 - compression
             return
         }
 
@@ -99,32 +563,37 @@ enum GameNodeFactory {
             let hover = sin(time * 5.4)
             rig.position = CGPoint(x: hover * 1.4 * intensity, y: hover * 4.2 * intensity)
             rig.zRotation = sin(time * 3.1) * 0.055 * intensity
-            setLimbPose(on: rig, stride: sin(time * 4.2) * 0.08 * intensity, armSwing: 0.06 * intensity)
+            setLimbPose(on: renderNode, stride: sin(time * 4.2) * 0.08 * intensity, armSwing: 0.06 * intensity)
             return
         }
 
         let movement: (cadence: CGFloat, stride: CGFloat, bob: CGFloat, sway: CGFloat) = switch enemy {
-        case .tackleBot, .craterCrawler:
+        case .tackleBot, .craterCrawler, .lunarHopper:
             (11.2, 0.43, 3.8, 0.045)
-        case .dustSprite:
+        case .dustSprite, .regolithRunner:
             (9.6, 0.36, 3.4, 0.035)
-        case .dummyDefender, .roverRaider:
+        case .dummyDefender, .roverRaider, .eclipseKeeper:
             (6.3, 0.28, 2.5, 0.024)
-        case .keeperDrone:
+        case .keeperDrone, .orbitDrone:
             (4.7, 0.21, 2.0, 0.018)
-        case .ballLauncher, .plasmaStriker:
+        case .ballLauncher, .plasmaStriker, .gravityStriker:
             (5.5, 0.24, 2.2, 0.020)
-        case .titanKeeper, .marsColossus:
+        case .titanKeeper, .lunarWarden, .marsColossus:
             (3.5, 0.15, 2.8, 0.014)
         case .coneRunner, .saucerKeeper:
             (6, 0.2, 2, 0.02)
+        default:
+            (6.8, 0.28, 2.8, 0.028)
         }
 
         let step = sin(time * movement.cadence)
         rig.position = CGPoint(x: 0, y: abs(cos(time * movement.cadence)) * movement.bob * intensity)
         rig.zRotation = step * movement.sway * intensity
+        let compression = abs(step) * 0.012 * intensity
+        rig.xScale = 1 + compression
+        rig.yScale = 1 - compression
         setLimbPose(
-            on: rig,
+            on: renderNode,
             stride: step * movement.stride * intensity,
             armSwing: -step * movement.stride * 0.72 * intensity
         )
@@ -136,343 +605,876 @@ enum GameNodeFactory {
         trail.name = "trail"
         root.addChild(trail)
         root.addChild(ellipse(size: .init(width: 18, height: 6), color: .black.withAlphaComponent(0.18), y: -12))
-        let ball = circle(radius: hostile ? 9 : 8, color: hostile ? color(1, 0.28, 0.08) : .white)
-        ball.strokeColor = hostile ? color(0.45, 0.04, 0.02) : color(0.05, 0.18, 0.55)
-        ball.lineWidth = 3
+        let halo = circle(radius: hostile ? 11 : 10, color: .clear)
+        halo.name = "ball-halo"
+        halo.fillColor = .clear
+        halo.strokeColor = .clear
+        halo.lineWidth = 2
+        halo.zPosition = -1
+        root.addChild(halo)
+        let effectOrbit = SKNode()
+        effectOrbit.name = "effect-orbit"
+        effectOrbit.zPosition = 2
+        root.addChild(effectOrbit)
+        let ball = SKSpriteNode(texture: projectileTextures["SoccerBall"])
+        ball.size = CGSize(width: hostile ? 25 : 27, height: hostile ? 25 : 27)
+        ball.color = hostile ? color(1, 0.20, 0.04) : .white
+        ball.colorBlendFactor = hostile ? 0.48 : 0
         ball.name = "ball"
         root.addChild(ball)
         return root
     }
 
+    static func configureProjectile(
+        _ node: SKNode,
+        hostile: Bool,
+        critical: Bool,
+        temporaryAbility: TemporaryBallAbility?,
+        endlessEffects: Set<TemporaryBallAbility> = [],
+        characterProjectile: CharacterProjectileKind? = nil
+    ) {
+        guard let ball = node.childNode(withName: "ball") as? SKSpriteNode,
+              let trail = node.childNode(withName: "trail") as? SKShapeNode,
+              let halo = node.childNode(withName: "ball-halo") as? SKShapeNode,
+              let effectOrbit = node.childNode(withName: "effect-orbit") else { return }
+        effectOrbit.removeAllChildren()
+        if hostile {
+            ball.texture = projectileTextures["SoccerBall"]
+            ball.size = CGSize(width: 25, height: 25)
+            ball.color = color(1, 0.20, 0.04)
+            ball.colorBlendFactor = 0.48
+            halo.strokeColor = .clear
+            halo.glowWidth = 0
+            trail.fillColor = color(1, 0.20, 0.06).withAlphaComponent(0.38)
+            return
+        }
+        if characterProjectile == .pinballBlitz {
+            ball.texture = projectileTextures["SoccerBallRapidFire"] ?? projectileTextures["SoccerBall"]
+            ball.size = CGSize(width: 39, height: 39)
+            ball.color = .white
+            ball.colorBlendFactor = 0
+            halo.strokeColor = color(0.08, 0.90, 1)
+            halo.glowWidth = 12
+            trail.fillColor = color(1, 0.72, 0.08).withAlphaComponent(0.74)
+            return
+        }
+        var effects = endlessEffects
+        if let temporaryAbility {
+            effects.insert(temporaryAbility)
+        }
+        let orderedEffects = TemporaryBallAbility.allCases.filter(effects.contains)
+        let visualAbility = orderedEffects.count == 1
+            ? orderedEffects.first
+            : nil
+        let presentation: (asset: String, accent: SKColor, size: CGFloat) = switch visualAbility {
+        case .rapidFire: ("SoccerBallRapidFire", color(1, 0.58, 0.03), 34)
+        case .explosive: ("SoccerBallExplosive", color(0.92, 0.04, 0.02), 34)
+        case .fire: ("SoccerBallFire", color(1, 0.28, 0.02), 36)
+        case .ice: ("SoccerBallIce", color(0.04, 0.64, 1), 34)
+        case .reverse: ("SoccerBallReverse", color(0.58, 0.12, 1), 34)
+        case .split: ("SoccerBallSplit", color(0.02, 0.68, 0.22), 36)
+        case .heatSeeking: ("SoccerBallRapidFire", color(0.10, 0.86, 1), 34)
+        case .orbitShot: ("SoccerBallReverse", color(0.55, 0.48, 1), 36)
+        case .solarPierce: ("SoccerBallFire", color(1, 0.72, 0.08), 36)
+        case .volt: ("SoccerBallVolt", color(0.06, 0.82, 1), 38)
+        case .gravityWell: ("SoccerBallGravityVortex", color(0.80, 0.42, 1), 38)
+        case .ringReturn: ("SoccerBallReturn", color(1, 0.78, 0.22), 37)
+        case .polarLink: ("SoccerBallMagnet", color(0.26, 0.96, 0.82), 37)
+        case .undertow: ("SoccerBallTidal", color(0.08, 0.62, 1), 38)
+        case nil:
+            effects.isEmpty
+                ? ("SoccerBall", color(0.05, 0.30, 0.78), 27)
+                : ("SoccerBall", color(0.92, 0.96, 1), 34)
+        }
+        ball.texture = projectileTextures[presentation.asset]
+            ?? projectileTextures["SoccerBall"]
+        ball.size = CGSize(width: presentation.size, height: presentation.size)
+        ball.color = .white
+        ball.colorBlendFactor = 0
+        halo.strokeColor = effects.count > 1
+            ? .white
+            : (visualAbility == .heatSeeking || visualAbility == .volt
+            ? color(0.10, 0.86, 1)
+            : (critical ? color(1, 0.78, 0.12) : .clear))
+        halo.glowWidth = effects.count > 1
+            ? 10
+            : (visualAbility == .volt
+            ? 12
+            : (visualAbility == .heatSeeking ? 7 : (critical ? 7 : 0)))
+        trail.fillColor = presentation.accent.withAlphaComponent(0.46)
+        if let visualAbility {
+            addProjectileSignature(
+                to: effectOrbit,
+                ability: visualAbility
+            )
+        }
+        if effects.count > 1 {
+            addEffectOrbit(
+                to: effectOrbit,
+                abilities: orderedEffects
+            )
+        }
+    }
+
+    private static func addEffectOrbit(
+        to parent: SKNode,
+        abilities: [TemporaryBallAbility]
+    ) {
+        let visible = abilities
+        guard !visible.isEmpty else { return }
+        let radius: CGFloat = visible.count > 8 ? 20 : 18
+        let markerRadius: CGFloat = visible.count > 8 ? 2.7 : 3.2
+        for (index, ability) in visible.enumerated() {
+            let angle = CGFloat(index) / CGFloat(visible.count) * .pi * 2
+            let marker = circle(
+                radius: markerRadius,
+                color: powerColor(ability)
+            )
+            marker.name = "effect-\(ability.rawValue)"
+            marker.position = .init(
+                x: cos(angle) * radius,
+                y: sin(angle) * radius
+            )
+            marker.strokeColor = .white
+            marker.lineWidth = 1
+            marker.glowWidth = 3
+            parent.addChild(marker)
+        }
+    }
+
+    private static func addProjectileSignature(
+        to parent: SKNode,
+        ability: TemporaryBallAbility
+    ) {
+        switch ability {
+        case .heatSeeking:
+            let scope = circle(radius: 15, color: .clear)
+            scope.name = "heat-seeking-signature"
+            scope.strokeColor = color(0.10, 0.90, 1)
+            scope.lineWidth = 2
+            scope.glowWidth = 5
+            parent.addChild(scope)
+            for rotation in [CGFloat(0), .pi / 2] {
+                parent.addChild(rect(
+                    size: .init(width: 2, height: 36),
+                    color: .white.withAlphaComponent(0.82),
+                    radius: 1,
+                    rotation: rotation
+                ))
+            }
+        case .orbitShot:
+            let ring = circle(radius: 17, color: .clear)
+            ring.name = "orbit-shot-signature"
+            ring.strokeColor = color(0.62, 0.42, 1)
+            ring.lineWidth = 2
+            ring.glowWidth = 5
+            parent.addChild(ring)
+            for side in [CGFloat(-1), 1] {
+                let satellite = circle(
+                    radius: 3.5,
+                    color: side < 0 ? .white : color(0.62, 0.42, 1)
+                )
+                satellite.position.x = side * 17
+                parent.addChild(satellite)
+            }
+        case .solarPierce:
+            let core = circle(radius: 15, color: .clear)
+            core.name = "solar-pierce-signature"
+            core.strokeColor = color(1, 0.72, 0.08)
+            core.lineWidth = 2
+            core.glowWidth = 6
+            parent.addChild(core)
+            for index in 0..<8 {
+                parent.addChild(rect(
+                    size: .init(width: 2.5, height: 8),
+                    color: index.isMultiple(of: 2)
+                        ? .white
+                        : color(1, 0.58, 0.03),
+                    radius: 1.25,
+                    y: 21,
+                    rotation: CGFloat(index) * .pi / 4
+                ))
+            }
+        default:
+            break
+        }
+    }
+
     static func rewardToken() -> SKNode {
-        let token = SKShapeNode(path: hexagon(radius: 13))
-        token.fillColor = color(1, 0.72, 0.10)
-        token.strokeColor = .white
-        token.lineWidth = 2
-        token.glowWidth = 4
+        let token = SKSpriteNode(imageNamed: "TrainingToken")
+        token.size = CGSize(width: 31, height: 31)
         return token
     }
 
     static func updateHealth(on node: SKNode, ratio: Double) {
-        guard let fill = node.childNode(withName: "health-background/health-fill") else { return }
-        fill.xScale = max(0.02, ratio)
-        fill.position.x = CGFloat(-23 * (1 - ratio))
+        guard let renderNode = node as? TargetRenderNode,
+              let fill = renderNode.healthFill else { return }
+        let clampedRatio = min(1, max(0, ratio))
+        fill.xScale = max(0.02, clampedRatio)
+        if renderNode.showsBossHealth {
+            fill.position.x = CGFloat(-31 * (1 - clampedRatio))
+        } else {
+            fill.position.x = CGFloat(-23 * (1 - clampedRatio))
+        }
         if let shape = fill as? SKShapeNode {
-            shape.fillColor = ratio > 0.5 ? color(0.16, 0.92, 0.42) : (ratio > 0.25 ? color(1, 0.72, 0.10) : color(1, 0.22, 0.08))
+            shape.fillColor = renderNode.showsBossHealth
+                ? color(1, 0.10, 0.07)
+                : (clampedRatio > 0.5
+                    ? color(0.16, 0.92, 0.42)
+                    : (clampedRatio > 0.25
+                        ? color(1, 0.72, 0.10)
+                        : color(1, 0.22, 0.08)))
+        }
+    }
+
+    static func updateShield(
+        on node: SKNode,
+        ratio: Double,
+        isActive: Bool,
+        reducedMotion: Bool
+    ) {
+        guard let renderNode = node as? TargetRenderNode else { return }
+        renderNode.applyShield(isActive: isActive, reducedMotion: reducedMotion)
+        guard let fill = renderNode.shieldFill else { return }
+        let clampedRatio = min(1, max(0, ratio))
+        fill.xScale = max(0.02, clampedRatio)
+        let halfWidth: CGFloat = renderNode.showsBossHealth ? 31 : 22
+        fill.position.x = -halfWidth * CGFloat(1 - clampedRatio)
+    }
+
+    static func updateStatus(on node: SKNode, target: TargetState, reducedMotion: Bool) {
+        (node as? TargetRenderNode)?.applyStatus(from: target, reducedMotion: reducedMotion)
+    }
+
+    static func resetStatus(on node: SKNode) {
+        (node as? TargetRenderNode)?.resetStatusEffects()
+    }
+
+    private static func installStatusEffects(on root: TargetRenderNode, kind: TargetState.Kind) {
+        let parent = root.childNode(withName: "//hit-reaction")
+            ?? root.childNode(withName: "motion-body")
+            ?? root
+        let profile = statusProfile(for: kind)
+
+        let underlay = SKNode()
+        underlay.name = "status-underlay"
+        underlay.zPosition = -12
+        underlay.alpha = 0
+        parent.addChild(underlay)
+
+        let fireBack = SKNode()
+        fireBack.name = "status-fire-back"
+        underlay.addChild(fireBack)
+        addFlames(
+            to: fireBack,
+            anchors: [
+                (-0.34, -0.25, 0.76), (0.32, -0.22, 0.90),
+                (-0.24, 0.17, 0.82), (0.26, 0.20, 0.72)
+            ],
+            profile: profile,
+            foreground: false
+        )
+
+        let reverseBack = SKNode()
+        reverseBack.name = "status-reverse-trail"
+        underlay.addChild(reverseBack)
+        addReverseStreaks(to: reverseBack, profile: profile)
+
+        let undertow = SKNode()
+        undertow.name = "status-undertow"
+        underlay.addChild(undertow)
+        addUndertowWaves(to: undertow, profile: profile)
+
+        let overlay = SKNode()
+        overlay.name = "status-overlay"
+        overlay.zPosition = 30
+        overlay.alpha = 0
+        parent.addChild(overlay)
+
+        let frostGlaze = SKNode()
+        frostGlaze.name = "status-frost-glaze"
+        overlay.addChild(frostGlaze)
+        addFrostBands(to: frostGlaze, profile: profile)
+
+        let crystals = SKNode()
+        crystals.name = "status-ice-crystals"
+        overlay.addChild(crystals)
+        addIceCrystals(to: crystals, profile: profile)
+
+        let fireFront = SKNode()
+        fireFront.name = "status-fire-front"
+        overlay.addChild(fireFront)
+        addFlames(
+            to: fireFront,
+            anchors: [
+                (-0.42, -0.42, 0.58), (0.40, -0.38, 0.66),
+                (-0.12, -0.02, 0.62), (0.17, 0.39, 0.52)
+            ],
+            profile: profile,
+            foreground: true
+        )
+        addEmbers(to: fireFront, profile: profile)
+
+        let stunArcs = SKNode()
+        stunArcs.name = "status-stun-arcs"
+        overlay.addChild(stunArcs)
+        addStunArcs(to: stunArcs, profile: profile)
+
+        let magnetMark = SKNode()
+        magnetMark.name = "status-magnet-mark"
+        overlay.addChild(magnetMark)
+        addMagnetMark(to: magnetMark, profile: profile)
+    }
+
+    private struct StatusProfile {
+        let width: CGFloat
+        let height: CGFloat
+        let centerY: CGFloat
+    }
+
+    private static func statusProfile(for kind: TargetState.Kind) -> StatusProfile {
+        switch kind {
+        case .enemy(let enemy):
+            return switch enemy {
+            case .coneRunner: .init(width: 56, height: 70, centerY: 4)
+            case .dummyDefender: .init(width: 70, height: 72, centerY: 2)
+            case .tackleBot: .init(width: 76, height: 68, centerY: 10)
+            case .keeperDrone: .init(width: 78, height: 76, centerY: 10)
+            case .ballLauncher: .init(width: 80, height: 78, centerY: 7)
+            case .titanKeeper: .init(width: 86, height: 90, centerY: 13)
+            case .regolithRunner: .init(width: 60, height: 72, centerY: 4)
+            case .lunarHopper: .init(width: 82, height: 68, centerY: 9)
+            case .orbitDrone: .init(width: 82, height: 80, centerY: 10)
+            case .eclipseKeeper: .init(width: 76, height: 78, centerY: 5)
+            case .gravityStriker: .init(width: 82, height: 88, centerY: 8)
+            case .lunarWarden: .init(width: 100, height: 106, centerY: 13)
+            case .dustSprite: .init(width: 60, height: 70, centerY: 4)
+            case .roverRaider: .init(width: 76, height: 78, centerY: 5)
+            case .craterCrawler: .init(width: 88, height: 62, centerY: 4)
+            case .saucerKeeper: .init(width: 82, height: 84, centerY: 6)
+            case .plasmaStriker: .init(width: 78, height: 90, centerY: 8)
+            case .marsColossus: .init(width: 98, height: 104, centerY: 12)
+            default: .init(width: 84, height: 88, centerY: 8)
+            }
+        case .fieldObject(let object):
+            return switch object {
+            case .ballCart: .init(width: 70, height: 76, centerY: 8)
+            case .waterCooler: .init(width: 52, height: 82, centerY: 10)
+            case .tacticsBoard: .init(width: 62, height: 84, centerY: 11)
+            case .coneBarricade: .init(width: 92, height: 42, centerY: -5)
+            case .equipmentTrunk: .init(width: 88, height: 52, centerY: 0)
+            case .roverBattery: .init(width: 74, height: 76, centerY: 8)
+            case .satelliteRelay: .init(width: 70, height: 88, centerY: 11)
+            case .regolithBarricade: .init(width: 94, height: 48, centerY: -4)
+            case .gravityCell: .init(width: 58, height: 86, centerY: 10)
+            case .lunarVault: .init(width: 90, height: 58, centerY: 0)
+            case .oxygenPod: .init(width: 62, height: 88, centerY: 12)
+            case .meteorCrate: .init(width: 78, height: 92, centerY: 12)
+            case .holoGate: .init(width: 98, height: 58, centerY: 0)
+            case .crystalBarricade: .init(width: 86, height: 92, centerY: 12)
+            case .artifactVault: .init(width: 86, height: 94, centerY: 12)
+            default: .init(width: 86, height: 72, centerY: 6)
+            }
+        case .powerUp:
+            return .init(width: 58, height: 64, centerY: 2)
+        case .volatileCore:
+            return .init(width: 54, height: 54, centerY: 0)
+        }
+    }
+
+    private static func decorateVolatileCore(_ root: SKNode) {
+        root.addChild(ellipse(size: .init(width: 46, height: 12), color: .black.withAlphaComponent(0.26), y: -27))
+        let outer = circle(radius: 25, color: color(0.42, 0.03, 0.08).withAlphaComponent(0.88))
+        outer.strokeColor = color(1, 0.46, 0.04)
+        outer.lineWidth = 3
+        outer.glowWidth = 10
+        root.addChild(outer)
+        let core = circle(radius: 13, color: color(1, 0.64, 0.06))
+        core.strokeColor = .white
+        core.lineWidth = 2
+        root.addChild(core)
+        for index in 0..<6 {
+            let ray = rect(
+                size: .init(width: 4, height: 12),
+                color: color(1, 0.28, 0.02),
+                radius: 2,
+                y: 33,
+                rotation: CGFloat(index) * .pi / 3
+            )
+            ray.position = CGPoint(
+                x: sin(CGFloat(index) * .pi / 3) * 4,
+                y: cos(CGFloat(index) * .pi / 3) * 4
+            )
+            outer.addChild(ray)
+        }
+    }
+
+    private static func addFrostBands(to parent: SKNode, profile: StatusProfile) {
+        for (index, yFactor) in [-0.34, -0.02, 0.28].enumerated() {
+            let width = profile.width * (index == 1 ? 0.82 : 0.66)
+            let band = SKShapeNode(path: frostBandPath(width: width, height: 8 + CGFloat(index)))
+            band.fillColor = color(0.44, 0.88, 1).withAlphaComponent(index == 1 ? 0.34 : 0.25)
+            band.strokeColor = color(0.80, 0.97, 1).withAlphaComponent(0.82)
+            band.lineWidth = 1.2
+            band.glowWidth = 1.5
+            band.position = CGPoint(
+                x: index.isMultiple(of: 2) ? -profile.width * 0.04 : profile.width * 0.05,
+                y: profile.centerY + profile.height * yFactor
+            )
+            band.zRotation = index.isMultiple(of: 2) ? -0.08 : 0.07
+            parent.addChild(band)
+        }
+    }
+
+    private static func addIceCrystals(to parent: SKNode, profile: StatusProfile) {
+        let anchors: [(CGFloat, CGFloat, CGFloat, CGFloat, CGFloat)] = [
+            (-0.38, 0.25, 0.10, 0.25, -0.18),
+            (0.38, 0.23, 0.11, 0.23, 0.18),
+            (-0.24, -0.36, 0.09, 0.28, -0.07),
+            (0.24, -0.35, 0.09, 0.25, 0.07),
+            (-0.10, 0.43, 0.08, 0.19, -0.04),
+            (0.11, 0.42, 0.07, 0.17, 0.04)
+        ]
+        for (index, anchor) in anchors.enumerated() {
+            let shard = SKShapeNode(path: iceShardPath(
+                width: max(5, profile.width * anchor.2),
+                height: max(13, profile.height * anchor.3)
+            ))
+            shard.name = "status-ice-shard-\(index)"
+            shard.fillColor = color(0.40, 0.84, 1).withAlphaComponent(0.53)
+            shard.strokeColor = color(0.88, 0.99, 1)
+            shard.lineWidth = 1.3
+            shard.glowWidth = 2
+            shard.position = CGPoint(
+                x: profile.width * anchor.0,
+                y: profile.centerY + profile.height * anchor.1
+            )
+            shard.zRotation = anchor.4
+            parent.addChild(shard)
+            let facet = SKShapeNode(path: iceFacetPath(
+                width: max(5, profile.width * anchor.2),
+                height: max(13, profile.height * anchor.3)
+            ))
+            facet.fillColor = .white.withAlphaComponent(0.24)
+            facet.strokeColor = .clear
+            shard.addChild(facet)
+        }
+    }
+
+    private static func addFlames(
+        to parent: SKNode,
+        anchors: [(CGFloat, CGFloat, CGFloat)],
+        profile: StatusProfile,
+        foreground: Bool
+    ) {
+        for (index, anchor) in anchors.enumerated() {
+            let height = profile.height * (foreground ? 0.28 : 0.38) * anchor.2
+            let width = max(9, height * 0.52)
+            let flame = SKShapeNode(path: flamePath(width: width, height: height))
+            flame.name = "status-flame"
+            flame.fillColor = index.isMultiple(of: 2)
+                ? color(1, 0.24, 0.015).withAlphaComponent(foreground ? 0.90 : 0.70)
+                : color(1, 0.55, 0.03).withAlphaComponent(foreground ? 0.88 : 0.65)
+            flame.strokeColor = color(1, 0.82, 0.16).withAlphaComponent(0.78)
+            flame.lineWidth = 1.1
+            flame.glowWidth = foreground ? 3 : 5
+            flame.position = CGPoint(
+                x: profile.width * anchor.0,
+                y: profile.centerY + profile.height * anchor.1
+            )
+            flame.xScale = index.isMultiple(of: 2) ? 1 : -1
+            parent.addChild(flame)
+
+            if foreground && index < 3 {
+                let core = SKShapeNode(path: flamePath(width: width * 0.46, height: height * 0.58))
+                core.fillColor = color(1, 0.88, 0.24).withAlphaComponent(0.92)
+                core.strokeColor = .clear
+                core.position.y = -height * 0.16
+                flame.addChild(core)
+            }
+        }
+    }
+
+    private static func addEmbers(to parent: SKNode, profile: StatusProfile) {
+        for index in 0..<6 {
+            let ember = SKShapeNode(circleOfRadius: index.isMultiple(of: 2) ? 1.5 : 1)
+            ember.name = "status-ember"
+            ember.fillColor = index.isMultiple(of: 3) ? color(1, 0.88, 0.28) : color(1, 0.34, 0.03)
+            ember.strokeColor = .clear
+            ember.glowWidth = 2
+            ember.position = CGPoint(
+                x: profile.width * (-0.34 + CGFloat(index) * 0.14),
+                y: profile.centerY + profile.height * (-0.12 + CGFloat(index % 3) * 0.24)
+            )
+            parent.addChild(ember)
+        }
+    }
+
+    private static func addReverseStreaks(to parent: SKNode, profile: StatusProfile) {
+        for index in 0..<5 {
+            let streak = SKShapeNode(path: reverseChevronPath(width: 15, height: 9))
+            streak.name = "status-reverse-streak"
+            streak.fillColor = .clear
+            streak.strokeColor = index.isMultiple(of: 2)
+                ? color(0.24, 0.88, 1).withAlphaComponent(0.72)
+                : color(0.74, 0.18, 1).withAlphaComponent(0.82)
+            streak.lineWidth = 2.2
+            streak.glowWidth = 3
+            streak.position = CGPoint(
+                x: (index.isMultiple(of: 2) ? -0.46 : 0.38) * profile.width,
+                y: profile.centerY + (-0.38 + CGFloat(index) * 0.19) * profile.height
+            )
+            streak.xScale = index.isMultiple(of: 2) ? 1 : -1
+            parent.addChild(streak)
+        }
+    }
+
+    private static func addStunArcs(to parent: SKNode, profile: StatusProfile) {
+        for index in 0..<5 {
+            let path = CGMutablePath()
+            let direction: CGFloat = index.isMultiple(of: 2) ? 1 : -1
+            path.move(to: CGPoint(x: -12 * direction, y: -5))
+            path.addLine(to: CGPoint(x: -4 * direction, y: 2))
+            path.addLine(to: CGPoint(x: -8 * direction, y: 7))
+            path.addLine(to: CGPoint(x: 9 * direction, y: 13))
+            let arc = SKShapeNode(path: path)
+            arc.name = "status-stun-arc"
+            arc.fillColor = .clear
+            arc.strokeColor = index.isMultiple(of: 2)
+                ? color(0.20, 0.92, 1)
+                : color(1, 0.82, 0.18)
+            arc.lineWidth = 2.4
+            arc.glowWidth = 5
+            arc.position = CGPoint(
+                x: (index.isMultiple(of: 2) ? -0.28 : 0.30) * profile.width,
+                y: profile.centerY + (-0.34 + CGFloat(index) * 0.18) * profile.height
+            )
+            arc.zRotation = direction * 0.10
+            parent.addChild(arc)
+        }
+    }
+
+    private static func addMagnetMark(
+        to parent: SKNode,
+        profile: StatusProfile
+    ) {
+        let radius = profile.width * 0.48
+        let path = CGMutablePath()
+        path.addArc(
+            center: .init(x: 0, y: profile.centerY + profile.height * 0.06),
+            radius: radius,
+            startAngle: .pi * 0.08,
+            endAngle: .pi * 0.92,
+            clockwise: false
+        )
+        let field = SKShapeNode(path: path)
+        field.name = "status-magnet-field"
+        field.fillColor = .clear
+        field.strokeColor = color(0.16, 0.96, 0.82)
+        field.lineWidth = 3
+        field.glowWidth = 7
+        parent.addChild(field)
+
+        for (x, poleColor) in [
+            (-radius * 0.96, color(0.08, 0.72, 1)),
+            (radius * 0.96, color(1, 0.18, 0.62)),
+        ] {
+            let pole = circle(radius: 4.5, color: poleColor)
+            pole.name = "status-magnet-pole"
+            pole.position = .init(
+                x: x,
+                y: profile.centerY + profile.height * 0.11
+            )
+            pole.strokeColor = .white
+            pole.lineWidth = 1.2
+            pole.glowWidth = 4
+            parent.addChild(pole)
+        }
+    }
+
+    private static func addUndertowWaves(
+        to parent: SKNode,
+        profile: StatusProfile
+    ) {
+        for index in 0..<3 {
+            let width = profile.width * (0.78 + CGFloat(index) * 0.12)
+            let path = CGMutablePath()
+            path.move(to: .init(x: -width * 0.5, y: 0))
+            path.addQuadCurve(
+                to: .init(x: 0, y: 0),
+                control: .init(x: -width * 0.25, y: 7)
+            )
+            path.addQuadCurve(
+                to: .init(x: width * 0.5, y: 0),
+                control: .init(x: width * 0.25, y: -7)
+            )
+            let wave = SKShapeNode(path: path)
+            wave.name = "status-undertow-wave"
+            wave.position.y = profile.centerY
+                - profile.height * (0.34 + CGFloat(index) * 0.08)
+            wave.fillColor = .clear
+            wave.strokeColor = index.isMultiple(of: 2)
+                ? color(0.10, 0.70, 1)
+                : .white.withAlphaComponent(0.88)
+            wave.lineWidth = 2.4
+            wave.glowWidth = 4
+            parent.addChild(wave)
+        }
+    }
+
+    private static func decoratePowerUp(_ root: SKNode, ability: TemporaryBallAbility) {
+        root.addChild(ellipse(size: .init(width: 54, height: 14), color: .black.withAlphaComponent(0.24), y: -31))
+
+        let aura = circle(radius: 31, color: powerColor(ability).withAlphaComponent(0.14))
+        aura.strokeColor = powerColor(ability)
+        aura.lineWidth = 3
+        aura.glowWidth = 9
+        aura.zPosition = -1
+        root.addChild(aura)
+
+        let trophy = SKNode()
+        trophy.name = "power-up-trophy"
+        root.addChild(trophy)
+
+        for side in [-1.0, 1.0] {
+            let handle = SKShapeNode(ellipseOf: .init(width: 22, height: 25))
+            handle.position = CGPoint(x: side * 17, y: 7)
+            handle.fillColor = .clear
+            handle.strokeColor = color(1, 0.62, 0.04)
+            handle.lineWidth = 5
+            trophy.addChild(handle)
+        }
+
+        let cup = SKShapeNode(path: trophyCupPath())
+        cup.fillColor = color(1, 0.72, 0.08)
+        cup.strokeColor = color(1, 0.94, 0.48)
+        cup.lineWidth = 2
+        trophy.addChild(cup)
+        trophy.addChild(rect(size: .init(width: 8, height: 15), color: color(1, 0.64, 0.04), radius: 3, y: -13))
+        trophy.addChild(rect(size: .init(width: 34, height: 8), color: color(1, 0.72, 0.08), radius: 4, y: -23))
+        trophy.addChild(rect(size: .init(width: 18, height: 4), color: .white.withAlphaComponent(0.42), radius: 2, x: -5, y: 13, rotation: -0.12))
+
+        let badge = circle(radius: 9, color: color(0.03, 0.16, 0.34), y: 5)
+        badge.strokeColor = .white
+        badge.lineWidth = 1.5
+        trophy.addChild(badge)
+
+        let symbol = SKLabelNode(fontNamed: "AvenirNext-Heavy")
+        symbol.text = powerGlyph(ability)
+        symbol.fontSize = 11
+        symbol.fontColor = .white
+        symbol.verticalAlignmentMode = .center
+        symbol.horizontalAlignmentMode = .center
+        symbol.position.y = 5
+        trophy.addChild(symbol)
+    }
+
+    private static func powerColor(_ ability: TemporaryBallAbility) -> SKColor {
+        switch ability {
+        case .rapidFire: color(1, 0.78, 0.08)
+        case .explosive: color(1, 0.28, 0.04)
+        case .fire: color(1, 0.10, 0.03)
+        case .ice: color(0.18, 0.84, 1)
+        case .reverse: color(0.72, 0.24, 1)
+        case .split: color(0.18, 0.92, 0.44)
+        case .heatSeeking: color(0.12, 0.88, 1)
+        case .orbitShot: color(0.58, 0.48, 1)
+        case .solarPierce: color(1, 0.72, 0.08)
+        case .volt: color(0.08, 0.84, 1)
+        case .gravityWell: color(0.76, 0.34, 1)
+        case .ringReturn: color(1, 0.78, 0.22)
+        case .polarLink: color(0.26, 0.96, 0.82)
+        case .undertow: color(0.08, 0.62, 1)
+        }
+    }
+
+    private static func powerGlyph(_ ability: TemporaryBallAbility) -> String {
+        switch ability {
+        case .rapidFire: "⚡︎"
+        case .explosive: "✹"
+        case .fire: "▲"
+        case .ice: "✦"
+        case .reverse: "↶"
+        case .split: "•••"
+        case .heatSeeking: "◎"
+        case .orbitShot: "◉"
+        case .solarPierce: "☀"
+        case .volt: "ϟ"
+        case .gravityWell: "●"
+        case .ringReturn: "↻"
+        case .polarLink: "⌁"
+        case .undertow: "≈"
         }
     }
 
     private static func decorateEnemy(_ root: SKNode, enemy: EnemyKind) {
-        root.addChild(ellipse(size: .init(width: 48, height: 13), color: .black.withAlphaComponent(0.20), y: -27))
+        root.addChild(earthEnemyShadow(for: enemy))
         switch enemy {
         case .coneRunner:
-            let rig = motionBody(on: root)
-            let cone = SKShapeNode(path: triangle(width: 34, height: 48))
-            cone.fillColor = color(1, 0.36, 0.05)
-            cone.strokeColor = .white
-            cone.lineWidth = 4
-            rig.addChild(cone)
-            rig.addChild(circle(radius: 6, color: color(0.08, 0.16, 0.25), y: 2))
+            renderedEnemySprite(root, enemy: enemy, size: 78)
         case .dummyDefender:
-            robot(root, body: color(1, 0.38, 0.08), head: color(0.97, 0.83, 0.58), wide: false)
+            renderedEnemySprite(root, enemy: enemy, size: 80)
         case .tackleBot:
-            robot(root, body: color(0.96, 0.18, 0.12), head: color(0.18, 0.18, 0.22), wide: true)
+            renderedEnemySprite(root, enemy: enemy, size: 86)
         case .keeperDrone:
-            let rig = robot(root, body: color(1, 0.72, 0.08), head: color(0.10, 0.26, 0.42), wide: true)
-            let shield = SKShapeNode(rectOf: .init(width: 50, height: 34), cornerRadius: 12)
-            shield.fillColor = color(0.08, 0.72, 0.92).withAlphaComponent(0.35)
-            shield.strokeColor = color(0.30, 0.92, 1)
-            shield.lineWidth = 3
-            shield.position.y = -2
-            rig.addChild(shield)
+            renderedEnemySprite(root, enemy: enemy, size: 90)
         case .ballLauncher:
-            let rig = robot(root, body: color(0.56, 0.18, 0.74), head: color(0.10, 0.12, 0.18), wide: false)
-            rig.addChild(circle(radius: 10, color: color(1, 0.30, 0.08), x: 22, y: 1))
+            renderedEnemySprite(root, enemy: enemy, size: 92)
         case .titanKeeper:
-            let rig = robot(root, body: color(1, 0.62, 0.06), head: color(0.08, 0.14, 0.22), wide: true)
-            let core = circle(radius: 9, color: color(0.08, 0.88, 1), y: 1)
-            core.name = "motion-light"
-            core.glowWidth = 5
-            rig.addChild(core)
+            renderedEnemySprite(root, enemy: enemy, size: 96)
+        case .regolithRunner:
+            renderedEnemySprite(root, enemy: enemy, size: 80)
+        case .lunarHopper:
+            renderedEnemySprite(root, enemy: enemy, size: 90)
+        case .orbitDrone:
+            renderedEnemySprite(root, enemy: enemy, size: 92)
+        case .eclipseKeeper:
+            renderedEnemySprite(root, enemy: enemy, size: 90)
+        case .gravityStriker:
+            renderedEnemySprite(root, enemy: enemy, size: 96)
+        case .lunarWarden:
+            renderedEnemySprite(root, enemy: enemy, size: 110)
         case .dustSprite:
-            let rig = alien(root, body: color(0.48, 0.92, 0.36), armor: color(0.42, 0.18, 0.72), wide: false)
-            rig.addChild(circle(radius: 3, color: color(0.08, 0.12, 0.22), x: 0, y: 28))
+            renderedEnemySprite(root, enemy: enemy, size: 80)
         case .roverRaider:
-            let rig = alien(root, body: color(0.76, 0.88, 0.42), armor: color(0.82, 0.24, 0.18), wide: true)
-            rig.addChild(rect(size: .init(width: 42, height: 8), color: color(0.14, 0.16, 0.26), radius: 4, y: -25))
+            renderedEnemySprite(root, enemy: enemy, size: 90)
         case .craterCrawler:
-            let rig = alien(root, body: color(0.68, 0.34, 0.86), armor: color(0.10, 0.72, 0.80), wide: true)
-            for x in [-27.0, 27.0] {
-                rig.addChild(rect(size: .init(width: 22, height: 7), color: color(0.58, 0.24, 0.76), radius: 3, x: x, y: -16, rotation: x < 0 ? -0.35 : 0.35))
-            }
+            renderedEnemySprite(root, enemy: enemy, size: 98)
         case .saucerKeeper:
-            let rig = alien(root, body: color(0.40, 0.90, 0.72), armor: color(0.18, 0.28, 0.72), wide: false)
-            let saucer = SKShapeNode(ellipseOf: .init(width: 64, height: 22))
-            saucer.fillColor = color(0.12, 0.72, 0.90).withAlphaComponent(0.38)
-            saucer.strokeColor = color(0.40, 0.96, 1)
-            saucer.lineWidth = 3
-            saucer.position.y = -4
-            rig.addChild(saucer)
+            renderedEnemySprite(root, enemy: enemy, size: 94)
         case .plasmaStriker:
-            let rig = alien(root, body: color(0.84, 0.44, 0.92), armor: color(0.20, 0.14, 0.42), wide: false)
-            let plasma = circle(radius: 11, color: color(0.18, 0.92, 1), x: 23, y: 1)
-            plasma.name = "motion-light"
-            plasma.glowWidth = 6
-            rig.addChild(plasma)
+            renderedEnemySprite(root, enemy: enemy, size: 98)
         case .marsColossus:
-            let rig = alien(root, body: color(0.48, 0.96, 0.42), armor: color(0.72, 0.12, 0.22), wide: true)
-            let core = circle(radius: 10, color: color(0.86, 0.24, 1), y: 0)
-            core.name = "motion-light"
-            core.glowWidth = 7
-            rig.addChild(core)
+            renderedEnemySprite(root, enemy: enemy, size: 110)
+        default:
+            renderedEnemySprite(root, enemy: enemy, size: enemy.isOuterBoss ? 110 : 92)
         }
     }
 
-    private static func playerHead(_ id: GearID?) -> SKNode {
-        let slot = SKNode()
-        slot.name = "slot-head"
-        let variant = SKNode()
-        variant.name = variantName(id)
+    @discardableResult
+    private static func renderedEnemySprite(
+        _ root: SKNode,
+        enemy: EnemyKind,
+        size: CGFloat
+    ) -> SKNode {
+        let rig = motionBody(on: root)
+        guard let texture = renderedEnemyTextures[enemy] else { return rig }
+        let sprite = SKSpriteNode(texture: texture)
+        sprite.name = "body-sprite"
+        sprite.size = CGSize(width: size, height: size)
+        sprite.position.y = enemySpriteVerticalOffset(for: enemy)
+        if let tint = enemy.outerWorldTint {
+            sprite.color = tint
+            sprite.colorBlendFactor = 0.46
+        }
+        rig.addChild(sprite)
+        return rig
+    }
 
-        switch id {
-        case .earthVisor:
-            variant.addChild(rect(size: .init(width: 12, height: 8), color: color(0.06, 0.18, 0.44), radius: 3, y: 21))
-            let helmet = circle(radius: 16, color: color(0.025, 0.10, 0.30), y: 33)
-            helmet.strokeColor = color(1, 0.72, 0.10)
-            helmet.lineWidth = 2.5
-            variant.addChild(helmet)
-            variant.addChild(rect(size: .init(width: 28, height: 10), color: color(0.10, 0.88, 1).withAlphaComponent(0.86), radius: 5, y: 35))
-            variant.addChild(rect(size: .init(width: 22, height: 9), color: color(0.08, 0.26, 0.58), radius: 4, y: 25))
-            variant.addChild(rect(size: .init(width: 5, height: 10), color: color(1, 0.72, 0.10), radius: 2, x: -15, y: 31))
-            variant.addChild(rect(size: .init(width: 5, height: 10), color: color(1, 0.72, 0.10), radius: 2, x: 15, y: 31))
-            variant.addChild(rect(size: .init(width: 8, height: 7), color: color(0.10, 0.84, 0.92), radius: 3, y: 50))
-        case .marsLens:
-            variant.addChild(rect(size: .init(width: 13, height: 8), color: color(0.22, 0.08, 0.34), radius: 3, y: 21))
-            let helmet = circle(radius: 17, color: color(0.22, 0.07, 0.36), y: 33)
-            helmet.strokeColor = color(0.24, 0.92, 1)
-            helmet.lineWidth = 2.5
-            variant.addChild(helmet)
-            let faceplate = rect(size: .init(width: 27, height: 20), color: color(0.04, 0.16, 0.30), radius: 8, y: 33)
-            faceplate.strokeColor = color(0.22, 0.94, 1)
-            faceplate.lineWidth = 1.5
-            variant.addChild(faceplate)
-            let lens = circle(radius: 7, color: color(0.88, 0.24, 1).withAlphaComponent(0.82), x: 6, y: 34)
-            lens.strokeColor = color(0.26, 0.96, 1)
-            lens.lineWidth = 2
-            lens.glowWidth = 2
-            variant.addChild(lens)
-            for side in [CGFloat(-1), CGFloat(1)] {
-                let pod = rect(size: .init(width: 7, height: 14), color: color(0.42, 0.12, 0.62), radius: 3, x: side * 17, y: 33)
-                pod.strokeColor = color(0.22, 0.94, 1)
-                pod.lineWidth = 1.5
-                variant.addChild(pod)
+    private static func enemySpriteVerticalOffset(for enemy: EnemyKind) -> CGFloat {
+        switch enemy {
+        case .coneRunner: 3.5
+        case .dummyDefender: 0
+        case .tackleBot: 9.5
+        case .keeperDrone: 9
+        case .ballLauncher: 6
+        case .titanKeeper: 12.5
+        case .regolithRunner: 3
+        case .lunarHopper: 8
+        case .orbitDrone: 9
+        case .eclipseKeeper: 5
+        case .gravityStriker: 8
+        case .lunarWarden: 13
+        case .dustSprite: 3
+        case .roverRaider: 5
+        case .craterCrawler: 5
+        case .saucerKeeper: 6
+        case .plasmaStriker: 8
+        case .marsColossus: 12
+        default: enemy.isOuterBoss ? 12 : 7
+        }
+    }
+
+    private static func earthEnemyShadow(for enemy: EnemyKind) -> SKShapeNode {
+        let size: CGSize = switch enemy {
+        case .coneRunner: .init(width: 30, height: 7)
+        case .dummyDefender: .init(width: 50, height: 10)
+        case .tackleBot: .init(width: 44, height: 9)
+        case .keeperDrone: .init(width: 58, height: 11)
+        case .ballLauncher: .init(width: 38, height: 8)
+        case .titanKeeper: .init(width: 62, height: 12)
+        case .regolithRunner: .init(width: 38, height: 9)
+        case .lunarHopper: .init(width: 50, height: 10)
+        case .orbitDrone: .init(width: 62, height: 11)
+        case .eclipseKeeper: .init(width: 56, height: 11)
+        case .gravityStriker: .init(width: 54, height: 10)
+        case .lunarWarden: .init(width: 80, height: 15)
+        case .dustSprite: .init(width: 38, height: 9)
+        case .roverRaider: .init(width: 58, height: 12)
+        case .craterCrawler: .init(width: 68, height: 12)
+        case .saucerKeeper: .init(width: 64, height: 12)
+        case .plasmaStriker: .init(width: 58, height: 11)
+        case .marsColossus: .init(width: 78, height: 15)
+        default: enemy.isOuterBoss ? .init(width: 78, height: 15) : .init(width: 56, height: 11)
+        }
+        let shadow = ellipse(
+            size: size,
+            color: color(0.02, 0.10, 0.08).withAlphaComponent(0.20),
+            y: -28
+        )
+        shadow.position.x = 2
+        shadow.glowWidth = 4
+        shadow.zPosition = -2
+        return shadow
+    }
+
+    private static func healthBarHeight(for kind: TargetState.Kind) -> CGFloat {
+        switch kind {
+        case .enemy(let enemy):
+            return switch enemy {
+            case .tackleBot: 51
+            case .keeperDrone: 54
+            case .ballLauncher: 50
+            case .titanKeeper: 66
+            case .regolithRunner: 44
+            case .lunarHopper: 50
+            case .orbitDrone: 55
+            case .eclipseKeeper: 52
+            case .gravityStriker: 58
+            case .lunarWarden: 72
+            case .dustSprite: 44
+            case .roverRaider: 50
+            case .craterCrawler: 45
+            case .saucerKeeper: 55
+            case .plasmaStriker: 58
+            case .marsColossus: 72
+            default: 43
             }
-        default:
-            variant.name = "variant-base"
-            variant.addChild(rect(size: .init(width: 10, height: 8), color: color(0.94, 0.66, 0.42), radius: 3, y: 22))
-            let head = circle(radius: 13, color: color(0.96, 0.70, 0.47), y: 32)
-            head.strokeColor = color(0.35, 0.15, 0.08)
-            head.lineWidth = 1.5
-            variant.addChild(head)
-            let hair = SKShapeNode(path: hairPath())
-            hair.fillColor = color(0.025, 0.09, 0.29)
-            hair.strokeColor = color(0.08, 0.28, 0.64)
-            hair.lineWidth = 1.5
-            hair.position.y = 38
-            variant.addChild(hair)
-            variant.addChild(circle(radius: 1.3, color: color(0.08, 0.10, 0.16), x: -5, y: 32))
-            variant.addChild(circle(radius: 1.3, color: color(0.08, 0.10, 0.16), x: 5, y: 32))
-        }
-        slot.addChild(variant)
-        return slot
-    }
-
-    private static func playerTorso(_ id: GearID?) -> SKNode {
-        let slot = SKNode()
-        slot.name = "slot-torso"
-        let variant = SKNode()
-        variant.name = variantName(id)
-
-        switch id {
-        case .earthJersey:
-            let jersey = SKShapeNode(path: jerseyPath(topWidth: 48, bottomWidth: 34, height: 38))
-            jersey.position.y = 2
-            jersey.fillColor = color(0.025, 0.10, 0.34)
-            jersey.strokeColor = color(1, 0.72, 0.10)
-            jersey.lineWidth = 2.5
-            variant.addChild(jersey)
-            variant.addChild(rect(size: .init(width: 42, height: 9), color: color(1, 0.72, 0.10), radius: 3, y: 13))
-            variant.addChild(rect(size: .init(width: 5, height: 18), color: color(0.10, 0.82, 0.90), radius: 2.5, x: -6, y: 3, rotation: -0.38))
-            variant.addChild(rect(size: .init(width: 5, height: 18), color: color(0.10, 0.82, 0.90), radius: 2.5, x: 6, y: 3, rotation: 0.38))
-            variant.addChild(playerNumber(color: .white, y: -6))
-        case .marsCore:
-            let armor = SKShapeNode(path: jerseyPath(topWidth: 51, bottomWidth: 35, height: 40))
-            armor.position.y = 2
-            armor.fillColor = color(0.20, 0.07, 0.34)
-            armor.strokeColor = color(0.24, 0.94, 1)
-            armor.lineWidth = 2.5
-            variant.addChild(armor)
-            variant.addChild(rect(size: .init(width: 31, height: 30), color: color(0.15, 0.06, 0.27), radius: 8, y: 1))
-            variant.addChild(rect(size: .init(width: 19, height: 9), color: color(0.54, 0.18, 0.76), radius: 4, x: -17, y: 14, rotation: -0.14))
-            variant.addChild(rect(size: .init(width: 19, height: 9), color: color(0.54, 0.18, 0.76), radius: 4, x: 17, y: 14, rotation: 0.14))
-            variant.addChild(rect(size: .init(width: 31, height: 5), color: color(0.22, 0.90, 0.98), radius: 2, y: -14))
-            let core = SKShapeNode(path: hexagon(radius: 7.5))
-            core.fillColor = color(0.88, 0.20, 1)
-            core.strokeColor = color(0.30, 0.96, 1)
-            core.lineWidth = 2
-            core.glowWidth = 2
-            core.position.y = 3
-            variant.addChild(core)
-        default:
-            variant.name = "variant-base"
-            let torso = rect(size: .init(width: 38, height: 35), color: color(0.025, 0.25, 0.76), radius: 11, y: 2)
-            torso.strokeColor = color(0.08, 0.72, 0.96)
-            torso.lineWidth = 2
-            variant.addChild(torso)
-            variant.addChild(rect(size: .init(width: 7, height: 31), color: color(0.05, 0.78, 0.80), radius: 3, x: -12, y: 2))
-            variant.addChild(rect(size: .init(width: 7, height: 31), color: color(0.05, 0.78, 0.80), radius: 3, x: 12, y: 2))
-            variant.addChild(playerNumber(color: .white, y: 3))
-        }
-        slot.addChild(variant)
-        return slot
-    }
-
-    private static func playerHands(_ id: GearID?) -> SKNode {
-        let slot = SKNode()
-        slot.name = "slot-hands"
-        let variant = SKNode()
-        variant.name = variantName(id)
-        let validID: GearID? = switch id {
-        case .earthGloves, .marsGauntlets: id
-        default: nil
-        }
-        if validID == nil { variant.name = "variant-base" }
-
-        for side in [CGFloat(-1), CGFloat(1)] {
-            let arm = SKNode()
-            arm.name = side < 0 ? "left-arm" : "right-arm"
-            arm.position = CGPoint(x: side * 20, y: 11)
-            arm.zRotation = side * -0.16
-            switch validID {
-            case .earthGloves:
-                let shoulder = circle(radius: 7, color: color(1, 0.72, 0.10), y: -1)
-                shoulder.strokeColor = .white.withAlphaComponent(0.40)
-                shoulder.lineWidth = 1.5
-                arm.addChild(shoulder)
-                arm.addChild(rect(size: .init(width: 11, height: 15), color: color(0.025, 0.12, 0.38), radius: 5, y: -9))
-                arm.addChild(rect(size: .init(width: 10, height: 11), color: color(0.08, 0.76, 0.84), radius: 4, y: -19))
-                let glove = rect(size: .init(width: 13, height: 10), color: color(1, 0.78, 0.12), radius: 5, y: -25)
-                glove.strokeColor = color(0.08, 0.72, 0.82)
-                glove.lineWidth = 1.5
-                arm.addChild(glove)
-            case .marsGauntlets:
-                let shoulder = rect(size: .init(width: 16, height: 11), color: color(0.58, 0.18, 0.78), radius: 5, y: -1, rotation: side * 0.10)
-                shoulder.strokeColor = color(0.24, 0.94, 1)
-                shoulder.lineWidth = 1.5
-                arm.addChild(shoulder)
-                arm.addChild(rect(size: .init(width: 10, height: 14), color: color(0.16, 0.07, 0.28), radius: 4, y: -10))
-                let gauntlet = rect(size: .init(width: 15, height: 17), color: color(0.12, 0.82, 0.94), radius: 6, y: -21)
-                gauntlet.strokeColor = color(0.88, 0.26, 1)
-                gauntlet.lineWidth = 2
-                gauntlet.glowWidth = 1
-                arm.addChild(gauntlet)
-                arm.addChild(circle(radius: 3, color: color(0.94, 0.30, 1), y: -21))
-            default:
-                arm.addChild(rect(size: .init(width: 11, height: 14), color: color(0.025, 0.30, 0.82), radius: 5, y: -5))
-                arm.addChild(rect(size: .init(width: 8, height: 12), color: color(0.94, 0.66, 0.42), radius: 4, y: -15))
-                arm.addChild(circle(radius: 5, color: color(0.96, 0.70, 0.47), y: -23))
+        case .fieldObject(let object):
+            return switch object {
+            case .coneBarricade, .equipmentTrunk, .holoGate, .regolithBarricade, .lunarVault: 40
+            case .ballCart: 53
+            case .waterCooler, .tacticsBoard, .roverBattery, .satelliteRelay, .gravityCell: 61
+            case .oxygenPod: 64
+            case .meteorCrate, .crystalBarricade, .artifactVault: 68
+            default: 58
             }
-            variant.addChild(arm)
+        case .powerUp:
+            return 43
+        case .volatileCore:
+            return 0
         }
-        slot.addChild(variant)
-        return slot
     }
 
-    private static func playerLegs(legID: GearID?, footID: GearID?) -> SKNode {
-        let slot = SKNode()
-        slot.name = "slot-legs"
-        for side in [CGFloat(-1), CGFloat(1)] {
-            let joint = SKNode()
-            joint.name = side < 0 ? "plant-leg" : "kicking-leg"
-            joint.position = CGPoint(x: side * 10, y: -13)
-            joint.zRotation = side * 0.08
-            joint.addChild(playerLegVariant(legID, side: side))
-            joint.addChild(playerFootVariant(footID, side: side))
-            slot.addChild(joint)
-        }
-        return slot
-    }
-
-    private static func playerLegVariant(_ id: GearID?, side: CGFloat) -> SKNode {
-        let variant = SKNode()
-        variant.name = id.map { "leg-variant-\($0.rawValue)" } ?? "leg-variant-base"
-        switch id {
-        case .earthGuards:
-            variant.addChild(rect(size: .init(width: 15, height: 11), color: color(0.025, 0.11, 0.34), radius: 5, y: -4, rotation: side * 0.04))
-            let guardPlate = rect(size: .init(width: 13, height: 18), color: color(0.08, 0.76, 0.84), radius: 5, y: -17)
-            guardPlate.strokeColor = color(1, 0.72, 0.10)
-            guardPlate.lineWidth = 2
-            variant.addChild(guardPlate)
-            variant.addChild(rect(size: .init(width: 8, height: 3), color: color(1, 0.78, 0.12), radius: 1.5, y: -17))
-        case .marsGuards:
-            variant.addChild(rect(size: .init(width: 16, height: 12), color: color(0.20, 0.07, 0.34), radius: 5, y: -4, rotation: side * 0.06))
-            let guardPlate = rect(size: .init(width: 15, height: 20), color: color(0.54, 0.17, 0.76), radius: 6, y: -18)
-            guardPlate.strokeColor = color(0.22, 0.94, 1)
-            guardPlate.lineWidth = 2
-            variant.addChild(guardPlate)
-            variant.addChild(circle(radius: 3.5, color: color(0.22, 0.94, 1), y: -12))
-            variant.addChild(rect(size: .init(width: 4, height: 11), color: color(0.88, 0.26, 1), radius: 2, y: -21))
-        default:
-            variant.name = "leg-variant-base"
-            variant.addChild(rect(size: .init(width: 13, height: 11), color: color(0.04, 0.22, 0.66), radius: 5, y: -4))
-            variant.addChild(rect(size: .init(width: 10, height: 17), color: color(0.08, 0.52, 0.78), radius: 5, y: -17))
-        }
-        return variant
-    }
-
-    private static func playerFootVariant(_ id: GearID?, side: CGFloat) -> SKNode {
-        let variant = SKNode()
-        variant.name = id.map { "foot-variant-\($0.rawValue)" } ?? "foot-variant-base"
-        switch id {
-        case .earthCleats:
-            let cleat = SKShapeNode(path: bootPath(width: 23, height: 10, direction: side))
-            cleat.fillColor = color(1, 0.72, 0.10)
-            cleat.strokeColor = color(0.16, 0.82, 0.90)
-            cleat.lineWidth = 2
-            cleat.position = CGPoint(x: side * 2, y: -29)
-            variant.addChild(cleat)
-            variant.addChild(rect(size: .init(width: 20, height: 3), color: color(0.10, 0.84, 0.92), radius: 1.5, x: side * 2, y: -34))
-            variant.addChild(circle(radius: 1.5, color: color(0.025, 0.12, 0.30), x: side * 7, y: -36))
-            variant.addChild(circle(radius: 1.5, color: color(0.025, 0.12, 0.30), x: side * -3, y: -36))
-        case .marsBoots:
-            let boot = SKShapeNode(path: bootPath(width: 24, height: 12, direction: side))
-            boot.fillColor = color(0.12, 0.82, 0.94)
-            boot.strokeColor = color(0.88, 0.26, 1)
-            boot.lineWidth = 2
-            boot.glowWidth = 1
-            boot.position = CGPoint(x: side * 2, y: -29)
-            variant.addChild(boot)
-            variant.addChild(rect(size: .init(width: 7, height: 9), color: color(0.48, 0.14, 0.72), radius: 3, x: side * 7, y: -25, rotation: side * 0.18))
-            variant.addChild(rect(size: .init(width: 20, height: 3), color: color(0.92, 0.30, 1), radius: 1.5, x: side * 2, y: -35))
-        default:
-            variant.name = "foot-variant-base"
-            variant.addChild(rect(size: .init(width: 18, height: 8), color: color(0.98, 0.68, 0.10), radius: 4, x: side * 2, y: -29))
-        }
-        return variant
-    }
-
-    private static func playerNumber(color: SKColor, y: CGFloat) -> SKLabelNode {
-        let number = SKLabelNode(text: "9")
-        number.fontName = "AvenirNext-Bold"
-        number.fontSize = 13
-        number.fontColor = color
-        number.verticalAlignmentMode = .center
-        number.position = CGPoint(x: 0, y: y)
-        return number
-    }
-
-    private static func variantName(_ id: GearID?) -> String {
-        id.map { "variant-\($0.rawValue)" } ?? "variant-base"
+    private static func inferredWorld(for kind: TargetState.Kind) -> WorldID {
+        guard case .enemy(let enemy) = kind else { return .earth }
+        if enemy.isLunar { return .moon }
+        if enemy.isMartian { return .mars }
+        if enemy.isJovian { return .jupiter }
+        if enemy.isSaturnian { return .saturn }
+        if enemy.isUranian { return .uranus }
+        if enemy.isNeptunian { return .neptune }
+        return .earth
     }
 
     @discardableResult
@@ -582,10 +1584,14 @@ enum GameNodeFactory {
     }
 
     private static func motionBody(on root: SKNode) -> SKNode {
-        let rig = SKNode()
-        rig.name = "motion-body"
-        root.addChild(rig)
-        return rig
+        let motionRig = SKNode()
+        motionRig.name = "motion-body"
+        root.addChild(motionRig)
+
+        let hitReactionRig = SKNode()
+        hitReactionRig.name = "hit-reaction"
+        motionRig.addChild(hitReactionRig)
+        return hitReactionRig
     }
 
     private static func articulatedLimb(name: String, position: CGPoint, rotation: CGFloat) -> SKNode {
@@ -596,70 +1602,63 @@ enum GameNodeFactory {
         return limb
     }
 
-    private static func setLimbPose(on rig: SKNode, stride: CGFloat, armSwing: CGFloat) {
-        rig.childNode(withName: "left-leg")?.zRotation = -0.09 + stride
-        rig.childNode(withName: "right-leg")?.zRotation = 0.09 - stride
-        rig.childNode(withName: "left-arm")?.zRotation = -0.18 + armSwing
-        rig.childNode(withName: "right-arm")?.zRotation = 0.18 - armSwing
+    private static func setLimbPose(on node: TargetRenderNode, stride: CGFloat, armSwing: CGFloat) {
+        node.leftLeg?.zRotation = -0.09 + stride
+        node.rightLeg?.zRotation = 0.09 - stride
+        node.leftArm?.zRotation = -0.18 + armSwing
+        node.rightArm?.zRotation = 0.18 - armSwing
     }
 
     private static func decorateObject(_ root: SKNode, object: FieldObjectKind) {
-        root.addChild(ellipse(size: .init(width: 50, height: 13), color: .black.withAlphaComponent(0.2), y: -25))
-        switch object {
-        case .ballCart:
-            root.addChild(rect(size: .init(width: 54, height: 35), color: color(0.12, 0.34, 0.65), radius: 7))
-            root.addChild(circle(radius: 9, color: .white, x: -14, y: 3))
-            root.addChild(circle(radius: 9, color: .white, x: 14, y: 3))
-        case .waterCooler:
-            root.addChild(rect(size: .init(width: 30, height: 44), color: color(0.10, 0.80, 0.88), radius: 8))
-            root.addChild(rect(size: .init(width: 34, height: 8), color: .white, radius: 3, y: 17))
-        case .tacticsBoard:
-            root.addChild(rect(size: .init(width: 58, height: 42), color: color(0.12, 0.55, 0.24), radius: 5))
-            let line = SKShapeNode(rectOf: .init(width: 44, height: 28), cornerRadius: 2)
-            line.strokeColor = .white
-            line.lineWidth = 2
-            root.addChild(line)
-        case .coneBarricade:
-            for x in [-18.0, 0, 18] {
-                let cone = SKShapeNode(path: triangle(width: 20, height: 33))
-                cone.fillColor = color(1, 0.36, 0.05)
-                cone.strokeColor = .white
-                cone.lineWidth = 2
-                cone.position.x = x
-                root.addChild(cone)
-            }
-        case .equipmentTrunk:
-            root.addChild(rect(size: .init(width: 62, height: 42), color: color(0.12, 0.18, 0.28), radius: 8))
-            root.addChild(rect(size: .init(width: 18, height: 9), color: color(1, 0.72, 0.1), radius: 2, y: 2))
-        case .oxygenPod:
-            root.addChild(rect(size: .init(width: 30, height: 46), color: color(0.18, 0.88, 0.96), radius: 12))
-            root.addChild(circle(radius: 8, color: .white.withAlphaComponent(0.86), y: 9))
-            root.addChild(rect(size: .init(width: 18, height: 6), color: color(0.54, 0.18, 0.76), radius: 3, y: -11))
-        case .meteorCrate:
-            root.addChild(rect(size: .init(width: 56, height: 38), color: color(0.54, 0.20, 0.12), radius: 10))
-            root.addChild(circle(radius: 11, color: color(0.92, 0.42, 0.16), y: 2))
-        case .holoGate:
-            let gate = SKShapeNode(rectOf: .init(width: 58, height: 44), cornerRadius: 8)
-            gate.fillColor = color(0.18, 0.86, 1).withAlphaComponent(0.20)
-            gate.strokeColor = color(0.26, 0.94, 1)
-            gate.lineWidth = 3
-            root.addChild(gate)
-            root.addChild(circle(radius: 6, color: color(0.84, 0.26, 1), y: 1))
-        case .crystalBarricade:
-            for x in [-18.0, 0, 18] {
-                let crystal = SKShapeNode(path: triangle(width: 19, height: 38))
-                crystal.fillColor = color(0.62, 0.22, 0.88)
-                crystal.strokeColor = color(0.22, 0.94, 1)
-                crystal.lineWidth = 2
-                crystal.position.x = x
-                crystal.glowWidth = 3
-                root.addChild(crystal)
-            }
-        case .artifactVault:
-            root.addChild(rect(size: .init(width: 64, height: 44), color: color(0.22, 0.12, 0.34), radius: 12))
-            let lock = circle(radius: 10, color: color(0.92, 0.32, 1), y: 1)
-            lock.glowWidth = 5
-            root.addChild(lock)
+        let presentation = fieldObjectPresentation(for: object)
+        let shadow = ellipse(
+            size: presentation.shadowSize,
+            color: presentation.shadowColor,
+            y: -26
+        )
+        shadow.position.x = 2
+        shadow.glowWidth = 4
+        shadow.zPosition = -2
+        root.addChild(shadow)
+
+        let rig = motionBody(on: root)
+        guard let texture = renderedFieldObjectTextures[object] else { return }
+        let sprite = SKSpriteNode(texture: texture)
+        sprite.name = "body-sprite"
+        sprite.size = CGSize(width: presentation.size, height: presentation.size)
+        sprite.position.y = presentation.verticalOffset
+        if object.isLunar {
+            sprite.color = color(0.58, 0.72, 1)
+            sprite.colorBlendFactor = 0.42
+        } else if let tint = object.outerWorldTint {
+            sprite.color = tint
+            sprite.colorBlendFactor = 0.48
+        }
+        rig.addChild(sprite)
+    }
+
+    private static func fieldObjectPresentation(
+        for object: FieldObjectKind
+    ) -> (size: CGFloat, verticalOffset: CGFloat, shadowSize: CGSize, shadowColor: SKColor) {
+        let earthShadow = color(0.02, 0.10, 0.08).withAlphaComponent(0.21)
+        let marsShadow = color(0.12, 0.025, 0.06).withAlphaComponent(0.25)
+        return switch object {
+        case .ballCart: (88, 13, .init(width: 54, height: 11), earthShadow)
+        case .waterCooler: (90, 15, .init(width: 42, height: 9), earthShadow)
+        case .tacticsBoard: (94, 16, .init(width: 54, height: 10), earthShadow)
+        case .coneBarricade: (100, -8, .init(width: 78, height: 10), earthShadow)
+        case .equipmentTrunk: (96, 0, .init(width: 76, height: 12), earthShadow)
+        case .roverBattery: (90, 13, .init(width: 56, height: 11), earthShadow)
+        case .satelliteRelay: (96, 16, .init(width: 58, height: 10), earthShadow)
+        case .regolithBarricade: (102, -7, .init(width: 80, height: 10), earthShadow)
+        case .gravityCell: (92, 15, .init(width: 44, height: 9), earthShadow)
+        case .lunarVault: (98, 0, .init(width: 78, height: 12), earthShadow)
+        case .oxygenPod: (96, 17, .init(width: 54, height: 11), marsShadow)
+        case .meteorCrate: (102, 19, .init(width: 68, height: 13), marsShadow)
+        case .holoGate: (106, 0, .init(width: 90, height: 13), marsShadow)
+        case .crystalBarricade: (102, 19, .init(width: 76, height: 13), marsShadow)
+        case .artifactVault: (104, 20, .init(width: 76, height: 14), marsShadow)
+        default: (98, 10, .init(width: 66, height: 12), marsShadow)
         }
     }
 
@@ -693,6 +1692,29 @@ enum GameNodeFactory {
         path.move(to: CGPoint(x: 0, y: height / 2))
         path.addLine(to: CGPoint(x: -width / 2, y: -height / 2))
         path.addLine(to: CGPoint(x: width / 2, y: -height / 2))
+        path.closeSubpath()
+        return path
+    }
+
+    private static func trophyCupPath() -> CGPath {
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: -20, y: 18))
+        path.addLine(to: CGPoint(x: 20, y: 18))
+        path.addCurve(
+            to: CGPoint(x: 11, y: -4),
+            control1: CGPoint(x: 20, y: 7),
+            control2: CGPoint(x: 17, y: -1)
+        )
+        path.addCurve(
+            to: CGPoint(x: -11, y: -4),
+            control1: CGPoint(x: 5, y: -8),
+            control2: CGPoint(x: -5, y: -8)
+        )
+        path.addCurve(
+            to: CGPoint(x: -20, y: 18),
+            control1: CGPoint(x: -17, y: -1),
+            control2: CGPoint(x: -20, y: 7)
+        )
         path.closeSubpath()
         return path
     }
@@ -746,7 +1768,184 @@ enum GameNodeFactory {
         return path
     }
 
+    private static func frostBandPath(width: CGFloat, height: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: -width * 0.5, y: 0))
+        path.addLine(to: CGPoint(x: -width * 0.34, y: height * 0.48))
+        path.addLine(to: CGPoint(x: -width * 0.18, y: height * 0.14))
+        path.addLine(to: CGPoint(x: 0, y: height * 0.62))
+        path.addLine(to: CGPoint(x: width * 0.19, y: height * 0.18))
+        path.addLine(to: CGPoint(x: width * 0.36, y: height * 0.52))
+        path.addLine(to: CGPoint(x: width * 0.5, y: 0))
+        path.addLine(to: CGPoint(x: width * 0.31, y: -height * 0.30))
+        path.addLine(to: CGPoint(x: width * 0.08, y: -height * 0.08))
+        path.addLine(to: CGPoint(x: -width * 0.20, y: -height * 0.34))
+        path.closeSubpath()
+        return path
+    }
+
+    private static func iceShardPath(width: CGFloat, height: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: -width * 0.5, y: height * 0.42))
+        path.addLine(to: CGPoint(x: width * 0.5, y: height * 0.42))
+        path.addLine(to: CGPoint(x: width * 0.22, y: -height * 0.10))
+        path.addLine(to: CGPoint(x: 0, y: -height * 0.58))
+        path.addLine(to: CGPoint(x: -width * 0.20, y: -height * 0.12))
+        path.closeSubpath()
+        return path
+    }
+
+    private static func iceFacetPath(width: CGFloat, height: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: -width * 0.18, y: height * 0.34))
+        path.addLine(to: CGPoint(x: width * 0.15, y: height * 0.30))
+        path.addLine(to: CGPoint(x: 0, y: -height * 0.45))
+        path.closeSubpath()
+        return path
+    }
+
+    private static func flamePath(width: CGFloat, height: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: 0, y: height * 0.58))
+        path.addCurve(
+            to: CGPoint(x: width * 0.48, y: -height * 0.12),
+            control1: CGPoint(x: width * 0.08, y: height * 0.30),
+            control2: CGPoint(x: width * 0.54, y: height * 0.18)
+        )
+        path.addCurve(
+            to: CGPoint(x: 0, y: -height * 0.52),
+            control1: CGPoint(x: width * 0.42, y: -height * 0.38),
+            control2: CGPoint(x: width * 0.18, y: -height * 0.52)
+        )
+        path.addCurve(
+            to: CGPoint(x: -width * 0.46, y: -height * 0.08),
+            control1: CGPoint(x: -width * 0.28, y: -height * 0.50),
+            control2: CGPoint(x: -width * 0.50, y: -height * 0.34)
+        )
+        path.addCurve(
+            to: CGPoint(x: 0, y: height * 0.58),
+            control1: CGPoint(x: -width * 0.32, y: height * 0.12),
+            control2: CGPoint(x: -width * 0.11, y: height * 0.30)
+        )
+        path.closeSubpath()
+        return path
+    }
+
+    private static func reverseChevronPath(width: CGFloat, height: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: width * 0.5, y: height * 0.5))
+        path.addLine(to: CGPoint(x: 0, y: 0))
+        path.addLine(to: CGPoint(x: width * 0.5, y: -height * 0.5))
+        path.move(to: CGPoint(x: 0, y: height * 0.5))
+        path.addLine(to: CGPoint(x: -width * 0.5, y: 0))
+        path.addLine(to: CGPoint(x: 0, y: -height * 0.5))
+        return path
+    }
+
     private static func color(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat) -> SKColor {
         SKColor(red: red, green: green, blue: blue, alpha: 1)
+    }
+}
+
+private extension EnemyKind {
+    var outerWorldTint: SKColor? {
+        if isJovian { return SKColor(red: 0.96, green: 0.55, blue: 0.12, alpha: 1) }
+        if isSaturnian { return SKColor(red: 0.93, green: 0.78, blue: 0.34, alpha: 1) }
+        if isUranian { return SKColor(red: 0.28, green: 0.91, blue: 0.88, alpha: 1) }
+        if isNeptunian { return SKColor(red: 0.10, green: 0.42, blue: 0.96, alpha: 1) }
+        return nil
+    }
+
+    var isOuterBoss: Bool {
+        switch self {
+        case .tempestRegent, .crownSovereign, .axisPrime, .abyssalMonarch:
+            true
+        default:
+            false
+        }
+    }
+
+    var isLunar: Bool {
+        switch self {
+        case .regolithRunner, .lunarHopper, .orbitDrone, .eclipseKeeper, .gravityStriker, .lunarWarden:
+            true
+        default:
+            false
+        }
+    }
+
+    var isMartian: Bool {
+        switch self {
+        case .dustSprite, .roverRaider, .craterCrawler, .saucerKeeper, .plasmaStriker, .marsColossus:
+            true
+        default:
+            false
+        }
+    }
+
+    var isJovian: Bool {
+        switch self {
+        case .cloudRunner, .pressureBrute, .vortexSkimmer, .stormKeeper,
+             .boltStriker, .tempestRegent:
+            true
+        default:
+            false
+        }
+    }
+
+    var isSaturnian: Bool {
+        switch self {
+        case .ringRunner, .iceMason, .shepherdDrone, .haloKeeper,
+             .shardStriker, .crownSovereign:
+            true
+        default:
+            false
+        }
+    }
+
+    var isUranian: Bool {
+        switch self {
+        case .frostSprinter, .tiltBrute, .auroraDrifter, .polarKeeper,
+             .magnetStriker, .axisPrime:
+            true
+        default:
+            false
+        }
+    }
+
+    var isNeptunian: Bool {
+        switch self {
+        case .mistRunner, .currentBrute, .squallRay, .tridentKeeper,
+             .pressureStriker, .abyssalMonarch:
+            true
+        default:
+            false
+        }
+    }
+}
+
+private extension FieldObjectKind {
+    var outerWorldTint: SKColor? {
+        switch self {
+        case .pressureCell, .cloudCondenser, .windGate, .lightningMast, .stormVault:
+            SKColor(red: 0.96, green: 0.55, blue: 0.12, alpha: 1)
+        case .ringShardCrate, .thermalPod, .shepherdBeacon, .iceBarricade, .crownVault:
+            SKColor(red: 0.93, green: 0.78, blue: 0.34, alpha: 1)
+        case .magneticCoil, .cryoCanister, .auroraRelay, .frostBarricade, .polarVault:
+            SKColor(red: 0.28, green: 0.91, blue: 0.88, alpha: 1)
+        case .stormBattery, .oxygenBell, .currentGate, .coralBarricade, .trenchVault:
+            SKColor(red: 0.10, green: 0.42, blue: 0.96, alpha: 1)
+        default:
+            nil
+        }
+    }
+
+    var isLunar: Bool {
+        switch self {
+        case .roverBattery, .satelliteRelay, .regolithBarricade, .gravityCell, .lunarVault:
+            true
+        default:
+            false
+        }
     }
 }

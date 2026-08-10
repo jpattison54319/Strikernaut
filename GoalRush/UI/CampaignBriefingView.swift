@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CampaignBriefingView: View {
+    @Environment(GameStore.self) private var store
     let level: LevelDefinition
     let discoveries: [CampaignDiscovery]
     let session: GameSessionModel
@@ -21,15 +22,15 @@ struct CampaignBriefingView: View {
             VStack(spacing: 18) {
                 VStack(spacing: 7) {
                     Label("NEW THIS LEVEL", systemImage: "sparkles")
-                        .font(.caption.bold())
+                        .font(GoalRushTheme.Typography.captionEmphasized)
                         .tracking(1.2)
                         .foregroundStyle(level.world.accentColor)
                     Text(level.name)
-                        .font(.largeTitle.bold())
+                        .font(GoalRushTheme.Typography.display)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.white)
                     Text("LEVEL \(level.worldLevel)")
-                        .font(.caption.bold())
+                        .font(GoalRushTheme.Typography.captionEmphasized)
                         .foregroundStyle(.white.opacity(0.58))
                 }
                 .accessibilityElement(children: .combine)
@@ -48,6 +49,7 @@ struct CampaignBriefingView: View {
                 .scrollIndicators(.hidden)
 
                 Button("Kick Off", systemImage: "play.fill") {
+                    store.uiAudio.requestFeedback(.impact)
                     session.startCampaignLevel()
                 }
                 .buttonStyle(PrimaryGameButton())

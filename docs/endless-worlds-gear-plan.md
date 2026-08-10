@@ -2,14 +2,18 @@
 
 ## Product contract
 
-- Campaign is organized into authored worlds. Earth contains Levels 1–10 and
-  Mars contains Levels 11–20. The content model owns world membership, theme,
-  background, enemies, objects, boss, and world-clear reward so another world
-  can be added without rewriting navigation or simulation code.
-- Endless is a distinct run mode available from the home screen. It starts with
-  a run-only power choice, has no victory condition or final wave, grants a new
-  choice after every cleared wave, and ends only when stamina reaches zero or
-  the player chooses to leave.
+- Campaign is organized into seven authored worlds spanning Levels 1–70. The
+  content model owns world
+  membership, theme, background, enemies, objects, boss, rule, and temporary
+  powers so another world can be added without rewriting navigation or
+  simulation code.
+- Endless is one distinct run mode available from the home screen; there is no
+  world picker. It starts with a run-only power choice, has no victory condition
+  or final wave, grants a new choice after every cleared wave, and ends only
+  when stamina reaches zero or the player chooses to leave.
+- The circuit uses each authored world for ten waves, reaches Neptune on
+  61–70, then loops to Earth on wave 71. Its sequence, enemies, objects, boss,
+  arena, and hazards are derived from the authored world catalog.
 - Permanent stat upgrades and equipped gear apply in Campaign and Endless.
   Run-only abilities reset when either type of run ends.
 - Gear cannot be bought. A complete five-piece set is awarded the first time a
@@ -17,22 +21,29 @@
 
 ## Endless balance
 
-- Waves have an authored time target, followed by a clear-the-field phase. This
-  prevents a wave transition from deleting live threats and makes the upgrade
-  break a true reward for clearing pressure.
+- Regular waves have an enemy defeat quota. Escaped enemies deal stamina
+  damage, do not decrement it, and are replaced. This makes the upgrade break a
+  true reward for defeating the authored pressure rather than outlasting it.
 - Enemy health, contact damage, hostile projectile damage, reward score, and
   movement pressure are functions of wave number. Health and damage continue
   scaling without an authored maximum; spawn rate has a safety floor so device
   performance is not used as the difficulty mechanism.
-- Enemy types enter the pool progressively. Every fifth wave introduces the
-  selected world's boss alongside the regular pool.
+- Enemy types enter the pool progressively. Every fifth wave is a boss-only
+  completion objective with two phase-gated reinforcement pulses; those adds
+  do not count toward the displayed objective.
+- At each ten-wave boundary, a black interstitial drops the completed world name
+  away and slams the incoming world name into place. The scene switches arena,
+  geometry, enemy and object families, boss, rule, temporary powers, colors,
+  and faction emblem beneath that cover before play resumes.
 - Endless power ranks are uncapped. Damage, cadence, pierce, tracking, volley,
   shields, healing, enemy slow, meteor kicks, and reward multipliers support
-  distinct stacking builds. Campaign retains a three-rank cap and the original
-  six-technique pool.
+  distinct stacking builds. Gravity Well, Ring Return, Polar Link, and
+  Undertow add four independently scaling special-ball tracks to the original
+  six.
 - Training Tokens are credited on destruction and checkpointed at every draft,
   pause, background transition, and result. Best wave and best score are stored
-  per world.
+  as one record for the continuous mode; legacy per-world records merge by
+  their maximum values.
 
 ## World release
 
@@ -42,12 +53,48 @@
 - Levels 1–10 and Titan Keeper boss.
 - First-clear reward: Earth Vanguard gear set.
 
+### Moon — Lunar League
+
+- Original low-gravity arena art with periodic orbital-debris strikes. Debris
+  marks a lane in the arena, then damages a player who remains there.
+- Levels 11–20 with regolith runners, lunar hoppers, orbit drones, eclipse
+  keepers, gravity strikers, lunar equipment, and the Lunar Warden boss.
+
 ### Mars — Red Frontier
 
 - Original rust-red crater stadium art with cyan rails and habitat domes.
-- Levels 11–20 with alien scouts, crawlers, shield saucers, plasma attackers,
+- Levels 21–30 with alien scouts, crawlers, shield saucers, plasma attackers,
   Martian equipment, and the Mars Colossus boss.
+- Every sixth standard defeat and each boss phase arms a Volatile Core. Shooting
+  it only neutralizes the threat; ignoring it damages the player.
 - First-clear reward: Mars Pioneer gear set.
+
+### Jupiter — Storm Citadel
+
+- Levels 31–40 introduce wind displacement, charged rails, storm enemies, and
+  the Tempest Regent.
+- Gale unlocks after the finale. Stormbreak anchors the player against wind and
+  launches five seeking counter-shots.
+
+### Saturn — Crown of Rings
+
+- Levels 41–50 turn lane reading into the core skill through sweeping ring
+  segments and the Crown Sovereign.
+- Halo unlocks after the finale. Ring Relay clears hostile shots and releases
+  three ricocheting pinballs.
+
+### Uranus — Tilted Frontier
+
+- Levels 51–60 combine icy momentum with frozen edge rails and Axis Prime.
+- Flux unlocks after the finale. Pole Shift converts hostile projectiles and
+  mirrors every kick for five seconds.
+
+### Neptune — Tempest Deep
+
+- Levels 61–70 compress the available field with pressure walls and culminate
+  in the Abyssal Monarch.
+- Surge unlocks after the finale. Tidal Break clears arena hazards and sends a
+  wide shockwave followed by staggered aftershocks.
 
 ## Gear and effects
 
@@ -70,21 +117,31 @@ effect, unlock source, and active full-set bonus.
   persistent-progression destinations.
 - Campaign keeps world choice and level choice on one screen so locked content,
   completion progress, and rewards remain visible without navigation hunting.
-- Endless onboarding states the irreversible run contract before Start, then
-  keeps Wave, Score, Stamina, and Tokens visible in the HUD.
+- Endless onboarding states the irreversible run contract before Start. Live
+  play keeps Wave, Stamina, and Tokens visible; score continues accumulating
+  but stays off the gameplay surface until results.
+- The objective plate uses image-generated abstract faction and boss-faction
+  sigils in a compact plate below the main status strip. Enemy-count decrements
+  roll, glow, and settle; the next wave rolls in when its draft dismisses. The
+  combo is a bare number and `x` aligned opposite the objective, with no panel,
+  border, or label. Reduce Motion replaces travel and scale with restrained
+  opacity changes. Boss health appears only on the boss itself as a red bar
+  paired with that world's abstract boss sigil.
 - Selection, reward, wave-clear, and equipment changes combine visible state,
   sound, and optional haptics. All icon-only controls retain text labels and at
   least 44-by-44-point targets.
 - Reduce Motion replaces large travel/scale transitions with opacity; Reduce
   Flashes suppresses strong gameplay pulses. Color is never the only indicator
   of locked, equipped, completed, or selected state.
+- World hazards happen at cadence and use only immediate in-arena warnings. They
+  never add a persistent countdown, progress bar, or active timer to the HUD.
 
 ## Verification
 
 - Unit tests cover save migration, world unlocking, gear idempotency and stat
-  effects, Endless wave progression, uncapped difficulty growth, repeatable
-  drafts, and per-world records.
-- UI tests cover Home entry points, world locks, Endless launch/draft/pause, and
-  gear cycling.
+  effects, Endless wave/world progression, uncapped difficulty growth,
+  repeatable drafts, theme-specific enemy pools, and the singular record.
+- UI tests cover Home entry points, world locks, the Endless circuit,
+  launch/draft/pause, the Earth-to-Moon interstitial, and gear cycling.
 - Simulator screenshots are inspected for Home, Campaign, Mars gameplay,
   Endless hub/HUD/draft, world-clear result, and the locker.

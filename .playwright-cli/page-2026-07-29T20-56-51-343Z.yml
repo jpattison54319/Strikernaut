@@ -1,0 +1,48 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - link "Strikernaut home" [ref=e3] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e4]: S
+      - generic [ref=e5]: STRIKERNAUT
+    - navigation "Main navigation" [ref=e6]:
+      - link "Support" [ref=e7] [cursor=pointer]:
+        - /url: /support/
+      - link "Privacy" [ref=e8] [cursor=pointer]:
+        - /url: /privacy/
+  - main [ref=e9]:
+    - article [ref=e10]:
+      - generic [ref=e11]: PLAYER SUPPORT
+      - heading "How can we help?" [level=1] [ref=e12]
+      - paragraph [ref=e13]: Strikernaut supports iPhone devices running iOS 18 or later. Try the answers below or report a reproducible problem through GitHub.
+      - heading "Rewarded ad is unavailable" [level=2] [ref=e14]
+      - paragraph [ref=e15]: Rewarded ads depend on your connection, region, privacy choices, and available ad inventory. You can always decline a death save or continue without claiming bonus Tokens. An unavailable ad does not remove Tokens you already earned.
+      - heading "How death saves work" [level=2] [ref=e16]
+      - paragraph [ref=e17]: A fresh Campaign or Endless attempt can offer one optional rewarded-ad death save. After it is used, retrying that same attempt does not offer another save. Returning home and beginning a new attempt resets eligibility.
+      - heading "How the Token bonus works" [level=2] [ref=e18]
+      - paragraph [ref=e19]: After a completed Campaign level or Endless run, an optional rewarded ad can add 50% to the Training Tokens earned in that result. The original Tokens are yours whether or not you watch.
+      - heading "Resume an interrupted run" [level=2] [ref=e20]
+      - paragraph [ref=e21]: Strikernaut saves a restorable checkpoint after a cleared wave. When you return to that Campaign level or Endless mode, choose to continue from the saved wave or start over. No checkpoint is created before the first wave is cleared, and completed runs remove their checkpoint.
+      - heading "Reset local progress" [level=2] [ref=e22]
+      - paragraph [ref=e23]:
+        - text: Open
+        - strong [ref=e24]: Settings
+        - text: ", choose"
+        - strong [ref=e25]: Account
+        - text: ", then select"
+        - strong [ref=e26]: Reset Account
+        - text: . This removes locally saved progress and current-run checkpoints and restarts onboarding. The action cannot be undone.
+      - generic [ref=e27]:
+        - generic [ref=e28]:
+          - heading "Still stuck?" [level=2] [ref=e29]
+          - paragraph [ref=e30]: Open a support issue with your iPhone model, iOS version, the game mode, and the steps that led to the problem. Do not include personal or sensitive information.
+        - link "Open a support issue" [ref=e31] [cursor=pointer]:
+          - /url: https://github.com/jpattison54319/Strikernaut/issues/new?title=Strikernaut%20support%3A%20
+  - contentinfo [ref=e32]:
+    - paragraph [ref=e33]: © 2026 Strikernaut
+    - generic [ref=e34]:
+      - link "Home" [ref=e35] [cursor=pointer]:
+        - /url: /
+      - link "Support" [ref=e36] [cursor=pointer]:
+        - /url: /support/
+      - link "Privacy" [ref=e37] [cursor=pointer]:
+        - /url: /privacy/

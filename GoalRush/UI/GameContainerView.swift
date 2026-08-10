@@ -3,216 +3,375 @@ import SwiftUI
 
 struct GameContainerView: View {
     @Environment(GameStore.self) private var store
+    @Environment(RewardedAdService.self) private var rewardedAds
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var session: GameSessionModel
     @State private var scene: GoalRushScene
-    @State private var showQuitConfirmation = false
     @State private var audio: GameAudio
     @State private var creditedRunTokens = 0
+    @State private var lastCheckpoint: RunCheckpoint?
+    @State private var checkpointWriteTask: Task<Void, Never>?
+    @State private var savedRunWasInvalidatedByDeath = false
+    @State private var isRestarting = false
+    @State private var isFinalizing = false
 
-    init(mode: RunMode, progress: PlayerProgress, settings: GameSettings) {
-        let session = GameSessionModel(mode: mode, progress: progress, settings: settings)
+    init(
+        mode: RunMode,
+        progress: PlayerProgress,
+        settings: GameSettings,
+        checkpoint: RunCheckpoint? = nil
+    ) {
+        let session = GameSessionModel(
+            mode: mode,
+            progress: progress,
+            settings: settings,
+            checkpoint: checkpoint
+        )
         _session = State(initialValue: session)
         _scene = State(initialValue: GoalRushScene(session: session, reducedEffects: settings.reducedFlashes))
         _audio = State(initialValue: GameAudio(settings: settings))
+        _creditedRunTokens = State(
+            initialValue: checkpoint?.creditedRunTokens ?? 0
+        )
+        _lastCheckpoint = State(initialValue: checkpoint)
     }
 
     var body: some View {
         ZStack {
-            SpriteView(scene: scene, isPaused: session.phase == .paused, preferredFramesPerSecond: 60)
+            SpriteView(
+                scene: scene,
+                isPaused: shouldPauseScene,
+                preferredFramesPerSecond: 60
+            )
                 .ignoresSafeArea()
                 .accessibilityLabel("Active soccer training run")
-            VStack(spacing: 10) {
-                hud
+                .accessibilityHidden(session.phase != .playing)
+            VStack(spacing: 6) {
+                GameplayStatusBar(
+                    world: session.world.id,
+                    stamina: session.hudState.stamina,
+                    maxStamina: session.hudState.maxStamina,
+                    staminaTint: staminaColor,
+                    tokens: session.hudState.tokens,
+                    endlessScore: session.mode.isEndless
+                        ? session.hudState.score
+                        : nil,
+                    shieldCharges: session.hudState.shieldCharges,
+                    pause: pauseRun
+                )
+                .allowsHitTesting(session.phase == .playing)
+
+                HStack(alignment: .center, spacing: GoalRushTheme.Metrics.compactSpacing) {
+                    WaveObjectiveHUD(
+                        world: session.world.id,
+                        wave: session.hudState.wave,
+                        waveCount: session.hudState.waveCount,
+                        remainingEnemies: session.hudState.remainingEnemies,
+                        isEndless: session.mode.isEndless,
+                        isBossWave: session.hudState.isBossWave
+                    )
+
+                    Spacer(minLength: GoalRushTheme.Metrics.compactSpacing)
+
+                    if session.hudState.combo > 0 {
+                        FloatingComboView(combo: session.hudState.combo)
+                            .transition(
+                                reduceMotion
+                                    ? .opacity
+                                    : .scale(scale: 0.86, anchor: .topTrailing)
+                                        .combined(with: .opacity)
+                            )
+                    }
+                }
+                .frame(minHeight: 38)
+
+                if let ability = session.hudState.activeTemporaryAbility {
+                    HStack {
+                        Spacer()
+                        TemporaryAbilityTimerView(
+                            ability: ability,
+                            remaining: session.hudState.temporaryAbilityRemaining,
+                            duration: session.hudState.temporaryAbilityDuration
+                        )
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                }
                 Spacer()
                 if session.mode.isEndless && session.hudState.elapsed < 5 && session.phase == .playing {
                     Label("Drag to aim", systemImage: "hand.draw.fill")
-                        .font(.subheadline.bold())
+                        .font(GoalRushTheme.Typography.subheadlineEmphasized)
                         .padding(.horizontal, 16)
                         .frame(minHeight: 44)
-                        .background(.ultraThinMaterial, in: .capsule)
-                        .overlay { Capsule().stroke(GoalRushTheme.cyan.opacity(0.45)) }
-                        .shadow(color: GoalRushTheme.cyan.opacity(0.22), radius: 10)
+                        .background(GoalRushTheme.surfaceRaised.opacity(0.94), in: ComicPanelShape(cut: 7))
+                        .overlay {
+                            ComicPanelShape(cut: 7)
+                                .stroke(GoalRushTheme.cyan.opacity(0.62), lineWidth: 2)
+                        }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 8)
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+            .animation(
+                reduceMotion ? .easeOut(duration: 0.16) : .snappy(duration: 0.20),
+                value: session.hudState.combo > 0
+            )
+            .accessibilityHidden(session.phase != .playing)
+
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    CharacterAbilityButton(
+                        character: session.character,
+                        charge: session.hudState.characterAbilityCharge,
+                        isReady: session.hudState.characterAbilityReady,
+                        activate: activateCharacterAbility
+                    )
+                }
+            }
+            .padding(.trailing, 18)
+            .padding(.bottom, 116)
+            .allowsHitTesting(session.phase == .playing)
+            .accessibilityHidden(session.phase != .playing)
 
             if case .briefing(let discoveries) = session.phase, let level = session.level {
                 CampaignBriefingView(level: level, discoveries: discoveries, session: session)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
-            if case .draft(let abilities) = session.phase {
-                AbilityDraftView(abilities: abilities, session: session)
+            if case .draft(let choices) = session.phase {
+                AbilityDraftView(choices: choices, session: session)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
             if session.phase == .paused {
                 pauseOverlay
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
+            if session.phase == .deathSaveOffer {
+                DeathSaveOfferView(
+                    mode: session.mode,
+                    wave: session.hudState.wave,
+                    continueRun: continueAfterDeathSave,
+                    finishRun: finishWithoutDeathSave
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .zIndex(30)
+            }
+            if session.phase == .deathSaveCountdown {
+                DeathSaveCountdownView(
+                    secondsRemaining: session.deathSaveCountdownSeconds
+                )
+                .transition(.opacity)
+                .zIndex(30)
+            }
+            if case .worldTransition(let from, let to, _) = session.phase {
+                EndlessWorldTransitionView(
+                    from: from,
+                    to: to,
+                    hapticsEnabled: store.settings.hapticsEnabled,
+                    onComplete: session.completeWorldTransition
+                )
+                .transition(.opacity)
+                .zIndex(20)
+            }
+#if DEBUG
+            if ProcessInfo.processInfo.arguments.contains(
+                "--gameplay-runtime-probe"
+            ) {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .accessibilityElement()
+                    .accessibilityLabel("Gameplay runtime")
+                    .accessibilityValue(
+                        "\(Int(session.hudState.elapsed * 10))"
+                    )
+                    .accessibilityIdentifier("gameplay-runtime-probe")
+            }
+#endif
         }
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: session.phase)
         .onChange(of: session.phase) { _, phase in
-            if phase == .paused || phase.isDraft { checkpointRunTokens() }
+            synchronizeScenePlayback()
+            if phase.isRunCheckpointBoundary {
+                checkpointRunTokens()
+                persistWaveCheckpoint()
+            } else if phase == .deathSaveOffer {
+                checkpointRunTokens()
+                invalidateSavedRunAfterDeath()
+            } else if phase == .paused {
+                checkpointRunTokens()
+                persistCheckpointMetadata()
+            }
             if phase == .finished { finishRun() }
         }
-        .onChange(of: session.eventPulse) { _, _ in
-            for event in session.recentEvents { audio.handle(event) }
-            let progress = session.hudState.elapsed / session.hudState.duration
-            audio.updateIntensity(progress: progress, bossActive: session.hudState.bossActive)
+        .onAppear(perform: handleContainerAppearance)
+        .task {
+            if case .briefing = session.phase, let levelNumber = session.levelNumber {
+                store.markCampaignBriefingSeen(level: levelNumber)
+            }
+            await Task.yield()
+            await audio.prepare()
+        }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            synchronizeScenePlayback()
+            await audio.resumeHaptics()
+        }
+        .task(id: rewardedAds.isPresenting) {
+            await handleRewardedAdPresentationChange()
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active {
                 if session.phase == .playing { session.togglePause() }
                 checkpointRunTokens()
+                persistCheckpointMetadata()
             }
+            synchronizeScenePlayback()
         }
-        .confirmationDialog("End this run?", isPresented: $showQuitConfirmation, titleVisibility: .visible) {
-            Button("End Run", role: .destructive) {
-                let result = RunResult(
-                    mode: session.mode,
-                    didWin: false,
-                    tokensEarned: session.snapshot.tokens,
-                    remainingStamina: session.snapshot.stamina,
-                    wave: session.snapshot.wave,
-                    score: session.snapshot.score
-                )
-                store.finish(result, tokensAlreadyCredited: creditedRunTokens)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(session.mode.isEndless
-                 ? "Training Tokens and your best wave are saved. Run powers reset."
-                 : "Collected Training Tokens are kept, but level progress is lost.")
-        }
-        .onDisappear { audio.stop() }
-    }
-
-    private var hud: some View {
-        VStack(spacing: 9) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "heart.fill")
-                            .foregroundStyle(staminaColor)
-                        Text("STAMINA")
-                            .font(.caption2.bold())
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 4)
-                        Text("\(Int(session.hudState.stamina))")
-                            .font(.subheadline.bold())
-                            .monospacedDigit()
-                            .contentTransition(.numericText())
-                    }
-                    ProgressView(value: session.hudState.stamina, total: session.hudState.maxStamina)
-                        .tint(staminaColor)
-                        .scaleEffect(y: 1.35)
-                }
-                .frame(maxWidth: .infinity)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Stamina \(Int(session.hudState.stamina)) of \(Int(session.hudState.maxStamina))")
-
-                Rectangle()
-                    .fill(.white.opacity(0.12))
-                    .frame(width: 1, height: 38)
-
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text("TOKENS")
-                        .font(.caption2.bold())
-                        .foregroundStyle(.secondary)
-                    Label("\(session.hudState.tokens)", systemImage: "hexagon.fill")
-                        .font(.headline)
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                        .animation(.snappy, value: session.hudState.tokens)
-                }
-                    .foregroundStyle(GoalRushTheme.gold)
-
-                if session.hudState.shieldCharges > 0 {
-                    Label("\(session.hudState.shieldCharges)", systemImage: "shield.fill")
-                        .labelStyle(.iconOnly)
-                        .foregroundStyle(GoalRushTheme.cyan)
-                        .overlay(alignment: .topTrailing) {
-                            Text("\(session.hudState.shieldCharges)")
-                                .font(.caption2.bold())
-                                .padding(3)
-                                .background(GoalRushTheme.navy, in: .circle)
-                                .offset(x: 8, y: -7)
-                        }
-                        .frame(width: 32)
-                        .accessibilityLabel("\(session.hudState.shieldCharges) shield blocks")
-                }
-
-                Button("Pause", systemImage: "pause.fill") { session.togglePause() }
-                    .labelStyle(.iconOnly)
-                    .font(.headline)
-                    .frame(width: 44, height: 44)
-                    .background(.white.opacity(0.11), in: .circle)
-                    .overlay { Circle().stroke(.white.opacity(0.18)) }
-                    .contentShape(.circle)
-                    .accessibilityIdentifier("pause")
-            }
-
-            HStack(spacing: 9) {
-                Text(progressLabel)
-                    .font(.caption2.bold())
-                    .foregroundStyle(session.hudState.bossActive ? GoalRushTheme.orange : .secondary)
-                ProgressView(value: levelProgress)
-                    .tint(session.hudState.bossActive ? GoalRushTheme.orange : GoalRushTheme.cyan)
-                    .accessibilityIdentifier("run-progress")
-                if session.mode.isEndless {
-                    Label(session.hudState.score.formatted(), systemImage: "trophy.fill")
-                        .font(.caption2.bold())
-                        .monospacedDigit()
-                        .foregroundStyle(GoalRushTheme.gold)
-                        .frame(minWidth: 58, alignment: .trailing)
-                        .accessibilityLabel("Score \(session.hudState.score)")
-                } else {
-                    Text("\(Int(levelProgress * 100))%")
-                        .font(.caption2.bold())
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .frame(width: 34, alignment: .trailing)
-                }
-            }
-        }
-        .padding(12)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 20))
-        .background(GoalRushTheme.navy.opacity(0.40), in: .rect(cornerRadius: 20))
-        .overlay { RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.15)) }
-        .shadow(color: .black.opacity(0.28), radius: 14, y: 7)
+        .onDisappear(perform: handleContainerDisappearance)
     }
 
     private var pauseOverlay: some View {
         Color.black.opacity(0.70).ignoresSafeArea()
             .overlay {
-                GameCard {
-                    VStack(spacing: 20) {
-                        Image(systemName: "pause.fill")
-                            .font(.title2.bold())
-                            .foregroundStyle(GoalRushTheme.navy)
-                            .frame(width: 54, height: 54)
-                            .background(GoalRushTheme.gold, in: .circle)
-                            .shadow(color: GoalRushTheme.gold.opacity(0.30), radius: 12)
-                        VStack(spacing: 5) {
-                            Text("Run Paused").font(.title.bold())
-                            Text(pauseSubtitle)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        Button("Resume Run", systemImage: "play.fill") { session.togglePause() }
-                            .buttonStyle(PrimaryGameButton())
-                            .accessibilityIdentifier("Resume")
-                        Button("End Run", systemImage: "xmark.circle") { showQuitConfirmation = true }
+                VStack(spacing: GoalRushTheme.Metrics.sectionSpacing) {
+                    Text("Run Paused")
+                        .font(GoalRushTheme.Typography.title)
+
+                    Button("Continue", action: continueRun)
+                    .buttonStyle(GameLaunchButtonStyle())
+                    .accessibilityIdentifier("pause-continue")
+
+                    HStack(spacing: GoalRushTheme.Metrics.standardSpacing) {
+                        Button("Home", action: leaveForHome)
                             .buttonStyle(SecondaryGameButton())
-                            .tint(GoalRushTheme.orange)
+                            .accessibilityIdentifier("pause-home")
+
+                        Button("Retry", action: retryRun)
+                            .buttonStyle(SecondaryGameButton())
+                            .disabled(isRestarting)
+                            .accessibilityIdentifier("pause-retry")
                     }
                 }
+                .padding(GoalRushTheme.Metrics.sectionSpacing)
+                .gameSurface(.modal)
                 .frame(maxWidth: 360)
                 .padding(24)
             }
+    }
+
+    private func continueRun() {
+        store.uiAudio.play(.tap)
+        session.togglePause()
+        synchronizeScenePlayback()
+    }
+
+    private func pauseRun() {
+        store.uiAudio.play(.whoosh, volume: 0.4)
+        session.togglePause()
+        synchronizeScenePlayback()
+    }
+
+    private func continueAfterDeathSave() {
+        guard session.continueAfterDeathSave() else { return }
+        synchronizeScenePlayback()
+        restoreSavedRunAfterRewardedContinue()
+        store.uiAudio.play(.fanfare, volume: 0.7)
+    }
+
+    private func finishWithoutDeathSave() {
+        store.uiAudio.play(.locked, volume: 0.65)
+        session.declineDeathSave()
+    }
+
+    private func activateCharacterAbility() {
+        guard session.hudState.characterAbilityReady else { return }
+        store.uiAudio.play(.fanfare, volume: 0.75, feedback: nil)
+        session.activateCharacterAbility(
+            cinematic: !reduceMotion && !store.settings.reducedFlashes
+        )
+    }
+
+    private func leaveForHome() {
+        store.uiAudio.play(.tap)
+        checkpointRunTokens()
+        persistCheckpointMetadata()
+        scene.prepareForRemoval()
+        store.route = .home
+    }
+
+    private func retryRun() {
+        guard !isRestarting else { return }
+        store.uiAudio.play(.tap)
+        checkpointRunTokens()
+        scene.prepareForRemoval()
+        checkpointWriteTask?.cancel()
+        checkpointWriteTask = nil
+        isRestarting = true
+
+        Task {
+            try? await store.runCheckpointStore.delete(for: session.mode)
+            guard !Task.isCancelled else { return }
+
+            let replacementSession = GameSessionModel(
+                mode: session.mode,
+                progress: store.progress,
+                settings: store.settings
+            )
+            let replacementScene = GoalRushScene(
+                session: replacementSession,
+                reducedEffects: store.settings.reducedFlashes
+            )
+            replacementScene.eventHandler = handleSimulationEvents
+            creditedRunTokens = 0
+            lastCheckpoint = nil
+            session = replacementSession
+            scene = replacementScene
+            synchronizeScenePlayback()
+            isRestarting = false
+        }
+    }
+
+    private var shouldPauseScene: Bool {
+        scenePhase != .active
+            || rewardedAds.isPresenting
+            || session.phase.pausesScene
+    }
+
+    private func synchronizeScenePlayback() {
+        scene.synchronizePlayback(isPaused: shouldPauseScene)
+    }
+
+    private func handleContainerAppearance() {
+        scene.eventHandler = handleSimulationEvents
+        synchronizeScenePlayback()
+    }
+
+    private func handleContainerDisappearance() {
+        if rewardedAds.isPresenting {
+            scene.synchronizePlayback(isPaused: true)
+            return
+        }
+        scene.prepareForRemoval()
+        audio.stop()
+    }
+
+    private func handleRewardedAdPresentationChange() async {
+        if rewardedAds.isPresenting {
+            scene.synchronizePlayback(isPaused: true)
+            return
+        }
+
+        // Let the full-screen presenter finish restoring the underlying view
+        // before clearing SpriteKit's own pause state.
+        await Task.yield()
+        guard !Task.isCancelled, !rewardedAds.isPresenting else { return }
+        scene.eventHandler = handleSimulationEvents
+        synchronizeScenePlayback()
+        if scenePhase == .active {
+            await audio.resumeHaptics()
+        }
     }
 
     private var staminaColor: Color {
@@ -222,33 +381,57 @@ struct GameContainerView: View {
         return GoalRushTheme.orange
     }
 
-    private var levelProgress: Double {
-        if session.mode.isEndless {
-            return min(1, max(0, session.hudState.waveElapsed / max(1, session.hudState.waveDuration)))
-        }
-        return min(1, max(0, session.hudState.elapsed / max(1, session.hudState.duration)))
+    private func buildResult(didWin: Bool, bonus: Int = 0) -> RunResult {
+        RunResult(
+            runID: session.runID,
+            mode: session.mode,
+            didWin: didWin,
+            tokensEarned: session.snapshot.tokens + bonus,
+            remainingStamina: session.snapshot.stamina,
+            wave: session.snapshot.wave,
+            score: session.snapshot.score,
+            targetsDefeated: session.snapshot.targetsDefeated,
+            bossesDefeated: session.snapshot.bossesDefeated,
+            bestCombo: session.snapshot.bestCombo,
+            abilitiesDrafted: session.draftsChosen,
+            character: session.character.id,
+            characterAbilityDefeats: session.snapshot.characterAbilityDefeats,
+            staminaFraction: session.snapshot.stamina / max(1, session.snapshot.maxStamina)
+        )
     }
 
     private func finishRun() {
+        guard !isFinalizing else { return }
         guard case .finished(let didWin) = session.lastEvent else { return }
+        isFinalizing = true
         let bonus: Int
         if let level = session.level {
-            let wasCompleted = store.progress.levelRecords[level.number]?.completed == true
-            bonus = didWin ? (wasCompleted ? level.replayBonus : level.firstClearBonus) : 0
+            let wasCompleted = store.progress.hasClearedCurrentCampaignLevel(
+                level.number
+            )
+            let baseBonus = wasCompleted ? level.replayBonus : level.firstClearBonus
+            bonus = didWin
+                ? CampaignDifficulty.scaledCompletionBonus(
+                    baseBonus,
+                    cycle: session.campaignCycle
+                )
+                : 0
         } else {
             bonus = 0
         }
-        store.finish(
-            RunResult(
-                mode: session.mode,
-                didWin: didWin,
-                tokensEarned: session.snapshot.tokens + bonus,
-                remainingStamina: session.snapshot.stamina,
-                wave: session.snapshot.wave,
-                score: session.snapshot.score
-            ),
-            tokensAlreadyCredited: creditedRunTokens
-        )
+        let result = buildResult(didWin: didWin, bonus: bonus)
+        scene.prepareForRemoval()
+        checkpointWriteTask?.cancel()
+        checkpointWriteTask = nil
+        Task {
+            try? await store.runCheckpointStore.delete(for: session.mode)
+            guard !Task.isCancelled else { return }
+            lastCheckpoint = nil
+            store.finish(
+                result,
+                tokensAlreadyCredited: creditedRunTokens
+            )
+        }
     }
 
     private func checkpointRunTokens() {
@@ -262,26 +445,107 @@ struct GameContainerView: View {
         store.saveProgress()
     }
 
-    private var progressLabel: String {
-        if session.hudState.bossActive { return session.mode.isEndless ? "BOSS WAVE \(session.hudState.wave)" : "BOSS" }
-        if session.mode.isEndless {
-            return session.hudState.waveElapsed >= session.hudState.waveDuration
-                ? "CLEAR WAVE \(session.hudState.wave)"
-                : "WAVE \(session.hudState.wave)"
+    private func persistWaveCheckpoint() {
+        guard !savedRunWasInvalidatedByDeath else { return }
+        guard lastCheckpoint?.wave != session.snapshot.wave,
+              let checkpoint = session.makeRunCheckpoint(
+                creditedRunTokens: creditedRunTokens,
+                previous: lastCheckpoint
+              ) else {
+            return
         }
-        return "LEVEL \(session.levelNumber ?? 1)"
+        lastCheckpoint = checkpoint
+        enqueueCheckpointWrite(checkpoint)
     }
 
-    private var pauseSubtitle: String {
-        if session.mode.isEndless {
-            return "Wave \(session.hudState.wave) • \(session.hudState.score.formatted()) score"
+    private func persistCheckpointMetadata() {
+        guard !savedRunWasInvalidatedByDeath else { return }
+        guard let checkpoint = lastCheckpoint else { return }
+        let updated = checkpoint.updatingRunMetadata(
+            creditedRunTokens: creditedRunTokens,
+            deathSaveWasUsed: session.deathSaveWasUsed
+        )
+        guard updated.creditedRunTokens != checkpoint.creditedRunTokens
+                || updated.deathSaveWasUsed != checkpoint.deathSaveWasUsed else {
+            return
         }
-        return "Level \(session.levelNumber ?? 1) • \(session.hudState.tokens) tokens earned"
+        lastCheckpoint = updated
+        enqueueCheckpointWrite(updated)
     }
+
+    private func invalidateSavedRunAfterDeath() {
+        savedRunWasInvalidatedByDeath = true
+        checkpointWriteTask?.cancel()
+        checkpointWriteTask = Task {
+            try? await store.runCheckpointStore.invalidateAfterDeath(
+                for: session.mode
+            )
+        }
+    }
+
+    private func restoreSavedRunAfterRewardedContinue() {
+        guard savedRunWasInvalidatedByDeath,
+              let checkpoint = lastCheckpoint else {
+            return
+        }
+        let restored = checkpoint.updatingRunMetadata(
+            creditedRunTokens: creditedRunTokens,
+            deathSaveWasUsed: true
+        )
+        savedRunWasInvalidatedByDeath = false
+        lastCheckpoint = restored
+        checkpointWriteTask?.cancel()
+        checkpointWriteTask = Task {
+            // Always finish the death invalidation before making the rewarded
+            // continuation resumable. Closing the app before the reward callback
+            // therefore leaves no live checkpoint to exploit.
+            try? await store.runCheckpointStore.invalidateAfterDeath(
+                for: session.mode
+            )
+            guard !Task.isCancelled else { return }
+            try? await store.runCheckpointStore.save(restored)
+        }
+    }
+
+    private func enqueueCheckpointWrite(_ checkpoint: RunCheckpoint) {
+        checkpointWriteTask?.cancel()
+        checkpointWriteTask = Task {
+            try? await store.runCheckpointStore.save(checkpoint)
+        }
+    }
+
+    private func handleSimulationEvents(_ events: [SimulationEvent], snapshot: SimulationSnapshot) {
+        audio.handle(events)
+        audio.updateIntensity(
+            progress: snapshot.waveObjectiveProgress,
+            bossActive: snapshot.targets.contains { target in
+                target.bossTier != .standard
+            }
+        )
+    }
+
 }
 
 private extension GameSessionModel.Phase {
     var isDraft: Bool {
         if case .draft = self { true } else { false }
+    }
+
+    var pausesScene: Bool {
+        switch self {
+        case .paused, .deathSaveOffer, .finished:
+            true
+        default:
+            false
+        }
+    }
+
+    var isRunCheckpointBoundary: Bool {
+        switch self {
+        case .draft, .worldTransition:
+            true
+        default:
+            false
+        }
     }
 }

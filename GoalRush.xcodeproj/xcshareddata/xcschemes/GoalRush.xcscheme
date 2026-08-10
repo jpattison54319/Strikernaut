@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "B392F1263A622BD10CB6ADB9"
-               BuildableName = "GoalRush.app"
+               BuildableName = "Strikernaut.app"
                BlueprintName = "GoalRush"
                ReferencedContainer = "container:GoalRush.xcodeproj">
             </BuildableReference>
@@ -61,7 +61,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "B392F1263A622BD10CB6ADB9"
-            BuildableName = "GoalRush.app"
+            BuildableName = "Strikernaut.app"
             BlueprintName = "GoalRush"
             ReferencedContainer = "container:GoalRush.xcodeproj">
          </BuildableReference>
@@ -108,7 +108,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "B392F1263A622BD10CB6ADB9"
-            BuildableName = "GoalRush.app"
+            BuildableName = "Strikernaut.app"
             BlueprintName = "GoalRush"
             ReferencedContainer = "container:GoalRush.xcodeproj">
          </BuildableReference>
@@ -125,7 +125,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "B392F1263A622BD10CB6ADB9"
-            BuildableName = "GoalRush.app"
+            BuildableName = "Strikernaut.app"
             BlueprintName = "GoalRush"
             ReferencedContainer = "container:GoalRush.xcodeproj">
          </BuildableReference>

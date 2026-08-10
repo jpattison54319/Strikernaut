@@ -1,8 +1,8 @@
-# Goal Rush UX & Engagement Overhaul Implementation Plan
+# Strikernaut UX & Engagement Overhaul Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Transform Goal Rush into a highly polished, highly engaging game via a daily-hub Home, combo scoring, missions, achievements, daily streaks, FTUE onboarding, menu audio, and celebration juice on every screen.
+**Goal:** Transform Strikernaut into a highly polished, highly engaging game via a daily-hub Home, combo scoring, missions, achievements, daily streaks, FTUE onboarding, menu audio, and celebration juice on every screen.
 
 **Architecture:** Pure testable domain engines (missions/daily/achievements) + `PlayerProgress` schema v3 migration, combo + run-stat counters in the deterministic simulation, `UIAudio` pooled menu SFX, reusable SwiftUI juice components, then screen-by-screen application. Spec: `docs/superpowers/specs/2026-07-22-ux-engagement-overhaul-design.md`.
 
@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - iOS 18 deployment target, Swift 6, `SWIFT_STRICT_CONCURRENCY: complete`, `SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor`.
-- **Do NOT run any git mutations.** This repo has zero commits and the owner has not authorized commits. Skip all "commit" steps.
+- **Git is authorized by the owner.** Work happens on branch `ux-engagement-overhaul`. Each task ends with one commit: stage only the task's files, message style `feat: <task summary>` / `test:` / `docs:` as appropriate.
 - After adding/removing files, `make generate` (XcodeGen 2.45.4 installed) re-globs `GoalRush/`; `make build`/`make test` run it automatically.
 - Verify with `make build` (build) and `make test` (unit). `make test-ui` for UI tests. Destination: iPhone 17 Pro, iOS 26.5.
 - Tests use Swift Testing: `@MainActor struct XTests { @Test func y() { #expect(...) } }` with `@testable import GoalRush`.
@@ -555,7 +555,7 @@ Expected: FAIL — `ui-*` files missing.
 
 ```python
 #!/usr/bin/env python3
-"""Generate Goal Rush UI sound effects as 16-bit mono WAVs (no dependencies)."""
+"""Generate Strikernaut UI sound effects as 16-bit mono WAVs (no dependencies)."""
 import math
 import os
 import struct

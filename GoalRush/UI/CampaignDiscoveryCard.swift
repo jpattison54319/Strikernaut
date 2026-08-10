@@ -10,21 +10,17 @@ struct CampaignDiscoveryCard: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 Text(discovery.title)
-                    .font(.headline)
+                    .font(GoalRushTheme.Typography.headline)
                     .foregroundStyle(.white)
                 Text(discovery.detail)
-                    .font(.subheadline)
+                    .font(GoalRushTheme.Typography.subheadline)
                     .foregroundStyle(.white.opacity(0.72))
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .background(GoalRushTheme.surfaceRaised.opacity(0.92), in: .rect(cornerRadius: 22))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22)
-                .stroke(.white.opacity(0.13))
-        }
+        .gameSurface(.panel)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("discovery-\(discovery.id)")
     }
